@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ChatHistoryMenu: View {
-    let sessions: [(id: UUID, firstMessage: String, date: Date, isCheckIn: Bool)]
+    let sessions: [(id: UUID, firstMessage: String, date: Date)]
     let onSelectSession: (UUID) -> Void
     let onClearHistory: () -> Void
     let onNewChat: () -> Void
@@ -23,17 +23,11 @@ struct ChatHistoryMenu: View {
                         Button {
                             onSelectSession(session.id)
                         } label: {
-                            HStack {
-                                if session.isCheckIn {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
-                                }
-                                VStack(alignment: .leading) {
-                                    Text(sessionTitle(session))
-                                    Text(session.date, format: .dateTime.month().day().hour().minute())
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                            VStack(alignment: .leading) {
+                                Text(sessionTitle(session))
+                                Text(session.date, format: .dateTime.month().day().hour().minute())
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -54,10 +48,7 @@ struct ChatHistoryMenu: View {
         }
     }
 
-    private func sessionTitle(_ session: (id: UUID, firstMessage: String, date: Date, isCheckIn: Bool)) -> String {
-        if session.isCheckIn {
-            return "Weekly Check-In"
-        }
+    private func sessionTitle(_ session: (id: UUID, firstMessage: String, date: Date)) -> String {
         let message = session.firstMessage
         if message.count > 40 {
             return String(message.prefix(40)) + "..."

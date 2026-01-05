@@ -47,12 +47,6 @@ final class ChatMessage {
     /// Whether a plan update was applied from this message
     var planUpdateApplied: Bool = false
 
-    /// Suggested responses data (JSON encoded) - for check-in multiple choice
-    var suggestedResponsesData: Data?
-
-    /// Whether the suggested responses have been answered
-    var suggestedResponsesAnswered: Bool = false
-
     /// Memories saved during this response (JSON encoded array of strings)
     var savedMemoriesData: Data?
 
@@ -107,26 +101,6 @@ final class ChatMessage {
             suggestedPlanData = try? JSONEncoder().encode(plan)
         } else {
             suggestedPlanData = nil
-        }
-    }
-
-    /// Whether this message has pending suggested responses (not yet answered)
-    var hasPendingSuggestedResponses: Bool {
-        suggestedResponsesData != nil && !suggestedResponsesAnswered
-    }
-
-    /// Decode the suggested responses data
-    var suggestedResponses: [CheckInResponseOption]? {
-        guard let data = suggestedResponsesData else { return nil }
-        return try? JSONDecoder().decode([CheckInResponseOption].self, from: data)
-    }
-
-    /// Set the suggested responses data
-    func setSuggestedResponses(_ responses: [CheckInResponseOption]?) {
-        if let responses, !responses.isEmpty {
-            suggestedResponsesData = try? JSONEncoder().encode(responses)
-        } else {
-            suggestedResponsesData = nil
         }
     }
 

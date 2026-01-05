@@ -32,7 +32,6 @@ struct ChatView: View {
 
     @Environment(\.modelContext) private var modelContext
     @State private var geminiService = GeminiService()
-    @State private var checkInService = CheckInService()
     @State private var messageText = ""
     @State private var isLoading = false
     @State private var selectedImage: UIImage?
@@ -45,33 +44,8 @@ struct ChatView: View {
     @FocusState private var isInputFocused: Bool
     @AppStorage("currentChatSessionId") private var currentSessionIdString: String = ""
     @AppStorage("lastChatActivityDate") private var lastActivityTimestamp: Double = 0
-    @AppStorage("checkInSessionIds") private var checkInSessionIdsData: Data = Data()
-    @AppStorage("pendingCheckIn") private var pendingCheckIn = false
-
-    // Check-in state
-    @State private var currentCheckInSummary: CheckInService.WeeklySummary?
 
     private let sessionTimeoutHours: Double = 1.5
-
-    // MARK: - Check-In Session Tracking
-
-    private var checkInSessionIds: Set<String> {
-        (try? JSONDecoder().decode(Set<String>.self, from: checkInSessionIdsData)) ?? []
-    }
-
-    private func addCheckInSessionId(_ id: UUID) {
-        var ids = checkInSessionIds
-        ids.insert(id.uuidString)
-        checkInSessionIdsData = (try? JSONEncoder().encode(ids)) ?? Data()
-    }
-
-    private func isCheckInSession(_ sessionId: UUID) -> Bool {
-        checkInSessionIds.contains(sessionId.uuidString)
-    }
-
-    var isCurrentSessionCheckIn: Bool {
-        isCheckInSession(currentSessionId)
-    }
 
     private var profile: UserProfile? { profiles.first }
 
@@ -88,7 +62,7 @@ struct ChatView: View {
         allMessages.filter { $0.sessionId == currentSessionId }
     }
 
-    private var chatSessions: [(id: UUID, firstMessage: String, date: Date, isCheckIn: Bool)] {
+    private var chatSessions: [(id: UUID, firstMessage: String, date: Date)] {
         var sessions: [UUID: (firstMessage: String, date: Date)] = [:]
 
         for message in allMessages {
@@ -99,7 +73,7 @@ struct ChatView: View {
         }
 
         return sessions
-            .map { (id: $0.key, firstMessage: $0.value.firstMessage, date: $0.value.date, isCheckIn: isCheckInSession($0.key)) }
+            .map { (id: $0.key, firstMessage: $0.value.firstMessage, date: $0.value.date) }
             .sorted { $0.date > $1.date }
     }
 
@@ -132,13 +106,6 @@ struct ChatView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    // Check-in stats header
-                    if isCurrentSessionCheckIn, let summary = currentCheckInSummary {
-                        CheckInStatsHeader(summary: summary)
-                            .padding(.horizontal)
-                            .padding(.top, 8)
-                    }
-
                     ChatContentList(
                         messages: currentSessionMessages,
                         isLoading: isLoading,
@@ -160,8 +127,7 @@ struct ChatView: View {
                         onEditPlan: { message, plan in
                             editingPlanSuggestion = (message, plan)
                         },
-                        onDismissPlan: dismissPlanSuggestion,
-                        onSelectSuggestedResponse: selectSuggestedResponse
+                        onDismissPlan: dismissPlanSuggestion
                     )
                 }
                 .onTapGesture {
@@ -187,7 +153,7 @@ struct ChatView: View {
                     )
                 }
             }
-            .navigationTitle(isCurrentSessionCheckIn ? "Weekly Check-In" : "Trai")
+            .navigationTitle("Trai")
             .onChange(of: selectedPhotoItem) { _, newValue in
                 Task {
                     if let data = try? await newValue?.loadTransferable(type: Data.self),
@@ -208,17 +174,6 @@ struct ChatView: View {
             }
             .onAppear {
                 checkSessionTimeout()
-                // Handle pending check-in if set before view appeared
-                if pendingCheckIn {
-                    pendingCheckIn = false
-                    startCheckInSession()
-                }
-            }
-            .onChange(of: pendingCheckIn) { _, isPending in
-                if isPending {
-                    pendingCheckIn = false
-                    startCheckInSession()
-                }
             }
             .chatCameraSheet(showingCamera: $showingCamera) { image in
                 selectedImage = image
@@ -265,147 +220,13 @@ extension ChatView {
         let newId = UUID()
         currentSessionIdString = newId.uuidString
         lastActivityTimestamp = Date().timeIntervalSince1970
-        currentCheckInSummary = nil
         if !silent {
             HapticManager.lightTap()
         }
     }
 
-    func startCheckInSession() {
-        guard let profile else { return }
-
-        // Create new session and mark as check-in
-        let newId = UUID()
-        currentSessionIdString = newId.uuidString
-        lastActivityTimestamp = Date().timeIntervalSince1970
-        addCheckInSessionId(newId)
-
-        // Calculate weekly summary
-        let summary = checkInService.getWeeklySummary(
-            profile: profile,
-            foodEntries: Array(allFoodEntries),
-            workouts: Array(recentWorkouts),
-            liveWorkouts: Array(liveWorkouts),
-            weightEntries: Array(weightEntries)
-        )
-        currentCheckInSummary = summary
-
-        HapticManager.lightTap()
-
-        // Send initial AI message with check-in context
-        Task {
-            await sendCheckInGreeting(summary: summary, profile: profile)
-        }
-    }
-
-    private func sendCheckInGreeting(summary: CheckInService.WeeklySummary, profile: UserProfile) async {
-        isLoading = true
-
-        // Create AI message placeholder
-        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
-        aiMessage.isLoading = true
-        modelContext.insert(aiMessage)
-
-        do {
-            let result = try await geminiService.streamCheckInGreeting(
-                summary: summary,
-                profile: profile
-            ) { chunk in
-                // Keep isLoading = true while streaming so ThinkingIndicator hides
-                // but isStreamingResponse becomes true (message has content while loading)
-                aiMessage.content = chunk
-            }
-
-            // Set final content and suggested responses
-            aiMessage.content = result.message
-            aiMessage.isLoading = false
-            if !result.suggestedResponses.isEmpty {
-                aiMessage.setSuggestedResponses(result.suggestedResponses)
-            }
-        } catch {
-            aiMessage.content = "Hey! Let's review your week together. How are you feeling about your progress?"
-            aiMessage.isLoading = false
-        }
-
-        isLoading = false
-    }
-
-    private func selectSuggestedResponse(_ response: CheckInResponseOption, for message: ChatMessage) {
-        // Mark the suggested responses as answered
-        message.suggestedResponsesAnswered = true
-        HapticManager.lightTap()
-
-        // Send the selected response as a user message
-        sendCheckInMessage(response.label)
-    }
-
-    private func sendCheckInMessage(_ text: String) {
-        guard let profile, let summary = currentCheckInSummary else {
-            sendMessage(text)
-            return
-        }
-
-        updateLastActivity()
-
-        // Create user message
-        let userMessage = ChatMessage(content: text, isFromUser: true, sessionId: currentSessionId)
-        modelContext.insert(userMessage)
-
-        // Create AI message placeholder
-        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
-        aiMessage.isLoading = true
-        modelContext.insert(aiMessage)
-
-        Task {
-            isLoading = true
-
-            do {
-                let result = try await geminiService.streamCheckInChat(
-                    message: text,
-                    summary: summary,
-                    profile: profile,
-                    conversationHistory: Array(currentSessionMessages.dropLast(2))
-                ) { chunk in
-                    // Keep isLoading = true on message while streaming
-                    aiMessage.content = chunk
-                }
-
-                // Set final content and suggested responses
-                aiMessage.content = result.message
-                aiMessage.isLoading = false
-
-                // Always set suggested responses if available
-                if !result.suggestedResponses.isEmpty {
-                    aiMessage.setSuggestedResponses(result.suggestedResponses)
-                }
-
-                // Handle check-in completion
-                if result.isComplete {
-                    profile.lastCheckInDate = Date()
-                }
-            } catch {
-                aiMessage.content = "I'm having trouble processing that. Could you try again?"
-                aiMessage.isLoading = false
-            }
-
-            isLoading = false
-        }
-    }
-
     private func switchToSession(_ sessionId: UUID) {
         currentSessionIdString = sessionId.uuidString
-        // Load check-in summary if switching to a check-in session
-        if isCheckInSession(sessionId), let profile {
-            currentCheckInSummary = checkInService.getWeeklySummary(
-                profile: profile,
-                foodEntries: Array(allFoodEntries),
-                workouts: Array(recentWorkouts),
-                liveWorkouts: Array(liveWorkouts),
-                weightEntries: Array(weightEntries)
-            )
-        } else {
-            currentCheckInSummary = nil
-        }
         HapticManager.lightTap()
     }
 
@@ -417,7 +238,6 @@ extension ChatView {
         for message in allMessages {
             modelContext.delete(message)
         }
-        checkInSessionIdsData = Data() // Clear check-in session tracking
         startNewSession()
     }
 }
@@ -430,13 +250,6 @@ extension ChatView {
         let hasImage = selectedImage != nil
 
         guard hasText || hasImage else { return }
-
-        // Route to check-in flow if in a check-in session (and no image)
-        if isCurrentSessionCheckIn && !hasImage {
-            messageText = ""
-            sendCheckInMessage(text)
-            return
-        }
 
         updateLastActivity()
 

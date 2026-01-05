@@ -11,7 +11,7 @@ import SwiftData
 struct CalorieDetailSheet: View {
     let entries: [FoodEntry]
     let goal: Int
-    let onAddFood: () -> Void
+    var onAddFood: (() -> Void)?
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
 
@@ -59,7 +59,7 @@ struct CalorieDetailSheet: View {
 
                     // Food list
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Today's Food")
+                        Text(onAddFood != nil ? "Today's Food" : "Food Log")
                             .font(.headline)
                             .padding(.horizontal)
 
@@ -87,8 +87,10 @@ struct CalorieDetailSheet: View {
                     Button("Done") { dismiss() }
                 }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Add Food", systemImage: "plus", action: onAddFood)
+                if let addAction = onAddFood {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Add Food", systemImage: "plus", action: addAction)
+                    }
                 }
             }
         }
@@ -242,7 +244,7 @@ private struct FoodCalorieRow: View {
 // MARK: - Empty State
 
 private struct EmptyStateView: View {
-    let onAddFood: () -> Void
+    var onAddFood: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -250,12 +252,14 @@ private struct EmptyStateView: View {
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
 
-            Text("No food logged today")
+            Text(onAddFood != nil ? "No food logged today" : "No food logged")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Button("Log Your First Meal", action: onAddFood)
-                .buttonStyle(.borderedProminent)
+            if let addAction = onAddFood {
+                Button("Log Your First Meal", action: addAction)
+                    .buttonStyle(.borderedProminent)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)

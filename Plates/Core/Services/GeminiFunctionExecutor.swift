@@ -71,8 +71,8 @@ final class GeminiFunctionExecutor {
         case "edit_food_entry":
             return executeEditFoodEntry(call.arguments)
 
-        case "get_todays_food_log":
-            return executeGetTodaysFoodLog()
+        case "get_food_log":
+            return executeGetFoodLog(call.arguments)
 
         case "get_user_plan":
             return executeGetUserPlan()

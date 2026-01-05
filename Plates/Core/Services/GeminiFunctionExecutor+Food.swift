@@ -102,13 +102,20 @@ extension GeminiFunctionExecutor {
         ))
     }
 
-    func executeGetTodaysFoodLog() -> ExecutionResult {
+    func executeGetFoodLog(_ args: [String: Any]) -> ExecutionResult {
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        let today = Date()
 
+        // Determine date range based on parameters
+        let (startDate, endDate, dateDescription) = determineDateRange(
+            args: args,
+            calendar: calendar,
+            today: today
+        )
+
+        // Fetch entries for the date range
         let descriptor = FetchDescriptor<FoodEntry>(
-            predicate: #Predicate { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay },
+            predicate: #Predicate { $0.loggedAt >= startDate && $0.loggedAt < endDate },
             sortBy: [SortDescriptor(\.loggedAt)]
         )
 
@@ -126,10 +133,13 @@ extension GeminiFunctionExecutor {
         let targetCarbs = userProfile?.dailyCarbsGoal ?? 200
         let targetFat = userProfile?.dailyFatGoal ?? 65
 
-        // Format entries
+        // Format entries with date for multi-day ranges
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a"
+
         let formattedEntries = entries.map { entry -> [String: Any] in
-            let timeFormatter = DateFormatter()
-            timeFormatter.dateFormat = "h:mm a"
             return [
                 "id": entry.id.uuidString,
                 "name": entry.name,
@@ -138,13 +148,19 @@ extension GeminiFunctionExecutor {
                 "protein": entry.proteinGrams,
                 "carbs": entry.carbsGrams,
                 "fat": entry.fatGrams,
+                "date": dateFormatter.string(from: entry.loggedAt),
                 "time": timeFormatter.string(from: entry.loggedAt)
             ]
         }
 
+        // Calculate number of days in range
+        let dayCount = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 1
+
         return .dataResponse(FunctionResult(
-            name: "get_todays_food_log",
+            name: "get_food_log",
             response: [
+                "date_range": dateDescription,
+                "day_count": dayCount,
                 "entries": formattedEntries,
                 "totals": [
                     "calories": totalCalories,
@@ -152,20 +168,80 @@ extension GeminiFunctionExecutor {
                     "carbs": Int(totalCarbs),
                     "fat": Int(totalFat)
                 ],
+                "daily_averages": dayCount > 1 ? [
+                    "calories": totalCalories / dayCount,
+                    "protein": Int(totalProtein) / dayCount,
+                    "carbs": Int(totalCarbs) / dayCount,
+                    "fat": Int(totalFat) / dayCount
+                ] : nil as [String: Int]?,
                 "targets": [
                     "calories": targetCalories,
                     "protein": targetProtein,
                     "carbs": targetCarbs,
                     "fat": targetFat
                 ],
-                "remaining": [
+                "remaining": dayCount == 1 ? [
                     "calories": targetCalories - totalCalories,
                     "protein": targetProtein - Int(totalProtein),
                     "carbs": targetCarbs - Int(totalCarbs),
                     "fat": targetFat - Int(totalFat)
-                ],
+                ] : nil as [String: Int]?,
                 "entry_count": entries.count
             ]
         ))
+    }
+
+    /// Determines the date range based on function arguments
+    private func determineDateRange(
+        args: [String: Any],
+        calendar: Calendar,
+        today: Date
+    ) -> (startDate: Date, endDate: Date, description: String) {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        // Option 1: Specific date provided
+        if let dateString = args["date"] as? String,
+           let specificDate = dateFormatter.date(from: dateString) {
+            let startOfDay = calendar.startOfDay(for: specificDate)
+            let rangeDays = (args["range_days"] as? Int) ?? 1
+            let endOfRange = calendar.date(byAdding: .day, value: rangeDays, to: startOfDay)!
+
+            if rangeDays == 1 {
+                return (startOfDay, endOfRange, dateString)
+            } else {
+                let endDateString = dateFormatter.string(from: calendar.date(byAdding: .day, value: rangeDays - 1, to: startOfDay)!)
+                return (startOfDay, endOfRange, "\(dateString) to \(endDateString)")
+            }
+        }
+
+        // Option 2: Days back from today
+        if let daysBack = args["days_back"] as? Int {
+            let targetDate = calendar.date(byAdding: .day, value: -daysBack, to: today)!
+            let startOfDay = calendar.startOfDay(for: targetDate)
+            let rangeDays = (args["range_days"] as? Int) ?? 1
+            let endOfRange = calendar.date(byAdding: .day, value: rangeDays, to: startOfDay)!
+
+            let startDateString = dateFormatter.string(from: startOfDay)
+            if rangeDays == 1 {
+                let dayName = daysBack == 1 ? "yesterday" : "\(daysBack) days ago"
+                return (startOfDay, endOfRange, "\(startDateString) (\(dayName))")
+            } else {
+                let endDateString = dateFormatter.string(from: calendar.date(byAdding: .day, value: rangeDays - 1, to: startOfDay)!)
+                return (startOfDay, endOfRange, "\(startDateString) to \(endDateString)")
+            }
+        }
+
+        // Default: Today
+        let startOfDay = calendar.startOfDay(for: today)
+        let rangeDays = (args["range_days"] as? Int) ?? 1
+        let endOfRange = calendar.date(byAdding: .day, value: rangeDays, to: startOfDay)!
+
+        if rangeDays == 1 {
+            return (startOfDay, endOfRange, "today")
+        } else {
+            let endDateString = dateFormatter.string(from: calendar.date(byAdding: .day, value: rangeDays - 1, to: startOfDay)!)
+            return (startOfDay, endOfRange, "today to \(endDateString)")
+        }
     }
 }

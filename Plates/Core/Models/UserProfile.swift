@@ -322,42 +322,4 @@ extension UserProfile {
         }
     }
 
-    var checkInDay: Weekday? {
-        get {
-            guard let day = preferredCheckInDay else { return nil }
-            return Weekday(rawValue: day)
-        }
-        set {
-            preferredCheckInDay = newValue?.rawValue
-        }
-    }
-
-    /// Check if today is the user's check-in day
-    var isTodayCheckInDay: Bool {
-        guard let checkInDay = preferredCheckInDay else { return false }
-        let todayWeekday = Calendar.current.component(.weekday, from: Date()) - 1 // 0-indexed
-        return todayWeekday == checkInDay
-    }
-
-    /// Check if a check-in is due (it's check-in day and hasn't been done this week)
-    var isCheckInDue: Bool {
-        guard isTodayCheckInDay else { return false }
-        guard let lastCheckIn = lastCheckInDate else { return true }
-
-        // Check if last check-in was before this week
-        let calendar = Calendar.current
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date()))!
-        return lastCheckIn < startOfWeek
-    }
-
-    /// Days until next check-in
-    var daysUntilCheckIn: Int? {
-        guard let checkInDay = preferredCheckInDay else { return nil }
-        let todayWeekday = Calendar.current.component(.weekday, from: Date()) - 1
-        var daysUntil = checkInDay - todayWeekday
-        if daysUntil <= 0 {
-            daysUntil += 7
-        }
-        return daysUntil
-    }
 }

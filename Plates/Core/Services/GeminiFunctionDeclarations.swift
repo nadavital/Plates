@@ -113,14 +113,27 @@ enum GeminiFunctionDeclarations {
         ]
     }
 
-    /// Get today's food log with nutrition totals
+    /// Get food log with optional date range
     static var getTodaysFoodLog: [String: Any] {
         [
-            "name": "get_todays_food_log",
-            "description": "Get the user's food log for today, including all entries and nutrition totals vs targets. Use when the user asks what they've eaten, their progress, remaining calories/macros, or nutrition status.",
+            "name": "get_food_log",
+            "description": "Get the user's food log for a specific date or date range. Defaults to today if no date specified. Use when the user asks what they've eaten, their progress, remaining calories/macros, or nutrition status. Also use when they ask about past days like 'what did I eat yesterday' or 'show me last week'.",
             "parameters": [
                 "type": "object",
-                "properties": [:],
+                "properties": [
+                    "date": [
+                        "type": "string",
+                        "description": "Specific date in YYYY-MM-DD format (e.g., '2025-01-15'). Defaults to today if not provided."
+                    ],
+                    "days_back": [
+                        "type": "integer",
+                        "description": "Number of days back from today (e.g., 1 for yesterday, 7 for last week). Alternative to specifying a date."
+                    ],
+                    "range_days": [
+                        "type": "integer",
+                        "description": "Number of days to include in the range (default: 1 for single day, use 7 for a week summary)"
+                    ]
+                ],
                 "required": []
             ]
         ]

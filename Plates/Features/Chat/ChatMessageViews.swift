@@ -2,10 +2,28 @@
 //  ChatMessageViews.swift
 //  Plates
 //
-//  Chat message bubble views and empty state
+//  Chat message bubble views, empty state, and loading indicator
 //
 
 import SwiftUI
+
+// MARK: - Thinking Indicator
+
+struct ThinkingIndicator: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            TraiLensView(size: 36, state: .thinking, palette: .energy)
+
+            Text("Thinking...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+}
 
 // MARK: - Empty Chat View
 

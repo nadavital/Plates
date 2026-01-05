@@ -119,9 +119,11 @@ struct MacroBreakdownCard: View {
     let protein: Double
     let carbs: Double
     let fat: Double
+    var fiber: Double = 0
     let proteinGoal: Int
     let carbsGoal: Int
     let fatGoal: Int
+    var fiberGoal: Int = 30
     var onTap: (() -> Void)?
 
     var body: some View {
@@ -141,7 +143,7 @@ struct MacroBreakdownCard: View {
                     }
                 }
 
-                HStack(spacing: 24) {
+                HStack(spacing: 16) {
                     MacroRingItem(
                         name: "Protein",
                         current: protein,
@@ -161,6 +163,13 @@ struct MacroBreakdownCard: View {
                         current: fat,
                         goal: Double(fatGoal),
                         color: .purple
+                    )
+
+                    MacroRingItem(
+                        name: "Fiber",
+                        current: fiber,
+                        goal: Double(fiberGoal),
+                        color: .green
                     )
                 }
             }
@@ -340,53 +349,80 @@ struct QuickActionButton: View {
     }
 }
 
-// MARK: - Check-In Due Card
+// MARK: - Date Navigation Bar
 
-struct CheckInDueCard: View {
-    let onStartCheckIn: () -> Void
+struct DateNavigationBar: View {
+    @Binding var selectedDate: Date
+    let isToday: Bool
+
+    private let calendar = Calendar.current
+
+    private var dateText: String {
+        if isToday {
+            return "Today"
+        }
+
+        let formatter = DateFormatter()
+        if calendar.isDate(selectedDate, equalTo: Date(), toGranularity: .year) {
+            formatter.dateFormat = "EEEE, MMM d"
+        } else {
+            formatter.dateFormat = "EEEE, MMM d, yyyy"
+        }
+        return formatter.string(from: selectedDate)
+    }
 
     var body: some View {
-        Button(action: onStartCheckIn) {
-            HStack(spacing: 16) {
-                // Icon
-                ZStack {
-                    Circle()
-                        .fill(Color.green.opacity(0.15))
-                        .frame(width: 50, height: 50)
-
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.green)
+        HStack {
+            Button {
+                withAnimation {
+                    selectedDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
                 }
-
-                // Text
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Weekly Check-In")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text("Time to review your progress!")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Arrow
-                Image(systemName: "chevron.right")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                HapticManager.lightTap()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.title3)
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.secondarySystemBackground))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.green.opacity(0.3), lineWidth: 1)
-                    )
-            )
+
+            Spacer()
+
+            VStack(spacing: 2) {
+                Text(dateText)
+                    .font(.headline)
+
+                if !isToday {
+                    Button {
+                        withAnimation {
+                            selectedDate = Date()
+                        }
+                        HapticManager.lightTap()
+                    } label: {
+                        Text("Jump to Today")
+                            .font(.caption)
+                            .foregroundStyle(.accent)
+                    }
+                }
+            }
+
+            Spacer()
+
+            Button {
+                withAnimation {
+                    selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+                }
+                HapticManager.lightTap()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.title3)
+                    .foregroundStyle(isToday ? .tertiary : .primary)
+                    .frame(width: 44, height: 44)
+            }
+            .disabled(isToday)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 12))
     }
 }

@@ -35,12 +35,11 @@ enum AppTab: String, CaseIterable {
 
 struct MainTabView: View {
     @State private var selectedTab: AppTab = .dashboard
-    @AppStorage("pendingCheckIn") private var pendingCheckIn = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
             Tab("Dashboard", systemImage: "house.fill", value: .dashboard) {
-                DashboardView(onStartCheckIn: navigateToTrai)
+                DashboardView()
             }
 
             Tab("Trai", systemImage: "circle.hexagongrid.circle", value: .trai, role: .search) {
@@ -51,16 +50,6 @@ struct MainTabView: View {
                 WorkoutsView()
             }
         }
-        .onAppear {
-            if pendingCheckIn {
-                pendingCheckIn = false
-                selectedTab = .trai
-            }
-        }
-    }
-
-    private func navigateToTrai() {
-        selectedTab = .trai
     }
 }
 

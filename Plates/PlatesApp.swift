@@ -24,7 +24,6 @@ struct PlatesApp: App {
                 LiveWorkout.self,
                 LiveWorkoutEntry.self,
                 ExerciseHistory.self,
-                WeeklyCheckIn.self,
                 CoachMemory.self
             ])
 

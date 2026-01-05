@@ -23,7 +23,6 @@ struct ChatContentList: View {
     let onAcceptPlan: (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     let onEditPlan: (ChatMessage, PlanUpdateSuggestionEntry) -> Void
     let onDismissPlan: (ChatMessage) -> Void
-    var onSelectSuggestedResponse: ((CheckInResponseOption, ChatMessage) -> Void)?
 
     var body: some View {
         LazyVStack(spacing: 12) {
@@ -61,16 +60,6 @@ struct ChatContentList: View {
                                     onDismissPlan(message)
                                 }
                             )
-
-                            // Suggested responses for check-in messages
-                            if message.hasPendingSuggestedResponses,
-                               let responses = message.suggestedResponses,
-                               let onSelect = onSelectSuggestedResponse {
-                                SuggestedResponsesView(responses: responses) { response in
-                                    onSelect(response, message)
-                                }
-                                .padding(.horizontal)
-                            }
                         }
                         .id(message.id)
                     }

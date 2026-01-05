@@ -9,8 +9,6 @@ import SwiftUI
 import SwiftData
 
 struct DashboardView: View {
-    let onStartCheckIn: () -> Void
-
     @Query private var profiles: [UserProfile]
     @Query(sort: \FoodEntry.loggedAt, order: .reverse)
     private var allFoodEntries: [FoodEntry]
@@ -26,7 +24,6 @@ struct DashboardView: View {
 
     @Environment(\.modelContext) private var modelContext
     @State private var healthKitService = HealthKitService()
-    @State private var planService = PlanService()
 
     // Sheet presentation state
     @State private var showingLogFood = false
@@ -37,41 +34,48 @@ struct DashboardView: View {
     @State private var entryToEdit: FoodEntry?
     @State private var sessionIdToAddTo: UUID?
 
+    // Date navigation
+    @State private var selectedDate = Date()
+
     private var profile: UserProfile? { profiles.first }
 
-    private var isCheckInDue: Bool {
-        guard let profile else { return false }
-        return planService.getCheckInStatus(for: profile).isDue
+    private var isViewingToday: Bool {
+        Calendar.current.isDateInToday(selectedDate)
     }
 
-    private var todaysFoodEntries: [FoodEntry] {
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        return allFoodEntries.filter { $0.loggedAt >= startOfDay }
+    private var selectedDayFoodEntries: [FoodEntry] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: selectedDate)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        return allFoodEntries.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
     }
 
-    private var todaysWorkouts: [WorkoutSession] {
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        return allWorkouts.filter { $0.loggedAt >= startOfDay }
+    private var selectedDayWorkouts: [WorkoutSession] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: selectedDate)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        return allWorkouts.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    if let profile {
+                    // Date Navigation
+                    DateNavigationBar(
+                        selectedDate: $selectedDate,
+                        isToday: isViewingToday
+                    )
+
+                    if isViewingToday, let profile {
                         GreetingCard(name: profile.name, goal: profile.goal)
 
-                        // Quick action buttons
+                        // Quick action buttons (only on today)
                         QuickActionsCard(
                             onLogFood: { showingLogFood = true },
                             onAddWorkout: { showingAddWorkout = true },
                             onLogWeight: { showingLogWeight = true }
                         )
-
-                        // Check-in prompt when due
-                        if isCheckInDue {
-                            CheckInDueCard(onStartCheckIn: onStartCheckIn)
-                        }
                     }
 
                     CalorieProgressCard(
@@ -84,26 +88,28 @@ struct DashboardView: View {
                         protein: totalProtein,
                         carbs: totalCarbs,
                         fat: totalFat,
+                        fiber: totalFiber,
                         proteinGoal: profile?.dailyProteinGoal ?? 150,
                         carbsGoal: profile?.dailyCarbsGoal ?? 200,
                         fatGoal: profile?.dailyFatGoal ?? 65,
+                        fiberGoal: profile?.dailyFiberGoal ?? 30,
                         onTap: { showingMacroDetail = true }
                     )
 
                     DailyFoodTimeline(
-                        entries: todaysFoodEntries,
-                        onAddFood: { showingLogFood = true },
-                        onAddToSession: { sessionId in
+                        entries: selectedDayFoodEntries,
+                        onAddFood: isViewingToday ? { showingLogFood = true } : nil,
+                        onAddToSession: isViewingToday ? { sessionId in
                             sessionIdToAddTo = sessionId
                             showingLogFood = true
-                        },
+                        } : nil,
                         onEditEntry: { entryToEdit = $0 },
                         onDeleteEntry: deleteFoodEntry
                     )
 
-                    TodaysActivityCard(workoutCount: todaysWorkouts.count)
+                    TodaysActivityCard(workoutCount: selectedDayWorkouts.count)
 
-                    if let latestWeight = weightEntries.first {
+                    if isViewingToday, let latestWeight = weightEntries.first {
                         WeightTrendCard(
                             currentWeight: latestWeight.weightKg,
                             targetWeight: profile?.targetWeightKg
@@ -133,15 +139,15 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingCalorieDetail) {
                 CalorieDetailSheet(
-                    entries: todaysFoodEntries,
+                    entries: selectedDayFoodEntries,
                     goal: profile?.dailyCalorieGoal ?? 2000,
-                    onAddFood: {
+                    onAddFood: isViewingToday ? {
                         showingCalorieDetail = false
                         Task {
                             try? await Task.sleep(for: .milliseconds(300))
                             showingLogFood = true
                         }
-                    },
+                    } : nil,
                     onEditEntry: { entry in
                         showingCalorieDetail = false
                         Task {
@@ -154,17 +160,18 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingMacroDetail) {
                 MacroDetailSheet(
-                    entries: todaysFoodEntries,
+                    entries: selectedDayFoodEntries,
                     proteinGoal: profile?.dailyProteinGoal ?? 150,
                     carbsGoal: profile?.dailyCarbsGoal ?? 200,
                     fatGoal: profile?.dailyFatGoal ?? 65,
-                    onAddFood: {
+                    fiberGoal: profile?.dailyFiberGoal ?? 30,
+                    onAddFood: isViewingToday ? {
                         showingMacroDetail = false
                         Task {
                             try? await Task.sleep(for: .milliseconds(300))
                             showingLogFood = true
                         }
-                    },
+                    } : nil,
                     onEditEntry: { entry in
                         showingMacroDetail = false
                         Task {
@@ -180,7 +187,7 @@ struct DashboardView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink {
-                        ProfileView(onStartCheckIn: onStartCheckIn)
+                        ProfileView()
                     } label: {
                         Image(systemName: "person.circle.fill")
                             .font(.title2)
@@ -192,19 +199,23 @@ struct DashboardView: View {
     }
 
     private var totalCalories: Int {
-        todaysFoodEntries.reduce(0) { $0 + $1.calories }
+        selectedDayFoodEntries.reduce(0) { $0 + $1.calories }
     }
 
     private var totalProtein: Double {
-        todaysFoodEntries.reduce(0) { $0 + $1.proteinGrams }
+        selectedDayFoodEntries.reduce(0) { $0 + $1.proteinGrams }
     }
 
     private var totalCarbs: Double {
-        todaysFoodEntries.reduce(0) { $0 + $1.carbsGrams }
+        selectedDayFoodEntries.reduce(0) { $0 + $1.carbsGrams }
     }
 
     private var totalFat: Double {
-        todaysFoodEntries.reduce(0) { $0 + $1.fatGrams }
+        selectedDayFoodEntries.reduce(0) { $0 + $1.fatGrams }
+    }
+
+    private var totalFiber: Double {
+        selectedDayFoodEntries.reduce(0) { $0 + ($1.fiberGrams ?? 0) }
     }
 
     private func refreshHealthData() async {
@@ -218,7 +229,7 @@ struct DashboardView: View {
 }
 
 #Preview {
-    DashboardView(onStartCheckIn: {})
+    DashboardView()
         .modelContainer(for: [
             UserProfile.self,
             FoodEntry.self,

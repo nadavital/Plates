@@ -13,7 +13,8 @@ struct MacroDetailSheet: View {
     let proteinGoal: Int
     let carbsGoal: Int
     let fatGoal: Int
-    let onAddFood: () -> Void
+    var fiberGoal: Int = 30
+    var onAddFood: (() -> Void)?
     let onEditEntry: (FoodEntry) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -30,6 +31,10 @@ struct MacroDetailSheet: View {
         entries.reduce(0) { $0 + $1.fatGrams }
     }
 
+    private var totalFiber: Double {
+        entries.reduce(0) { $0 + ($1.fiberGrams ?? 0) }
+    }
+
     private var totalCaloriesFromMacros: Int {
         Int((totalProtein * 4) + (totalCarbs * 4) + (totalFat * 9))
     }
@@ -43,9 +48,11 @@ struct MacroDetailSheet: View {
                         protein: totalProtein,
                         carbs: totalCarbs,
                         fat: totalFat,
+                        fiber: totalFiber,
                         proteinGoal: proteinGoal,
                         carbsGoal: carbsGoal,
-                        fatGoal: fatGoal
+                        fatGoal: fatGoal,
+                        fiberGoal: fiberGoal
                     )
                     .padding(.top)
 
@@ -68,8 +75,10 @@ struct MacroDetailSheet: View {
                     Button("Done") { dismiss() }
                 }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Add Food", systemImage: "plus", action: onAddFood)
+                if let addAction = onAddFood {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Add Food", systemImage: "plus", action: addAction)
+                    }
                 }
             }
         }
@@ -82,12 +91,14 @@ private struct MacroRingsDisplay: View {
     let protein: Double
     let carbs: Double
     let fat: Double
+    let fiber: Double
     let proteinGoal: Int
     let carbsGoal: Int
     let fatGoal: Int
+    let fiberGoal: Int
 
     var body: some View {
-        HStack(spacing: 32) {
+        HStack(spacing: 20) {
             MacroRing(
                 name: "Protein",
                 current: protein,
@@ -109,6 +120,14 @@ private struct MacroRingsDisplay: View {
                 current: fat,
                 goal: Double(fatGoal),
                 color: .purple,
+                unit: "g"
+            )
+
+            MacroRing(
+                name: "Fiber",
+                current: fiber,
+                goal: Double(fiberGoal),
+                color: .green,
                 unit: "g"
             )
         }
@@ -324,10 +343,11 @@ private struct FoodMacroRow: View {
 
                 Spacer()
 
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     MacroValue(value: entry.proteinGrams, unit: "P", color: .blue)
                     MacroValue(value: entry.carbsGrams, unit: "C", color: .orange)
                     MacroValue(value: entry.fatGrams, unit: "F", color: .purple)
+                    MacroValue(value: entry.fiberGrams ?? 0, unit: "Fi", color: .green)
                 }
             }
             .padding(.horizontal, 12)

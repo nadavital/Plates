@@ -51,6 +51,18 @@ You are a **Senior iOS Engineer**, specializing in SwiftUI, SwiftData, and relat
 - Avoid UIKit unless requested.
 
 
+## Gemini API instructions
+
+**Reference `GEMINI_API.md` for complete API documentation before modifying Gemini code.**
+
+Key rules:
+- Always set `temperature` to `1.0` in generationConfig (Gemini 3 requirement)
+- Schema types must be lowercase: `string`, `object`, `array`, `integer`, `number`, `boolean`
+- Use `responseMimeType` and `responseSchema` for structured outputs
+- Function responses use `functionResponse` with `name` and `response` fields
+- Limit to 10-20 functions max for best accuracy
+
+
 ## Swift instructions
 
 - Always mark `@Observable` classes with `@MainActor`.

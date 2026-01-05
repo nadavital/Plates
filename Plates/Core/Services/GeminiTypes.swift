@@ -159,42 +159,6 @@ struct PlanUpdateSuggestionEntry: Codable, Sendable {
     }
 }
 
-// MARK: - Check-In Response
-
-/// A suggested response option for check-in questions
-struct CheckInResponseOption: Codable, Sendable, Identifiable, Hashable {
-    let id: String
-    let label: String
-    let emoji: String?
-
-    init(id: String? = nil, label: String, emoji: String? = nil) {
-        self.id = id ?? UUID().uuidString
-        self.label = label
-        self.emoji = emoji
-    }
-
-    var displayLabel: String {
-        if let emoji {
-            return "\(emoji) \(label)"
-        }
-        return label
-    }
-}
-
-/// Structured response from AI during check-in with optional suggested responses
-struct CheckInAIResponse: Codable, Sendable {
-    let message: String
-    let suggestedResponses: [CheckInResponseOption]?
-    let isComplete: Bool?
-    let summary: String?
-
-    /// Whether this response has suggested responses for the user
-    var hasSuggestedResponses: Bool {
-        guard let responses = suggestedResponses else { return false }
-        return !responses.isEmpty
-    }
-}
-
 // MARK: - Errors
 
 enum GeminiError: LocalizedError {

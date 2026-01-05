@@ -7,8 +7,6 @@ import SwiftUI
 import SwiftData
 
 struct ProfileView: View {
-    let onStartCheckIn: () -> Void
-
     @Query private var profiles: [UserProfile]
     @Query(sort: \WorkoutSession.loggedAt, order: .reverse)
     private var workouts: [WorkoutSession]
@@ -29,7 +27,9 @@ struct ProfileView: View {
     private var profile: UserProfile? { profiles.first }
 
     private var hasWorkoutToday: Bool {
-        planService.isTrainingDay(workouts: workouts)
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        return workouts.contains { $0.loggedAt >= startOfDay }
     }
 
     var body: some View {
@@ -40,7 +40,6 @@ struct ProfileView: View {
                         headerCard(profile)
                         statsGrid(profile)
                         planCard(profile)
-                        checkInCard(profile)
                         memoriesCard()
                         preferencesCard(profile)
                     }
@@ -279,106 +278,6 @@ struct ProfileView: View {
                 }
                 .padding()
                 .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-            }
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-        )
-    }
-
-    // MARK: - Check-In Card
-
-    @ViewBuilder
-    private func checkInCard(_ profile: UserProfile) -> some View {
-        let status = planService.getCheckInStatus(for: profile)
-
-        VStack(spacing: 16) {
-            HStack {
-                Label("Weekly Check-In", systemImage: "calendar.badge.clock")
-                    .font(.headline)
-
-                Spacer()
-
-                if status.isDue {
-                    Text("Due Today")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.green, in: .capsule)
-                }
-            }
-
-            HStack(spacing: 16) {
-                // Day selector
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Check-in day")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Menu {
-                        ForEach(UserProfile.Weekday.allCases) { day in
-                            Button {
-                                profile.checkInDay = day
-                                HapticManager.lightTap()
-                            } label: {
-                                HStack {
-                                    Text(day.displayName)
-                                    if profile.checkInDay == day {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(profile.checkInDay?.displayName ?? "Select")
-                                .fontWeight(.medium)
-
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption2)
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                }
-
-                Spacer()
-
-                if let days = status.daysUntilNext, !status.isDue {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("Next in")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Text(days == 1 ? "1 day" : "\(days) days")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                    }
-                }
-            }
-
-            if status.isDue {
-                Button {
-                    onStartCheckIn()
-                } label: {
-                    Label("Start Check-In", systemImage: "arrow.right.circle.fill")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                Button {
-                    onStartCheckIn()
-                } label: {
-                    Label("Check in now", systemImage: "arrow.right.circle")
-                        .font(.subheadline)
-                }
-                .foregroundStyle(.secondary)
             }
         }
         .padding(20)
@@ -682,7 +581,7 @@ struct DietaryRestrictionsView: View {
 }
 
 #Preview {
-    ProfileView(onStartCheckIn: {})
+    ProfileView()
         .modelContainer(for: [
             UserProfile.self,
             WorkoutSession.self,

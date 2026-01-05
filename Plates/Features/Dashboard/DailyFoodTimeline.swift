@@ -10,8 +10,8 @@ import SwiftData
 
 struct DailyFoodTimeline: View {
     let entries: [FoodEntry]
-    let onAddFood: () -> Void
-    let onAddToSession: (UUID) -> Void
+    var onAddFood: (() -> Void)?
+    var onAddToSession: ((UUID) -> Void)?
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
 
@@ -54,18 +54,24 @@ struct DailyFoodTimeline: View {
         entries.isEmpty
     }
 
+    private var canAddFood: Bool {
+        onAddFood != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Text("Today's Food")
+                Text(canAddFood ? "Today's Food" : "Food Log")
                     .font(.headline)
 
                 Spacer()
 
-                Button("Add", systemImage: "plus.circle.fill", action: onAddFood)
-                    .font(.subheadline)
-                    .labelStyle(.iconOnly)
+                if let addAction = onAddFood {
+                    Button("Add", systemImage: "plus.circle.fill", action: addAction)
+                        .font(.subheadline)
+                        .labelStyle(.iconOnly)
+                }
             }
 
             if isEmpty {
@@ -84,7 +90,7 @@ struct DailyFoodTimeline: View {
                         case .session(let sessionId, let sessionEntries):
                             FoodSessionCard(
                                 entries: sessionEntries,
-                                onAddMore: { onAddToSession(sessionId) },
+                                onAddMore: onAddToSession.map { action in { action(sessionId) } },
                                 onEditEntry: onEditEntry,
                                 onDeleteEntry: onDeleteEntry
                             )
@@ -118,7 +124,7 @@ private enum FoodGroup: Identifiable {
 // MARK: - Empty Meals View
 
 private struct EmptyMealsView: View {
-    let onAddFood: () -> Void
+    var onAddFood: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -126,13 +132,15 @@ private struct EmptyMealsView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
 
-            Text("No meals logged yet")
+            Text(onAddFood != nil ? "No meals logged yet" : "No meals logged")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Button("Log Your First Meal", action: onAddFood)
-                .font(.subheadline)
-                .buttonStyle(.bordered)
+            if let addAction = onAddFood {
+                Button("Log Your First Meal", action: addAction)
+                    .font(.subheadline)
+                    .buttonStyle(.bordered)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
@@ -143,7 +151,7 @@ private struct EmptyMealsView: View {
 
 private struct FoodSessionCard: View {
     let entries: [FoodEntry]
-    let onAddMore: () -> Void
+    var onAddMore: (() -> Void)?
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
 
@@ -222,15 +230,17 @@ private struct FoodSessionCard: View {
                         )
                     }
 
-                    // Add more button
-                    Button(action: onAddMore) {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add to this meal")
+                    // Add more button (only if onAddMore is provided)
+                    if let addAction = onAddMore {
+                        Button(action: addAction) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Add to this meal")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.tint)
+                            .padding(.vertical, 8)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.tint)
-                        .padding(.vertical, 8)
                     }
                 }
                 .padding(.top, 4)

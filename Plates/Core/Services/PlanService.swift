@@ -120,50 +120,6 @@ final class PlanService {
         return currentWeight - lastWeight
     }
 
-    // MARK: - Weekly Check-In
-
-    /// Check if a weekly check-in is due
-    func isCheckInDue(for profile: UserProfile) -> Bool {
-        return profile.isCheckInDue
-    }
-
-    /// Record that a check-in was completed
-    func recordCheckIn(for profile: UserProfile) {
-        profile.lastCheckInDate = Date()
-    }
-
-    /// Get check-in status info
-    func getCheckInStatus(for profile: UserProfile) -> CheckInStatus {
-        CheckInStatus(
-            isCheckInDay: profile.isTodayCheckInDay,
-            isDue: profile.isCheckInDue,
-            daysUntilNext: profile.daysUntilCheckIn,
-            lastCheckIn: profile.lastCheckInDate,
-            preferredDay: profile.checkInDay
-        )
-    }
-
-    struct CheckInStatus {
-        let isCheckInDay: Bool
-        let isDue: Bool
-        let daysUntilNext: Int?
-        let lastCheckIn: Date?
-        let preferredDay: UserProfile.Weekday?
-
-        var statusMessage: String {
-            if isDue {
-                return "Time for your weekly check-in!"
-            } else if let days = daysUntilNext {
-                if days == 1 {
-                    return "Check-in tomorrow"
-                } else {
-                    return "Check-in in \(days) days"
-                }
-            }
-            return "No check-in scheduled"
-        }
-    }
-
     // MARK: - Training Day Detection
 
     /// Check if today is a training day based on logged workouts
