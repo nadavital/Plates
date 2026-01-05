@@ -139,7 +139,7 @@ struct SummaryStepView: View {
                 .font(.title3)
                 .foregroundStyle(.purple)
 
-            Text("Our AI will use this information to create a personalized nutrition plan just for you.")
+            Text("Trai will use this information to create a personalized nutrition plan just for you.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

@@ -297,3 +297,30 @@ struct EditMealSuggestionSheet: View {
         }
     }
 }
+
+// MARK: - Memory Saved Badge
+
+struct MemorySavedBadge: View {
+    let memories: [String]
+
+    private var displayText: String {
+        if memories.count == 1 {
+            return "Remembered"
+        }
+        return "Remembered \(memories.count) things"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "brain.head.profile")
+                .font(.caption)
+            Text(displayText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.purple.opacity(0.1))
+        .clipShape(.capsule)
+    }
+}

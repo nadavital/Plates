@@ -89,12 +89,12 @@ struct PlanChatView: View {
                 }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Your AI Nutritionist")
+                Text("Trai")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundStyle(.tint)
 
-                Text("I've created your personalized plan with **\(currentPlan.dailyTargets.calories) calories** daily. Feel free to ask me anything about your plan or request adjustments!")
+                Text("I've created your personalized plan with **\(currentPlan.dailyTargets.calories) calories** daily. Feel free to ask me anything or request adjustments!")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

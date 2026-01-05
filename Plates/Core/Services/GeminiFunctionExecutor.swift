@@ -86,6 +86,12 @@ final class GeminiFunctionExecutor {
         case "log_workout":
             return executeLogWorkout(call.arguments)
 
+        case "save_memory":
+            return executeSaveMemory(call.arguments)
+
+        case "delete_memory":
+            return executeDeleteMemory(call.arguments)
+
         default:
             return .dataResponse(FunctionResult(
                 name: call.name,

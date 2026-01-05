@@ -339,3 +339,54 @@ struct QuickActionButton: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - Check-In Due Card
+
+struct CheckInDueCard: View {
+    let onStartCheckIn: () -> Void
+
+    var body: some View {
+        Button(action: onStartCheckIn) {
+            HStack(spacing: 16) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(Color.green.opacity(0.15))
+                        .frame(width: 50, height: 50)
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.green)
+                }
+
+                // Text
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weekly Check-In")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text("Time to review your progress!")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                // Arrow
+                Image(systemName: "chevron.right")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.secondarySystemBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}

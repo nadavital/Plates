@@ -23,7 +23,9 @@ struct PlatesApp: App {
                 ChatMessage.self,
                 LiveWorkout.self,
                 LiveWorkoutEntry.self,
-                ExerciseHistory.self
+                ExerciseHistory.self,
+                WeeklyCheckIn.self,
+                CoachMemory.self
             ])
 
             let modelConfiguration = ModelConfiguration(

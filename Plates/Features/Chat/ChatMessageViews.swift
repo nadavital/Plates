@@ -11,20 +11,23 @@ import SwiftUI
 
 struct EmptyChatView: View {
     let onSuggestionTapped: (String) -> Void
+    var isLoading: Bool = false
+
+    private var lensState: TraiLensState {
+        isLoading ? .thinking : .idle
+    }
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.tint)
+            TraiLensView(size: 100, state: lensState, palette: .energy)
 
-            Text("Your AI Fitness Coach")
+            Text("Meet Trai")
                 .font(.title2)
                 .bold()
 
-            Text("Ask me anything about nutrition, workouts, or your fitness goals")
+            Text("Your personal fitness coach. Ask me anything about nutrition, workouts, or your goals!")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -64,10 +67,17 @@ struct EmptyChatView: View {
 
 struct ChatBubble: View {
     let message: ChatMessage
+    var currentCalories: Int?
+    var currentProtein: Int?
+    var currentCarbs: Int?
+    var currentFat: Int?
     var onAcceptMeal: ((SuggestedFoodEntry) -> Void)?
     var onEditMeal: ((SuggestedFoodEntry) -> Void)?
     var onDismissMeal: (() -> Void)?
     var onViewLoggedMeal: ((UUID) -> Void)?
+    var onAcceptPlan: ((PlanUpdateSuggestionEntry) -> Void)?
+    var onEditPlan: ((PlanUpdateSuggestionEntry) -> Void)?
+    var onDismissPlan: (() -> Void)?
 
     var body: some View {
         HStack {
@@ -120,6 +130,24 @@ struct ChatBubble: View {
                         ))
                     }
 
+                    // Show plan update suggestion card if pending
+                    if message.hasPendingPlanSuggestion, let plan = message.suggestedPlan {
+                        PlanUpdateSuggestionCard(
+                            suggestion: plan,
+                            currentCalories: currentCalories,
+                            currentProtein: currentProtein,
+                            currentCarbs: currentCarbs,
+                            currentFat: currentFat,
+                            onAccept: { onAcceptPlan?(plan) },
+                            onEdit: { onEditPlan?(plan) },
+                            onDismiss: { onDismissPlan?() }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.9).combined(with: .opacity),
+                            removal: .scale(scale: 0.95).combined(with: .opacity)
+                        ))
+                    }
+
                     // Show logged meal indicator (after message content)
                     if let entryId = message.loggedFoodEntryId {
                         LoggedMealBadge(
@@ -129,9 +157,24 @@ struct ChatBubble: View {
                         )
                         .transition(.scale.combined(with: .opacity))
                     }
+
+                    // Show plan update applied indicator
+                    if message.planUpdateApplied {
+                        PlanUpdateAppliedBadge()
+                            .transition(.scale.combined(with: .opacity))
+                    }
+
+                    // Show memory saved indicator
+                    if message.hasSavedMemories {
+                        MemorySavedBadge(memories: message.savedMemories)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingMealSuggestion)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingPlanSuggestion)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.loggedFoodEntryId)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.planUpdateApplied)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasSavedMemories)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -168,23 +211,3 @@ struct ChatBubble: View {
     }
 }
 
-// MARK: - Loading Bubble
-
-struct LoadingBubble: View {
-    var body: some View {
-        HStack {
-            HStack(spacing: 4) {
-                ForEach(0..<3, id: \.self) { _ in
-                    Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 8, height: 8)
-                }
-            }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 16))
-
-            Spacer()
-        }
-    }
-}

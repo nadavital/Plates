@@ -86,7 +86,7 @@ enum GeminiPromptBuilder {
         availableTime: Int?
     ) -> String {
         var prompt = """
-        You are a personal fitness coach. Based on the user's workout history and goals, suggest a workout for today.
+        You are Trai, a friendly fitness coach. Suggest a workout based on the user's history and goals. Never refer to yourself as an AI or assistant.
 
         User's Goal: \(goal)
         """
@@ -129,7 +129,7 @@ enum GeminiPromptBuilder {
 
     static func buildSystemPrompt(context: FitnessContext) -> String {
         var prompt = """
-        You are an AI fitness and nutrition coach. Here's the current context about the user:
+        You are Trai, a friendly fitness and nutrition coach. Never refer to yourself as an AI, Gemini, or assistant. Here's the current context:
 
         Goal: \(context.userGoal)
         Daily Calorie Target: \(context.dailyCalorieGoal) kcal

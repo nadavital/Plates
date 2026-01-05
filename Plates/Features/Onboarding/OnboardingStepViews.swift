@@ -137,7 +137,7 @@ struct WelcomeStepView: View {
             }
             .opacity(titleVisible ? 1 : 0)
 
-            Text("Your AI-powered nutrition companion\nthat learns and adapts to you")
+            Text("Meet Trai, your personal coach\nwho learns and adapts to you")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -21,7 +21,9 @@ enum GeminiFunctionDeclarations {
             getUserPlan,
             updateUserPlan,
             getRecentWorkouts,
-            logWorkout
+            logWorkout,
+            saveMemory,
+            deleteMemory
         ]
     }
 
@@ -143,36 +145,37 @@ enum GeminiFunctionDeclarations {
     static var updateUserPlan: [String: Any] {
         [
             "name": "update_user_plan",
-            "description": "Propose changes to the user's nutrition plan or goals. The user must confirm before changes are applied. Use when the user wants to adjust their calorie/macro targets or change their goal.",
+            "description": "Propose changes to the user's nutrition plan or goals. The user must confirm before changes are applied. Use when the user wants to adjust their calorie/macro targets or change their goal. You must provide at least one value to change, plus a rationale explaining why.",
             "parameters": [
                 "type": "object",
                 "properties": [
                     "calories": [
                         "type": "integer",
-                        "description": "New daily calorie target"
+                        "description": "New daily calorie target (e.g., 2000)"
                     ],
                     "protein_grams": [
                         "type": "integer",
-                        "description": "New daily protein target in grams"
+                        "description": "New daily protein target in grams (e.g., 150)"
                     ],
                     "carbs_grams": [
                         "type": "integer",
-                        "description": "New daily carbs target in grams"
+                        "description": "New daily carbs target in grams (e.g., 200)"
                     ],
                     "fat_grams": [
                         "type": "integer",
-                        "description": "New daily fat target in grams"
+                        "description": "New daily fat target in grams (e.g., 65)"
                     ],
                     "goal": [
                         "type": "string",
-                        "description": "New fitness goal (e.g., 'lose_weight', 'build_muscle', 'maintain')"
+                        "description": "New fitness goal",
+                        "enum": ["lose_weight", "lose_fat", "build_muscle", "body_recomposition", "maintain_weight", "athletic_performance", "general_health"]
                     ],
                     "rationale": [
                         "type": "string",
                         "description": "Brief explanation of why these changes are recommended"
                     ]
                 ],
-                "required": []
+                "required": ["rationale"]
             ]
         ]
     }
@@ -207,7 +210,8 @@ enum GeminiFunctionDeclarations {
                 "properties": [
                     "type": [
                         "type": "string",
-                        "description": "Type of workout (e.g., 'strength', 'cardio', 'hiit', 'yoga', 'running')"
+                        "description": "Type of workout",
+                        "enum": ["strength", "cardio", "hiit", "yoga", "running", "cycling", "swimming", "walking", "sports", "other"]
                     ],
                     "duration_minutes": [
                         "type": "integer",
@@ -232,6 +236,62 @@ enum GeminiFunctionDeclarations {
                     ]
                 ],
                 "required": ["type"]
+            ]
+        ]
+    }
+
+    // MARK: - Memory Functions
+
+    /// Save a memory/fact about the user
+    static var saveMemory: [String: Any] {
+        [
+            "name": "save_memory",
+            "description": "Save an important fact, preference, or piece of information about the user to remember for future conversations. Use this proactively when you learn something valuable like: food preferences ('doesn't like fish'), dietary restrictions ('allergic to nuts'), habits ('usually skips breakfast'), goals ('training for a marathon'), schedule constraints ('works night shifts'), or feedback ('found portions too large'). This helps you act as a personalized coach who knows the user.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "content": [
+                        "type": "string",
+                        "description": "The fact or preference to remember (e.g., 'Doesn't like eating fish', 'Prefers high-protein breakfasts', 'Has a nut allergy')"
+                    ],
+                    "category": [
+                        "type": "string",
+                        "description": "Type of memory",
+                        "enum": ["preference", "restriction", "habit", "goal", "context", "feedback"]
+                    ],
+                    "topic": [
+                        "type": "string",
+                        "description": "Topic area this relates to",
+                        "enum": ["food", "workout", "schedule", "general"]
+                    ],
+                    "importance": [
+                        "type": "integer",
+                        "description": "How important this is to remember (1-5, where 5 is critical like allergies)"
+                    ]
+                ],
+                "required": ["content", "category", "topic"]
+            ]
+        ]
+    }
+
+    /// Delete/deactivate a memory
+    static var deleteMemory: [String: Any] {
+        [
+            "name": "delete_memory",
+            "description": "Delete or update a memory when the user indicates something is no longer true or has changed. For example, if a user previously said they don't like fish but now says they've started eating it.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "memory_content": [
+                        "type": "string",
+                        "description": "The memory content to find and delete (partial match is okay)"
+                    ],
+                    "reason": [
+                        "type": "string",
+                        "description": "Brief reason for deletion (e.g., 'User now eats fish')"
+                    ]
+                ],
+                "required": ["memory_content"]
             ]
         ]
     }

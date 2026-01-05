@@ -13,7 +13,7 @@ extension GeminiPromptBuilder {
 
     static func buildPlanGenerationPrompt(request: PlanGenerationRequest) -> String {
         var prompt = """
-        You are a certified nutritionist and fitness expert. Create a personalized nutrition plan based on the following user profile.
+        You are Trai, a certified nutritionist and fitness coach creating a personalized nutrition plan. Never mention being an AI or assistant.
 
         USER PROFILE:
         - Name: \(request.name)
@@ -142,7 +142,7 @@ extension GeminiPromptBuilder {
         conversationHistory: [PlanChatMessage]
     ) -> String {
         var prompt = """
-        You are a friendly AI nutritionist chatting with a user about their nutrition plan. This is a casual chat interface, so keep responses SHORT and conversational (1-3 sentences max for questions/clarifications).
+        You are Trai, a friendly nutrition coach chatting with the user about their plan. Never refer to yourself as an AI or assistant. This is a casual chat, so keep responses SHORT and conversational (1-3 sentences max).
 
         RESPONSE TYPES - Choose ONE:
         1. "message" - For questions, clarifications, or asking follow-ups. Use this MOST of the time.

@@ -193,7 +193,7 @@ struct PlanReviewStepView: View {
                 Text("Crafting Your Plan")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
 
-                Text("Our AI is analyzing your profile and\ncreating a personalized nutrition strategy")
+                Text("Trai is analyzing your profile and\ncreating a personalized nutrition strategy")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

@@ -27,25 +27,40 @@ struct ContentView: View {
 
 // MARK: - Main Tab View
 
+enum AppTab: String, CaseIterable {
+    case dashboard
+    case trai
+    case workouts
+}
+
 struct MainTabView: View {
+    @State private var selectedTab: AppTab = .dashboard
+    @AppStorage("pendingCheckIn") private var pendingCheckIn = false
+
     var body: some View {
-        TabView {
-            Tab("Dashboard", systemImage: "house.fill") {
-                DashboardView()
+        TabView(selection: $selectedTab) {
+            Tab("Dashboard", systemImage: "house.fill", value: .dashboard) {
+                DashboardView(onStartCheckIn: navigateToTrai)
             }
 
-            Tab("Workouts", systemImage: "figure.run") {
-                WorkoutsView()
-            }
-
-            Tab("Coach", systemImage: "bubble.left.and.bubble.right.fill") {
+            Tab("Trai", systemImage: "circle.hexagongrid.circle", value: .trai, role: .search) {
                 ChatView()
             }
 
-            Tab("Profile", systemImage: "person.fill") {
-                ProfileView()
+            Tab("Workouts", systemImage: "figure.run", value: .workouts) {
+                WorkoutsView()
             }
         }
+        .onAppear {
+            if pendingCheckIn {
+                pendingCheckIn = false
+                selectedTab = .trai
+            }
+        }
+    }
+
+    private func navigateToTrai() {
+        selectedTab = .trai
     }
 }
 

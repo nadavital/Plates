@@ -108,6 +108,93 @@ struct FitnessContext: Sendable {
     }
 }
 
+// MARK: - Plan Update Suggestion
+
+/// Plan update suggested by AI for user confirmation
+struct PlanUpdateSuggestionEntry: Codable, Sendable {
+    let calories: Int?
+    let proteinGrams: Int?
+    let carbsGrams: Int?
+    let fatGrams: Int?
+    let goal: String?
+    let rationale: String?
+
+    /// Whether this suggestion contains any changes
+    var hasChanges: Bool {
+        calories != nil || proteinGrams != nil || carbsGrams != nil ||
+        fatGrams != nil || goal != nil
+    }
+
+    /// Formatted goal display name
+    var goalDisplayName: String? {
+        guard let goal else { return nil }
+        // Convert raw goal string to display name
+        switch goal.lowercased().replacing("_", with: "") {
+        case "loseweight": return "Lose Weight"
+        case "losefat": return "Lose Fat, Keep Muscle"
+        case "buildmuscle": return "Build Muscle"
+        case "recomposition", "bodyrecomposition": return "Body Recomposition"
+        case "maintenance", "maintainweight": return "Maintain Weight"
+        case "performance", "athleticperformance": return "Athletic Performance"
+        case "health", "generalhealth": return "General Health"
+        default: return goal.replacing("_", with: " ").capitalized
+        }
+    }
+
+    /// Create from function executor result
+    init(
+        calories: Int? = nil,
+        proteinGrams: Int? = nil,
+        carbsGrams: Int? = nil,
+        fatGrams: Int? = nil,
+        goal: String? = nil,
+        rationale: String? = nil
+    ) {
+        self.calories = calories
+        self.proteinGrams = proteinGrams
+        self.carbsGrams = carbsGrams
+        self.fatGrams = fatGrams
+        self.goal = goal
+        self.rationale = rationale
+    }
+}
+
+// MARK: - Check-In Response
+
+/// A suggested response option for check-in questions
+struct CheckInResponseOption: Codable, Sendable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let emoji: String?
+
+    init(id: String? = nil, label: String, emoji: String? = nil) {
+        self.id = id ?? UUID().uuidString
+        self.label = label
+        self.emoji = emoji
+    }
+
+    var displayLabel: String {
+        if let emoji {
+            return "\(emoji) \(label)"
+        }
+        return label
+    }
+}
+
+/// Structured response from AI during check-in with optional suggested responses
+struct CheckInAIResponse: Codable, Sendable {
+    let message: String
+    let suggestedResponses: [CheckInResponseOption]?
+    let isComplete: Bool?
+    let summary: String?
+
+    /// Whether this response has suggested responses for the user
+    var hasSuggestedResponses: Bool {
+        guard let responses = suggestedResponses else { return false }
+        return !responses.isEmpty
+    }
+}
+
 // MARK: - Errors
 
 enum GeminiError: LocalizedError {

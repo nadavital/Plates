@@ -7,11 +7,19 @@ import SwiftUI
 import SwiftData
 
 struct ProfileView: View {
+    let onStartCheckIn: () -> Void
+
     @Query private var profiles: [UserProfile]
     @Query(sort: \WorkoutSession.loggedAt, order: .reverse)
     private var workouts: [WorkoutSession]
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
     private var weightEntries: [WeightEntry]
+    @Query(sort: \FoodEntry.loggedAt, order: .reverse)
+    private var foodEntries: [FoodEntry]
+    @Query(sort: \LiveWorkout.startedAt, order: .reverse)
+    private var liveWorkouts: [LiveWorkout]
+    @Query(filter: #Predicate<CoachMemory> { $0.isActive }, sort: \CoachMemory.createdAt, order: .reverse)
+    private var memories: [CoachMemory]
 
     @Environment(\.modelContext) private var modelContext
     @State private var planService = PlanService()
@@ -33,6 +41,7 @@ struct ProfileView: View {
                         statsGrid(profile)
                         planCard(profile)
                         checkInCard(profile)
+                        memoriesCard()
                         preferencesCard(profile)
                     }
                 }
@@ -353,7 +362,7 @@ struct ProfileView: View {
 
             if status.isDue {
                 Button {
-                    // TODO: Navigate to check-in flow
+                    onStartCheckIn()
                 } label: {
                     Label("Start Check-In", systemImage: "arrow.right.circle.fill")
                         .font(.subheadline)
@@ -362,6 +371,14 @@ struct ProfileView: View {
                         .padding(.vertical, 12)
                 }
                 .buttonStyle(.borderedProminent)
+            } else {
+                Button {
+                    onStartCheckIn()
+                } label: {
+                    Label("Check in now", systemImage: "arrow.right.circle")
+                        .font(.subheadline)
+                }
+                .foregroundStyle(.secondary)
             }
         }
         .padding(20)
@@ -369,6 +386,76 @@ struct ProfileView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(.ultraThinMaterial)
         )
+    }
+
+    // MARK: - Memories Card
+
+    @ViewBuilder
+    private func memoriesCard() -> some View {
+        VStack(spacing: 16) {
+            HStack {
+                Label("What I Know About You", systemImage: "brain.head.profile")
+                    .font(.headline)
+
+                Spacer()
+
+                if !memories.isEmpty {
+                    Text("\(memories.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.secondary.opacity(0.15), in: .capsule)
+                }
+            }
+
+            if memories.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "brain")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+
+                    Text("No memories yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text("As you chat with Trai, important things about your preferences and goals will be remembered.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(memories.prefix(5)) { memory in
+                        MemoryRow(memory: memory, onDelete: {
+                            deleteMemory(memory)
+                        })
+                    }
+
+                    if memories.count > 5 {
+                        NavigationLink {
+                            AllMemoriesView(memories: memories, onDelete: deleteMemory)
+                        } label: {
+                            Text("See all \(memories.count) memories")
+                                .font(.subheadline)
+                                .foregroundStyle(.accent)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+        )
+    }
+
+    private func deleteMemory(_ memory: CoachMemory) {
+        memory.isActive = false
+        HapticManager.lightTap()
     }
 
     // MARK: - Preferences Card
@@ -595,7 +682,7 @@ struct DietaryRestrictionsView: View {
 }
 
 #Preview {
-    ProfileView()
+    ProfileView(onStartCheckIn: {})
         .modelContainer(for: [
             UserProfile.self,
             WorkoutSession.self,

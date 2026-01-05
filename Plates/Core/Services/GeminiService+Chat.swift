@@ -102,7 +102,7 @@ extension GeminiService {
         ])
         contents.append([
             "role": "model",
-            "parts": [["text": "I understand. I'm your AI fitness coach and I'll help you reach your goals. How can I help you today?"]]
+            "parts": [["text": "Hey! What's going on?"]]
         ])
 
         for msg in conversationHistory.suffix(10) {

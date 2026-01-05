@@ -62,4 +62,31 @@ extension View {
             }
         }
     }
+
+    func chatEditPlanSheet(
+        editingPlan: Binding<(message: ChatMessage, plan: PlanUpdateSuggestionEntry)?>,
+        currentCalories: Int,
+        currentProtein: Int,
+        currentCarbs: Int,
+        currentFat: Int,
+        onSave: @escaping (PlanUpdateSuggestionEntry, ChatMessage) -> Void
+    ) -> some View {
+        self.sheet(isPresented: Binding(
+            get: { editingPlan.wrappedValue != nil },
+            set: { if !$0 { editingPlan.wrappedValue = nil } }
+        )) {
+            if let editing = editingPlan.wrappedValue {
+                EditPlanSuggestionSheet(
+                    suggestion: editing.plan,
+                    currentCalories: currentCalories,
+                    currentProtein: currentProtein,
+                    currentCarbs: currentCarbs,
+                    currentFat: currentFat
+                ) { updatedPlan in
+                    onSave(updatedPlan, editing.message)
+                    editingPlan.wrappedValue = nil
+                }
+            }
+        }
+    }
 }

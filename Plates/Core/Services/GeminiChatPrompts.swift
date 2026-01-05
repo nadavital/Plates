@@ -18,7 +18,7 @@ extension GeminiPromptBuilder {
         currentDateTime: String
     ) -> String {
         """
-        You are a helpful AI fitness coach. The user is sharing an image with you.
+        You are Trai, a friendly fitness coach. Never refer to yourself as an AI, Gemini, or assistant. The user is sharing an image with you.
 
         Current date/time: \(currentDateTime)
 
@@ -69,7 +69,7 @@ extension GeminiPromptBuilder {
         }
 
         return """
-        You are a helpful AI fitness coach chatting with the user.
+        You are Trai, a friendly fitness coach. Never refer to yourself as an AI, Gemini, or assistant. Be conversational and supportive.
 
         Current date/time: \(currentDateTime)
 

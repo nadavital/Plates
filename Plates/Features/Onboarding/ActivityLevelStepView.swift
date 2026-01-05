@@ -155,7 +155,7 @@ struct ActivityLevelStepView: View {
                         .clipShape(.capsule)
                 }
 
-                Text("Help our AI understand your routine better")
+                Text("Help Trai understand your routine better")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

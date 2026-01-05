@@ -82,7 +82,7 @@ struct PlanAdjustmentSheet: View {
             .sheet(isPresented: $showAICoach) {
                 NavigationStack {
                     ChatView()
-                        .navigationTitle("AI Coach")
+                        .navigationTitle("Trai")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
@@ -113,7 +113,7 @@ struct PlanAdjustmentSheet: View {
                     }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Talk to AI Coach")
+                    Text("Talk to Trai")
                         .font(.headline)
                         .foregroundStyle(.primary)
 

@@ -9,6 +9,8 @@ import SwiftUI
 import SwiftData
 
 struct DashboardView: View {
+    let onStartCheckIn: () -> Void
+
     @Query private var profiles: [UserProfile]
     @Query(sort: \FoodEntry.loggedAt, order: .reverse)
     private var allFoodEntries: [FoodEntry]
@@ -16,11 +18,15 @@ struct DashboardView: View {
     @Query(sort: \WorkoutSession.loggedAt, order: .reverse)
     private var allWorkouts: [WorkoutSession]
 
+    @Query(sort: \LiveWorkout.startedAt, order: .reverse)
+    private var liveWorkouts: [LiveWorkout]
+
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
     private var weightEntries: [WeightEntry]
 
     @Environment(\.modelContext) private var modelContext
     @State private var healthKitService = HealthKitService()
+    @State private var planService = PlanService()
 
     // Sheet presentation state
     @State private var showingLogFood = false
@@ -32,6 +38,11 @@ struct DashboardView: View {
     @State private var sessionIdToAddTo: UUID?
 
     private var profile: UserProfile? { profiles.first }
+
+    private var isCheckInDue: Bool {
+        guard let profile else { return false }
+        return planService.getCheckInStatus(for: profile).isDue
+    }
 
     private var todaysFoodEntries: [FoodEntry] {
         let startOfDay = Calendar.current.startOfDay(for: Date())
@@ -45,63 +56,61 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottomTrailing) {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        if let profile {
-                            GreetingCard(name: profile.name, goal: profile.goal)
+            ScrollView {
+                VStack(spacing: 20) {
+                    if let profile {
+                        GreetingCard(name: profile.name, goal: profile.goal)
+
+                        // Quick action buttons
+                        QuickActionsCard(
+                            onLogFood: { showingLogFood = true },
+                            onAddWorkout: { showingAddWorkout = true },
+                            onLogWeight: { showingLogWeight = true }
+                        )
+
+                        // Check-in prompt when due
+                        if isCheckInDue {
+                            CheckInDueCard(onStartCheckIn: onStartCheckIn)
                         }
-
-                        CalorieProgressCard(
-                            consumed: totalCalories,
-                            goal: profile?.dailyCalorieGoal ?? 2000,
-                            onTap: { showingCalorieDetail = true }
-                        )
-
-                        MacroBreakdownCard(
-                            protein: totalProtein,
-                            carbs: totalCarbs,
-                            fat: totalFat,
-                            proteinGoal: profile?.dailyProteinGoal ?? 150,
-                            carbsGoal: profile?.dailyCarbsGoal ?? 200,
-                            fatGoal: profile?.dailyFatGoal ?? 65,
-                            onTap: { showingMacroDetail = true }
-                        )
-
-                        DailyFoodTimeline(
-                            entries: todaysFoodEntries,
-                            onAddFood: { showingLogFood = true },
-                            onAddToSession: { sessionId in
-                                sessionIdToAddTo = sessionId
-                                showingLogFood = true
-                            },
-                            onEditEntry: { entryToEdit = $0 },
-                            onDeleteEntry: deleteFoodEntry
-                        )
-
-                        TodaysActivityCard(workoutCount: todaysWorkouts.count)
-
-                        if let latestWeight = weightEntries.first {
-                            WeightTrendCard(
-                                currentWeight: latestWeight.weightKg,
-                                targetWeight: profile?.targetWeightKg
-                            )
-                        }
-
-                        // Bottom padding for FAB
-                        Color.clear.frame(height: 80)
                     }
-                    .padding()
-                }
 
-                // Floating Action Button
-                FloatingActionButton(
-                    onLogFood: { showingLogFood = true },
-                    onLogWeight: { showingLogWeight = true },
-                    onAddWorkout: { showingAddWorkout = true }
-                )
-                .padding(.trailing, 20)
-                .padding(.bottom, 20)
+                    CalorieProgressCard(
+                        consumed: totalCalories,
+                        goal: profile?.dailyCalorieGoal ?? 2000,
+                        onTap: { showingCalorieDetail = true }
+                    )
+
+                    MacroBreakdownCard(
+                        protein: totalProtein,
+                        carbs: totalCarbs,
+                        fat: totalFat,
+                        proteinGoal: profile?.dailyProteinGoal ?? 150,
+                        carbsGoal: profile?.dailyCarbsGoal ?? 200,
+                        fatGoal: profile?.dailyFatGoal ?? 65,
+                        onTap: { showingMacroDetail = true }
+                    )
+
+                    DailyFoodTimeline(
+                        entries: todaysFoodEntries,
+                        onAddFood: { showingLogFood = true },
+                        onAddToSession: { sessionId in
+                            sessionIdToAddTo = sessionId
+                            showingLogFood = true
+                        },
+                        onEditEntry: { entryToEdit = $0 },
+                        onDeleteEntry: deleteFoodEntry
+                    )
+
+                    TodaysActivityCard(workoutCount: todaysWorkouts.count)
+
+                    if let latestWeight = weightEntries.first {
+                        WeightTrendCard(
+                            currentWeight: latestWeight.weightKg,
+                            targetWeight: profile?.targetWeightKg
+                        )
+                    }
+                }
+                .padding()
             }
             .navigationTitle("Dashboard")
             .refreshable {
@@ -168,6 +177,17 @@ struct DashboardView: View {
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
             }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink {
+                        ProfileView(onStartCheckIn: onStartCheckIn)
+                    } label: {
+                        Image(systemName: "person.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
     }
 
@@ -198,7 +218,7 @@ struct DashboardView: View {
 }
 
 #Preview {
-    DashboardView()
+    DashboardView(onStartCheckIn: {})
         .modelContainer(for: [
             UserProfile.self,
             FoodEntry.self,

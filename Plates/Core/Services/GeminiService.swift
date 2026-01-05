@@ -84,7 +84,7 @@ final class GeminiService {
 
         if let schema = jsonSchema {
             config["responseMimeType"] = "application/json"
-            config["responseJsonSchema"] = schema
+            config["responseSchema"] = schema
         }
 
         return config
