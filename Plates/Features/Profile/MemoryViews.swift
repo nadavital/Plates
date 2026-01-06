@@ -15,49 +15,46 @@ struct MemoryRow: View {
     let onDelete: () -> Void
 
     @State private var showDeleteConfirmation = false
+    @State private var showDetail = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Category icon
-            Image(systemName: memory.category.icon)
-                .font(.body)
-                .foregroundStyle(categoryColor)
-                .frame(width: 32, height: 32)
-                .background(categoryColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        Button {
+            showDetail = true
+        } label: {
+            HStack(spacing: 12) {
+                // Category icon
+                Image(systemName: memory.category.icon)
+                    .font(.body)
+                    .foregroundStyle(categoryColor)
+                    .frame(width: 32, height: 32)
+                    .background(categoryColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
 
-            // Content
-            VStack(alignment: .leading, spacing: 2) {
-                Text(memory.content)
-                    .font(.subheadline)
-                    .lineLimit(2)
+                // Content
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(memory.content)
+                        .font(.subheadline)
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
 
-                HStack(spacing: 8) {
                     Text(memory.topic.displayName)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                }
 
-                    Text("•")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                Spacer()
 
-                    Text(memory.createdAt, style: .relative)
-                        .font(.caption2)
+                // Delete button
+                Button {
+                    showDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.body)
                         .foregroundStyle(.tertiary)
                 }
+                .buttonStyle(.plain)
             }
-
-            Spacer()
-
-            // Delete button
-            Button {
-                showDeleteConfirmation = true
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.body)
-                    .foregroundStyle(.tertiary)
-            }
-            .buttonStyle(.plain)
         }
+        .buttonStyle(.plain)
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
@@ -70,6 +67,13 @@ struct MemoryRow: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete this memory? Trai will no longer remember this about you.")
+        }
+        .sheet(isPresented: $showDetail) {
+            MemoryDetailSheet(memory: memory, onDelete: {
+                showDetail = false
+                onDelete()
+            })
+            .presentationDetents([.medium])
         }
     }
 
@@ -147,24 +151,26 @@ struct MemoryListRow: View {
     let onDelete: () -> Void
 
     @State private var showDeleteConfirmation = false
+    @State private var showDetail = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: memory.category.icon)
-                .font(.caption)
-                .foregroundStyle(categoryColor)
-                .frame(width: 24, height: 24)
-                .background(categoryColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+        Button {
+            showDetail = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: memory.category.icon)
+                    .font(.caption)
+                    .foregroundStyle(categoryColor)
+                    .frame(width: 24, height: 24)
+                    .background(categoryColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
 
-            VStack(alignment: .leading, spacing: 2) {
                 Text(memory.content)
                     .font(.subheadline)
-
-                Text(memory.createdAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
             }
         }
+        .buttonStyle(.plain)
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 showDeleteConfirmation = true
@@ -181,6 +187,99 @@ struct MemoryListRow: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete this memory?")
+        }
+        .sheet(isPresented: $showDetail) {
+            MemoryDetailSheet(memory: memory, onDelete: {
+                showDetail = false
+                onDelete()
+            })
+            .presentationDetents([.medium])
+        }
+    }
+
+    private var categoryColor: Color {
+        switch memory.category {
+        case .preference: return .pink
+        case .restriction: return .red
+        case .habit: return .orange
+        case .goal: return .blue
+        case .context: return .purple
+        case .feedback: return .green
+        }
+    }
+}
+
+// MARK: - Memory Detail Sheet
+
+struct MemoryDetailSheet: View {
+    let memory: CoachMemory
+    let onDelete: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showDeleteConfirmation = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Category and topic header
+                    HStack(spacing: 12) {
+                        Image(systemName: memory.category.icon)
+                            .font(.title2)
+                            .foregroundStyle(categoryColor)
+                            .frame(width: 44, height: 44)
+                            .background(categoryColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(memory.category.displayName)
+                                .font(.headline)
+                            Text(memory.topic.displayName)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Divider()
+
+                    // Full memory content
+                    Text(memory.content)
+                        .font(.body)
+
+                    // Metadata
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Saved \(memory.createdAt.formatted(date: .long, time: .shortened))", systemImage: "calendar")
+                        Label("Source: \(memory.source.capitalized)", systemImage: "info.circle")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationTitle("Memory")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .destructiveAction) {
+                    Button("Delete", role: .destructive) {
+                        showDeleteConfirmation = true
+                    }
+                }
+            }
+            .confirmationDialog("Delete Memory", isPresented: $showDeleteConfirmation) {
+                Button("Delete", role: .destructive) {
+                    onDelete()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Are you sure you want to delete this memory?")
+            }
         }
     }
 

@@ -24,12 +24,15 @@ extension GeminiFunctionExecutor {
             ))
         }
 
+        let fiber = args["fiber_grams"] as? Double ?? (args["fiber_grams"] as? Int).map(Double.init)
+
         let entry = SuggestedFoodEntry(
             name: name,
             calories: calories,
             proteinGrams: protein,
             carbsGrams: carbs,
             fatGrams: fat,
+            fiberGrams: fiber,
             servingSize: args["serving_size"] as? String,
             emoji: args["emoji"] as? String,
             loggedAtTime: args["logged_at_time"] as? String

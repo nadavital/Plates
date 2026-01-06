@@ -53,6 +53,11 @@ enum GeminiPromptBuilder {
                     "type": "number",
                     "description": "Fat in grams"
                 ],
+                "fiberGrams": [
+                    "type": "number",
+                    "description": "Dietary fiber in grams",
+                    "nullable": true
+                ],
                 "servingSize": [
                     "type": "string",
                     "description": "Estimated serving size",

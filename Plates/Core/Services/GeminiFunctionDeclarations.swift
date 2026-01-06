@@ -57,6 +57,10 @@ enum GeminiFunctionDeclarations {
                         "type": "number",
                         "description": "Fat in grams"
                     ],
+                    "fiber_grams": [
+                        "type": "number",
+                        "description": "Dietary fiber in grams"
+                    ],
                     "serving_size": [
                         "type": "string",
                         "description": "Serving size description (e.g., '1 large bowl', '16 oz')"

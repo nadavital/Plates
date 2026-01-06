@@ -116,6 +116,7 @@ extension GeminiService {
 
         var parts: [[String: Any]] = []
 
+        let fiberStr = currentSuggestion.fiberGrams.map { "- Fiber: \(Int($0))g" } ?? ""
         let prompt = """
         The user is correcting a food analysis. Here's the current estimate:
         - Name: \(currentSuggestion.name)
@@ -123,11 +124,12 @@ extension GeminiService {
         - Protein: \(Int(currentSuggestion.proteinGrams))g
         - Carbs: \(Int(currentSuggestion.carbsGrams))g
         - Fat: \(Int(currentSuggestion.fatGrams))g
+        \(fiberStr)
         \(currentSuggestion.servingSize.map { "- Serving: \($0)" } ?? "")
 
         User's correction: "\(correction)"
 
-        Please provide an UPDATED food analysis based on their correction. If they say it's a different food, update all values accordingly. If they mention adjusting a specific value, update just that. Keep unmentioned values reasonable for the (potentially new) food.
+        Please provide an UPDATED food analysis based on their correction. If they say it's a different food, update all values accordingly. If they mention adjusting a specific value, update just that. Keep unmentioned values reasonable for the (potentially new) food. Include fiber if relevant.
         """
 
         parts.append(["text": prompt])
@@ -150,6 +152,7 @@ extension GeminiService {
                 "proteinGrams": ["type": "number", "description": "Updated protein in grams"],
                 "carbsGrams": ["type": "number", "description": "Updated carbs in grams"],
                 "fatGrams": ["type": "number", "description": "Updated fat in grams"],
+                "fiberGrams": ["type": "number", "description": "Updated fiber in grams", "nullable": true],
                 "servingSize": ["type": "string", "description": "Updated serving size", "nullable": true],
                 "emoji": ["type": "string", "description": "Updated emoji for this food"]
             ],
@@ -201,6 +204,7 @@ extension GeminiService {
             let proteinGrams: Double
             let carbsGrams: Double
             let fatGrams: Double
+            let fiberGrams: Double?
             let servingSize: String?
             let emoji: String?
         }
@@ -212,6 +216,7 @@ extension GeminiService {
             proteinGrams: decoded.proteinGrams,
             carbsGrams: decoded.carbsGrams,
             fatGrams: decoded.fatGrams,
+            fiberGrams: decoded.fiberGrams,
             servingSize: decoded.servingSize,
             emoji: decoded.emoji
         )
@@ -235,6 +240,7 @@ extension GeminiService {
                 let proteinGrams: Double
                 let carbsGrams: Double
                 let fatGrams: Double
+                let fiberGrams: Double?
                 let servingSize: String?
                 let emoji: String?
                 let loggedAtTime: String?
@@ -253,6 +259,7 @@ extension GeminiService {
                     proteinGrams: meal.proteinGrams,
                     carbsGrams: meal.carbsGrams,
                     fatGrams: meal.fatGrams,
+                    fiberGrams: meal.fiberGrams,
                     servingSize: meal.servingSize,
                     emoji: meal.emoji,
                     loggedAtTime: meal.loggedAtTime

@@ -189,6 +189,7 @@ struct FoodCameraView: View {
         entry.proteinGrams = suggestion.proteinGrams
         entry.carbsGrams = suggestion.carbsGrams
         entry.fatGrams = suggestion.fatGrams
+        entry.fiberGrams = suggestion.fiberGrams
         entry.servingSize = suggestion.servingSize
         entry.emoji = suggestion.emoji
         entry.imageData = capturedImage?.jpegData(compressionQuality: 0.8)
@@ -373,6 +374,7 @@ private struct ReviewCaptureView: View {
             proteinGrams: result.proteinGrams,
             carbsGrams: result.carbsGrams,
             fatGrams: result.fatGrams,
+            fiberGrams: result.fiberGrams,
             servingSize: result.servingSize,
             emoji: result.emoji
         )
@@ -564,10 +566,13 @@ private struct FoodSuggestionCard: View {
             }
 
             // Macros
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 MacroPillView(label: "Protein", value: Int(suggestion.proteinGrams), color: .blue)
                 MacroPillView(label: "Carbs", value: Int(suggestion.carbsGrams), color: .green)
                 MacroPillView(label: "Fat", value: Int(suggestion.fatGrams), color: .yellow)
+                if let fiber = suggestion.fiberGrams, fiber > 0 {
+                    MacroPillView(label: "Fiber", value: Int(fiber), color: .brown)
+                }
             }
 
             // Action buttons

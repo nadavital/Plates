@@ -14,6 +14,7 @@ struct FoodAnalysis: Codable, Sendable {
     let proteinGrams: Double
     let carbsGrams: Double
     let fatGrams: Double
+    let fiberGrams: Double?
     let servingSize: String?
     let confidence: String
     let notes: String?
@@ -38,6 +39,7 @@ struct SuggestedFoodEntry: Codable, Sendable {
     let proteinGrams: Double
     let carbsGrams: Double
     let fatGrams: Double
+    let fiberGrams: Double?
     let servingSize: String?
     let emoji: String?  // Relevant emoji for the food (☕, 🥗, 🍳, etc.)
     let loggedAtTime: String?  // HH:mm format if user specified a time
@@ -64,12 +66,13 @@ struct SuggestedFoodEntry: Codable, Sendable {
         emoji ?? "🍽️"
     }
 
-    init(name: String, calories: Int, proteinGrams: Double, carbsGrams: Double, fatGrams: Double, servingSize: String?, emoji: String? = nil, loggedAtTime: String? = nil) {
+    init(name: String, calories: Int, proteinGrams: Double, carbsGrams: Double, fatGrams: Double, fiberGrams: Double? = nil, servingSize: String?, emoji: String? = nil, loggedAtTime: String? = nil) {
         self.name = name
         self.calories = calories
         self.proteinGrams = proteinGrams
         self.carbsGrams = carbsGrams
         self.fatGrams = fatGrams
+        self.fiberGrams = fiberGrams
         self.servingSize = servingSize
         self.emoji = emoji
         self.loggedAtTime = loggedAtTime

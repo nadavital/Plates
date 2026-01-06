@@ -470,6 +470,7 @@ extension ChatView {
         entry.proteinGrams = meal.proteinGrams
         entry.carbsGrams = meal.carbsGrams
         entry.fatGrams = meal.fatGrams
+        entry.fiberGrams = meal.fiberGrams
         entry.servingSize = meal.servingSize
         entry.emoji = meal.emoji
         entry.imageData = imageData

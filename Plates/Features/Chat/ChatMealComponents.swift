@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 // MARK: - Logged Meal Badge
 
@@ -104,10 +105,13 @@ struct SuggestedMealCard: View {
             }
 
             // Macros
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 MealMacroPill(label: "Protein", value: Int(meal.proteinGrams), color: .blue)
                 MealMacroPill(label: "Carbs", value: Int(meal.carbsGrams), color: .green)
                 MealMacroPill(label: "Fat", value: Int(meal.fatGrams), color: .yellow)
+                if let fiber = meal.fiberGrams, fiber > 0 {
+                    MealMacroPill(label: "Fiber", value: Int(fiber), color: .brown)
+                }
             }
 
             // Action buttons
@@ -197,6 +201,7 @@ struct EditMealSuggestionSheet: View {
     @State private var proteinText: String
     @State private var carbsText: String
     @State private var fatText: String
+    @State private var fiberText: String
     @State private var servingSize: String
 
     init(meal: SuggestedFoodEntry, onSave: @escaping (SuggestedFoodEntry) -> Void) {
@@ -207,6 +212,7 @@ struct EditMealSuggestionSheet: View {
         _proteinText = State(initialValue: String(format: "%.0f", meal.proteinGrams))
         _carbsText = State(initialValue: String(format: "%.0f", meal.carbsGrams))
         _fatText = State(initialValue: String(format: "%.0f", meal.fatGrams))
+        _fiberText = State(initialValue: meal.fiberGrams.map { String(format: "%.0f", $0) } ?? "")
         _servingSize = State(initialValue: meal.servingSize ?? "")
     }
 
@@ -267,6 +273,17 @@ struct EditMealSuggestionSheet: View {
                         Text("g")
                             .foregroundStyle(.secondary)
                     }
+
+                    HStack {
+                        Text("Fiber")
+                        Spacer()
+                        TextField("0", text: $fiberText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                        Text("g")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Edit Meal")
@@ -286,6 +303,7 @@ struct EditMealSuggestionSheet: View {
                             proteinGrams: Double(proteinText) ?? meal.proteinGrams,
                             carbsGrams: Double(carbsText) ?? meal.carbsGrams,
                             fatGrams: Double(fatText) ?? meal.fatGrams,
+                            fiberGrams: fiberText.isEmpty ? nil : Double(fiberText),
                             servingSize: servingSize.isEmpty ? nil : servingSize
                         )
                         onSave(updated)
@@ -302,6 +320,9 @@ struct EditMealSuggestionSheet: View {
 
 struct MemorySavedBadge: View {
     let memories: [String]
+    @Environment(\.modelContext) private var modelContext
+    @State private var showMemories = false
+    @State private var singleMemory: CoachMemory?
 
     private var displayText: String {
         if memories.count == 1 {
@@ -311,16 +332,99 @@ struct MemorySavedBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "brain.head.profile")
-                .font(.caption)
-            Text(displayText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Button {
+            if memories.count == 1 {
+                // Fetch and show single memory directly
+                fetchSingleMemory()
+            } else {
+                showMemories = true
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "brain.head.profile")
+                    .font(.caption)
+                Text(displayText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.purple.opacity(0.1))
+            .clipShape(.capsule)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.purple.opacity(0.1))
-        .clipShape(.capsule)
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showMemories) {
+            SavedMemoriesSheet(memoryContents: memories)
+                .presentationDetents([.medium])
+        }
+        .sheet(item: $singleMemory) { memory in
+            MemoryDetailSheet(memory: memory, onDelete: {
+                memory.isActive = false
+                try? modelContext.save()
+                singleMemory = nil
+                HapticManager.lightTap()
+            })
+            .presentationDetents([.medium])
+        }
+    }
+
+    private func fetchSingleMemory() {
+        guard let content = memories.first else { return }
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate { $0.isActive },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let allMemories = (try? modelContext.fetch(descriptor)) ?? []
+        singleMemory = allMemories.first { $0.content == content }
+    }
+}
+
+// MARK: - Saved Memories Sheet
+
+struct SavedMemoriesSheet: View {
+    let memoryContents: [String]
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var memories: [CoachMemory] = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(memories) { memory in
+                    MemoryListRow(memory: memory, onDelete: {
+                        deleteMemory(memory)
+                    })
+                }
+            }
+            .navigationTitle("Saved Memories")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                fetchMemories()
+            }
+        }
+    }
+
+    private func fetchMemories() {
+        // Fetch CoachMemory objects that match the content strings
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate { $0.isActive },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let allMemories = (try? modelContext.fetch(descriptor)) ?? []
+        memories = allMemories.filter { memoryContents.contains($0.content) }
+    }
+
+    private func deleteMemory(_ memory: CoachMemory) {
+        memory.isActive = false
+        try? modelContext.save()
+        fetchMemories()
+        HapticManager.lightTap()
     }
 }
