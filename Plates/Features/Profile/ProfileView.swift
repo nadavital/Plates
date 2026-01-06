@@ -25,6 +25,7 @@ struct ProfileView: View {
     @State private var planService = PlanService()
     @State private var showPlanSheet = false
     @State private var showEditSheet = false
+    @State private var showMacroTrackingSheet = false
 
     private var profile: UserProfile? { profiles.first }
 
@@ -83,6 +84,11 @@ struct ProfileView: View {
             .sheet(isPresented: $showEditSheet) {
                 if let profile {
                     ProfileEditSheet(profile: profile)
+                }
+            }
+            .sheet(isPresented: $showMacroTrackingSheet) {
+                if let profile {
+                    MacroTrackingSettingsSheet(profile: profile)
                 }
             }
         }
@@ -450,6 +456,39 @@ struct ProfileView: View {
     @ViewBuilder
     private func preferencesCard(_ profile: UserProfile) -> some View {
         VStack(spacing: 0) {
+            // Macro Tracking row
+            Button {
+                showMacroTrackingSheet = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "chart.pie.fill")
+                        .font(.body)
+                        .foregroundStyle(.purple)
+                        .frame(width: 32, height: 32)
+                        .background(Color.purple.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+
+                    Text("Macro Tracking")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Text(macroTrackingSummary(profile))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding()
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+                .padding(.leading, 56)
+
+            // Units row
             HStack(spacing: 12) {
                 Image(systemName: "ruler.fill")
                     .font(.body)
@@ -482,6 +521,17 @@ struct ProfileView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(.ultraThinMaterial)
         )
+    }
+
+    private func macroTrackingSummary(_ profile: UserProfile) -> String {
+        let count = profile.enabledMacros.count
+        if count == 0 {
+            return "Calories only"
+        } else if count == 5 {
+            return "All macros"
+        } else {
+            return "\(count) macros"
+        }
     }
 }
 

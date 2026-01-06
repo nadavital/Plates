@@ -34,6 +34,7 @@ extension View {
 
     func chatEditMealSheet(
         editingMeal: Binding<(message: ChatMessage, meal: SuggestedFoodEntry)?>,
+        enabledMacros: Set<MacroType> = MacroType.defaultEnabled,
         onSave: @escaping (SuggestedFoodEntry, ChatMessage) -> Void
     ) -> some View {
         self.sheet(isPresented: Binding(
@@ -41,7 +42,10 @@ extension View {
             set: { if !$0 { editingMeal.wrappedValue = nil } }
         )) {
             if let editing = editingMeal.wrappedValue {
-                EditMealSuggestionSheet(meal: editing.meal) { updatedMeal in
+                EditMealSuggestionSheet(
+                    meal: editing.meal,
+                    enabledMacros: enabledMacros
+                ) { updatedMeal in
                     onSave(updatedMeal, editing.message)
                     editingMeal.wrappedValue = nil
                 }
@@ -69,6 +73,7 @@ extension View {
         currentProtein: Int,
         currentCarbs: Int,
         currentFat: Int,
+        enabledMacros: Set<MacroType> = MacroType.defaultEnabled,
         onSave: @escaping (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     ) -> some View {
         self.sheet(isPresented: Binding(
@@ -81,7 +86,8 @@ extension View {
                     currentCalories: currentCalories,
                     currentProtein: currentProtein,
                     currentCarbs: currentCarbs,
-                    currentFat: currentFat
+                    currentFat: currentFat,
+                    enabledMacros: enabledMacros
                 ) { updatedPlan in
                     onSave(updatedPlan, editing.message)
                     editingPlan.wrappedValue = nil

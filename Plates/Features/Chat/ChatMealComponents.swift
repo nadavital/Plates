@@ -156,9 +156,24 @@ struct LoggedMealBadge: View {
 
 struct SuggestedMealCard: View {
     let meal: SuggestedFoodEntry
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onAccept: () -> Void
     let onEdit: () -> Void
     let onDismiss: () -> Void
+
+    private var orderedEnabledMacros: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
+
+    private func valueFor(_ macro: MacroType) -> Double {
+        switch macro {
+        case .protein: meal.proteinGrams
+        case .carbs: meal.carbsGrams
+        case .fat: meal.fatGrams
+        case .fiber: meal.fiberGrams ?? 0
+        case .sugar: meal.sugarGrams ?? 0
+        }
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -212,12 +227,15 @@ struct SuggestedMealCard: View {
                 }
             }
 
-            HStack(spacing: 12) {
-                MealMacroPill(label: "Protein", value: Int(meal.proteinGrams), color: .blue)
-                MealMacroPill(label: "Carbs", value: Int(meal.carbsGrams), color: .green)
-                MealMacroPill(label: "Fat", value: Int(meal.fatGrams), color: .yellow)
-                if let fiber = meal.fiberGrams, fiber > 0 {
-                    MealMacroPill(label: "Fiber", value: Int(fiber), color: .brown)
+            if !orderedEnabledMacros.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(orderedEnabledMacros) { macro in
+                        MealMacroPill(
+                            label: macro.displayName,
+                            value: Int(valueFor(macro)),
+                            color: macro.color
+                        )
+                    }
                 }
             }
 
@@ -298,6 +316,7 @@ struct MealMacroPill: View {
 
 struct EditMealSuggestionSheet: View {
     let meal: SuggestedFoodEntry
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onSave: (SuggestedFoodEntry) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -308,10 +327,16 @@ struct EditMealSuggestionSheet: View {
     @State private var carbsText: String
     @State private var fatText: String
     @State private var fiberText: String
+    @State private var sugarText: String
     @State private var servingSize: String
 
-    init(meal: SuggestedFoodEntry, onSave: @escaping (SuggestedFoodEntry) -> Void) {
+    init(
+        meal: SuggestedFoodEntry,
+        enabledMacros: Set<MacroType> = MacroType.defaultEnabled,
+        onSave: @escaping (SuggestedFoodEntry) -> Void
+    ) {
         self.meal = meal
+        self.enabledMacros = enabledMacros
         self.onSave = onSave
         _name = State(initialValue: meal.name)
         _caloriesText = State(initialValue: String(meal.calories))
@@ -319,12 +344,17 @@ struct EditMealSuggestionSheet: View {
         _carbsText = State(initialValue: String(format: "%.0f", meal.carbsGrams))
         _fatText = State(initialValue: String(format: "%.0f", meal.fatGrams))
         _fiberText = State(initialValue: meal.fiberGrams.map { String(format: "%.0f", $0) } ?? "")
+        _sugarText = State(initialValue: meal.sugarGrams.map { String(format: "%.0f", $0) } ?? "")
         _servingSize = State(initialValue: meal.servingSize ?? "")
     }
 
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
         Int(caloriesText) != nil
+    }
+
+    private var orderedEnabledMacros: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
     }
 
     var body: some View {
@@ -337,10 +367,14 @@ struct EditMealSuggestionSheet: View {
 
                 Section("Nutrition") {
                     NutritionInputRow(label: "Calories", text: $caloriesText, unit: "kcal")
-                    NutritionInputRow(label: "Protein", text: $proteinText, unit: "g")
-                    NutritionInputRow(label: "Carbs", text: $carbsText, unit: "g")
-                    NutritionInputRow(label: "Fat", text: $fatText, unit: "g")
-                    NutritionInputRow(label: "Fiber", text: $fiberText, unit: "g")
+
+                    ForEach(orderedEnabledMacros) { macro in
+                        NutritionInputRow(
+                            label: macro.displayName,
+                            text: bindingFor(macro),
+                            unit: "g"
+                        )
+                    }
                 }
             }
             .navigationTitle("Edit Meal")
@@ -361,6 +395,7 @@ struct EditMealSuggestionSheet: View {
                             carbsGrams: Double(carbsText) ?? meal.carbsGrams,
                             fatGrams: Double(fatText) ?? meal.fatGrams,
                             fiberGrams: fiberText.isEmpty ? nil : Double(fiberText),
+                            sugarGrams: sugarText.isEmpty ? nil : Double(sugarText),
                             servingSize: servingSize.isEmpty ? nil : servingSize
                         )
                         onSave(updated)
@@ -369,6 +404,16 @@ struct EditMealSuggestionSheet: View {
                     .disabled(!isValid)
                 }
             }
+        }
+    }
+
+    private func bindingFor(_ macro: MacroType) -> Binding<String> {
+        switch macro {
+        case .protein: $proteinText
+        case .carbs: $carbsText
+        case .fat: $fatText
+        case .fiber: $fiberText
+        case .sugar: $sugarText
         }
     }
 }

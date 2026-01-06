@@ -89,15 +89,19 @@ struct DashboardView: View {
                         carbs: totalCarbs,
                         fat: totalFat,
                         fiber: totalFiber,
+                        sugar: totalSugar,
                         proteinGoal: profile?.dailyProteinGoal ?? 150,
                         carbsGoal: profile?.dailyCarbsGoal ?? 200,
                         fatGoal: profile?.dailyFatGoal ?? 65,
                         fiberGoal: profile?.dailyFiberGoal ?? 30,
+                        sugarGoal: profile?.dailySugarGoal ?? 50,
+                        enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                         onTap: { showingMacroDetail = true }
                     )
 
                     DailyFoodTimeline(
                         entries: selectedDayFoodEntries,
+                        enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                         onAddFood: isViewingToday ? { showingLogFood = true } : nil,
                         onAddToSession: isViewingToday ? { sessionId in
                             sessionIdToAddTo = sessionId
@@ -165,6 +169,8 @@ struct DashboardView: View {
                     carbsGoal: profile?.dailyCarbsGoal ?? 200,
                     fatGoal: profile?.dailyFatGoal ?? 65,
                     fiberGoal: profile?.dailyFiberGoal ?? 30,
+                    sugarGoal: profile?.dailySugarGoal ?? 50,
+                    enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                     onAddFood: isViewingToday ? {
                         showingMacroDetail = false
                         Task {
@@ -216,6 +222,10 @@ struct DashboardView: View {
 
     private var totalFiber: Double {
         selectedDayFoodEntries.reduce(0) { $0 + ($1.fiberGrams ?? 0) }
+    }
+
+    private var totalSugar: Double {
+        selectedDayFoodEntries.reduce(0) { $0 + ($1.sugarGrams ?? 0) }
     }
 
     private func refreshHealthData() async {

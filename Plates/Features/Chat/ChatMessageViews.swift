@@ -127,6 +127,7 @@ struct ChatBubble: View {
     var currentProtein: Int?
     var currentCarbs: Int?
     var currentFat: Int?
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var onAcceptMeal: ((SuggestedFoodEntry) -> Void)?
     var onEditMeal: ((SuggestedFoodEntry) -> Void)?
     var onDismissMeal: (() -> Void)?
@@ -177,6 +178,7 @@ struct ChatBubble: View {
                     if message.hasPendingMealSuggestion, let meal = message.suggestedMeal {
                         SuggestedMealCard(
                             meal: meal,
+                            enabledMacros: enabledMacros,
                             onAccept: { onAcceptMeal?(meal) },
                             onEdit: { onEditMeal?(meal) },
                             onDismiss: { onDismissMeal?() }
@@ -195,6 +197,7 @@ struct ChatBubble: View {
                             currentProtein: currentProtein,
                             currentCarbs: currentCarbs,
                             currentFat: currentFat,
+                            enabledMacros: enabledMacros,
                             onAccept: { onAcceptPlan?(plan) },
                             onEdit: { onEditPlan?(plan) },
                             onDismiss: { onDismissPlan?() }

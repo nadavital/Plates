@@ -15,16 +15,32 @@ struct PlanUpdateSuggestionCard: View {
     let currentProtein: Int?
     let currentCarbs: Int?
     let currentFat: Int?
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onAccept: () -> Void
     let onEdit: () -> Void
     let onDismiss: () -> Void
 
+    private var hasCalorieChange: Bool {
+        suggestion.calories != nil && suggestion.calories != currentCalories
+    }
+
+    private var hasProteinChange: Bool {
+        enabledMacros.contains(.protein) &&
+        suggestion.proteinGrams != nil && suggestion.proteinGrams != currentProtein
+    }
+
+    private var hasCarbsChange: Bool {
+        enabledMacros.contains(.carbs) &&
+        suggestion.carbsGrams != nil && suggestion.carbsGrams != currentCarbs
+    }
+
+    private var hasFatChange: Bool {
+        enabledMacros.contains(.fat) &&
+        suggestion.fatGrams != nil && suggestion.fatGrams != currentFat
+    }
+
     private var hasAnyChanges: Bool {
-        (suggestion.calories != nil && suggestion.calories != currentCalories) ||
-        (suggestion.proteinGrams != nil && suggestion.proteinGrams != currentProtein) ||
-        (suggestion.carbsGrams != nil && suggestion.carbsGrams != currentCarbs) ||
-        (suggestion.fatGrams != nil && suggestion.fatGrams != currentFat) ||
-        suggestion.goal != nil
+        hasCalorieChange || hasProteinChange || hasCarbsChange || hasFatChange || suggestion.goal != nil
     }
 
     var body: some View {
@@ -59,7 +75,7 @@ struct PlanUpdateSuggestionCard: View {
             // Changes grid
             if hasAnyChanges {
                 VStack(spacing: 0) {
-                    if let newCalories = suggestion.calories, let current = currentCalories, newCalories != current {
+                    if hasCalorieChange, let newCalories = suggestion.calories, let current = currentCalories {
                         PlanChangeRow(
                             color: .orange,
                             label: "Calories",
@@ -67,46 +83,51 @@ struct PlanUpdateSuggestionCard: View {
                             proposed: newCalories,
                             unit: "kcal"
                         )
-                        Divider().padding(.leading, 24)
+                        if hasProteinChange || hasCarbsChange || hasFatChange || suggestion.goalDisplayName != nil {
+                            Divider().padding(.leading, 24)
+                        }
                     }
 
-                    if let newProtein = suggestion.proteinGrams, let current = currentProtein, newProtein != current {
+                    if hasProteinChange, let newProtein = suggestion.proteinGrams, let current = currentProtein {
                         PlanChangeRow(
-                            color: .blue,
+                            color: MacroType.protein.color,
                             label: "Protein",
                             current: current,
                             proposed: newProtein,
                             unit: "g"
                         )
-                        Divider().padding(.leading, 24)
+                        if hasCarbsChange || hasFatChange || suggestion.goalDisplayName != nil {
+                            Divider().padding(.leading, 24)
+                        }
                     }
 
-                    if let newCarbs = suggestion.carbsGrams, let current = currentCarbs, newCarbs != current {
+                    if hasCarbsChange, let newCarbs = suggestion.carbsGrams, let current = currentCarbs {
                         PlanChangeRow(
-                            color: .green,
+                            color: MacroType.carbs.color,
                             label: "Carbs",
                             current: current,
                             proposed: newCarbs,
                             unit: "g"
                         )
-                        Divider().padding(.leading, 24)
+                        if hasFatChange || suggestion.goalDisplayName != nil {
+                            Divider().padding(.leading, 24)
+                        }
                     }
 
-                    if let newFat = suggestion.fatGrams, let current = currentFat, newFat != current {
+                    if hasFatChange, let newFat = suggestion.fatGrams, let current = currentFat {
                         PlanChangeRow(
-                            color: .yellow,
+                            color: MacroType.fat.color,
                             label: "Fat",
                             current: current,
                             proposed: newFat,
                             unit: "g"
                         )
+                        if suggestion.goalDisplayName != nil {
+                            Divider().padding(.leading, 24)
+                        }
                     }
 
                     if let goalName = suggestion.goalDisplayName {
-                        if suggestion.calories != nil || suggestion.proteinGrams != nil ||
-                           suggestion.carbsGrams != nil || suggestion.fatGrams != nil {
-                            Divider().padding(.leading, 24)
-                        }
                         HStack(spacing: 8) {
                             Circle()
                                 .fill(Color.purple)
@@ -261,6 +282,7 @@ struct EditPlanSuggestionSheet: View {
     let currentProtein: Int
     let currentCarbs: Int
     let currentFat: Int
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onSave: (PlanUpdateSuggestionEntry) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -270,12 +292,18 @@ struct EditPlanSuggestionSheet: View {
     @State private var carbsText: String
     @State private var fatText: String
 
+    /// Macros that are tracked and relevant for plan (protein, carbs, fat only)
+    private var planMacros: [MacroType] {
+        [.protein, .carbs, .fat].filter { enabledMacros.contains($0) }
+    }
+
     init(
         suggestion: PlanUpdateSuggestionEntry,
         currentCalories: Int,
         currentProtein: Int,
         currentCarbs: Int,
         currentFat: Int,
+        enabledMacros: Set<MacroType> = MacroType.defaultEnabled,
         onSave: @escaping (PlanUpdateSuggestionEntry) -> Void
     ) {
         self.suggestion = suggestion
@@ -283,6 +311,7 @@ struct EditPlanSuggestionSheet: View {
         self.currentProtein = currentProtein
         self.currentCarbs = currentCarbs
         self.currentFat = currentFat
+        self.enabledMacros = enabledMacros
         self.onSave = onSave
         _caloriesText = State(initialValue: String(suggestion.calories ?? currentCalories))
         _proteinText = State(initialValue: String(suggestion.proteinGrams ?? currentProtein))
@@ -292,6 +321,15 @@ struct EditPlanSuggestionSheet: View {
 
     private var isValid: Bool {
         Int(caloriesText) != nil && Int(caloriesText)! > 0
+    }
+
+    private func bindingFor(_ macro: MacroType) -> Binding<String> {
+        switch macro {
+        case .protein: $proteinText
+        case .carbs: $carbsText
+        case .fat: $fatText
+        default: $proteinText // Won't be used for fiber/sugar
+        }
     }
 
     var body: some View {
@@ -309,9 +347,15 @@ struct EditPlanSuggestionSheet: View {
 
                 Section {
                     MacroEditRow(label: "Calories", value: $caloriesText, unit: "kcal", color: .orange)
-                    MacroEditRow(label: "Protein", value: $proteinText, unit: "g", color: .blue)
-                    MacroEditRow(label: "Carbs", value: $carbsText, unit: "g", color: .green)
-                    MacroEditRow(label: "Fat", value: $fatText, unit: "g", color: .yellow)
+
+                    ForEach(planMacros) { macro in
+                        MacroEditRow(
+                            label: macro.displayName,
+                            value: bindingFor(macro),
+                            unit: "g",
+                            color: macro.color
+                        )
+                    }
                 } header: {
                     Text("New Targets")
                 }

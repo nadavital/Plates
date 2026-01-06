@@ -11,6 +11,8 @@ import SwiftData
 struct ManualFoodEntrySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
+
     let sessionId: UUID?
     let onSave: (FoodEntry) -> Void
 
@@ -20,7 +22,18 @@ struct ManualFoodEntrySheet: View {
     @State private var carbsText = ""
     @State private var fatText = ""
     @State private var fiberText = ""
+    @State private var sugarText = ""
     @State private var servingSize = ""
+
+    private var profile: UserProfile? { profiles.first }
+
+    private var enabledMacros: Set<MacroType> {
+        profile?.enabledMacros ?? MacroType.defaultEnabled
+    }
+
+    private var orderedEnabledMacros: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
 
     private var isValid: Bool {
         !name.isEmpty && Int(caloriesText) != nil
@@ -50,13 +63,14 @@ struct ManualFoodEntrySheet: View {
                     Text("Calories")
                 }
 
-                Section {
-                    MacroInputRow(label: "Protein", text: $proteinText)
-                    MacroInputRow(label: "Carbs", text: $carbsText)
-                    MacroInputRow(label: "Fat", text: $fatText)
-                    MacroInputRow(label: "Fiber", text: $fiberText)
-                } header: {
-                    Text("Macros")
+                if !orderedEnabledMacros.isEmpty {
+                    Section {
+                        ForEach(orderedEnabledMacros) { macro in
+                            MacroInputRow(label: macro.displayName, text: bindingFor(macro))
+                        }
+                    } header: {
+                        Text("Macros")
+                    }
                 }
 
                 Section {
@@ -85,6 +99,16 @@ struct ManualFoodEntrySheet: View {
         }
     }
 
+    private func bindingFor(_ macro: MacroType) -> Binding<String> {
+        switch macro {
+        case .protein: $proteinText
+        case .carbs: $carbsText
+        case .fat: $fatText
+        case .fiber: $fiberText
+        case .sugar: $sugarText
+        }
+    }
+
     private func saveEntry() {
         let entry = FoodEntry()
         entry.name = name
@@ -93,6 +117,7 @@ struct ManualFoodEntrySheet: View {
         entry.carbsGrams = Double(carbsText) ?? 0
         entry.fatGrams = Double(fatText) ?? 0
         entry.fiberGrams = Double(fiberText).flatMap { $0 > 0 ? $0 : nil }
+        entry.sugarGrams = Double(sugarText).flatMap { $0 > 0 ? $0 : nil }
         entry.servingSize = servingSize.isEmpty ? nil : servingSize
         entry.inputMethod = "manual"
 

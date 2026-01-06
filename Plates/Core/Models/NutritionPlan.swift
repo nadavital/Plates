@@ -27,6 +27,27 @@ struct NutritionPlan: Codable, Equatable {
         let carbs: Int
         let fat: Int
         let fiber: Int
+        let sugar: Int
+
+        // Custom decoder to handle older plans without sugar
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            calories = try container.decode(Int.self, forKey: .calories)
+            protein = try container.decode(Int.self, forKey: .protein)
+            carbs = try container.decode(Int.self, forKey: .carbs)
+            fat = try container.decode(Int.self, forKey: .fat)
+            fiber = try container.decode(Int.self, forKey: .fiber)
+            sugar = try container.decodeIfPresent(Int.self, forKey: .sugar) ?? 50 // Default if not present
+        }
+
+        init(calories: Int, protein: Int, carbs: Int, fat: Int, fiber: Int, sugar: Int = 50) {
+            self.calories = calories
+            self.protein = protein
+            self.carbs = carbs
+            self.fat = fat
+            self.fiber = fiber
+            self.sugar = sugar
+        }
     }
 
     struct MacroSplit: Codable, Equatable {
@@ -51,7 +72,7 @@ struct NutritionPlan: Codable, Equatable {
 
     /// Placeholder plan used for binding when actual plan is nil
     static let placeholder = NutritionPlan(
-        dailyTargets: DailyTargets(calories: 2000, protein: 150, carbs: 200, fat: 65, fiber: 30),
+        dailyTargets: DailyTargets(calories: 2000, protein: 150, carbs: 200, fat: 65, fiber: 30, sugar: 50),
         rationale: "",
         macroSplit: MacroSplit(proteinPercent: 30, carbsPercent: 40, fatPercent: 30),
         nutritionGuidelines: [],
@@ -151,6 +172,7 @@ extension NutritionPlan {
         let carbs = Int(Double(calories) * Double(carbsPct) / 100 / 4)
         let fat = Int(Double(calories) * Double(fatPct) / 100 / 9)
         let fiber = 30 // Standard recommendation
+        let sugar = 50 // Standard recommendation (~10% of calories from added sugar)
 
         let rationale = buildDefaultRationale(request: request, calories: calories)
 
@@ -160,7 +182,8 @@ extension NutritionPlan {
                 protein: protein,
                 carbs: carbs,
                 fat: fat,
-                fiber: fiber
+                fiber: fiber,
+                sugar: sugar
             ),
             rationale: rationale,
             macroSplit: MacroSplit(

@@ -107,38 +107,47 @@ struct ChatView: View {
         return allFoodEntries.first { $0.id == id }
     }
 
+    private var enabledMacrosValue: Set<MacroType> {
+        profile?.enabledMacros ?? MacroType.defaultEnabled
+    }
+
+    private var chatContentList: some View {
+        ChatContentList(
+            messages: currentSessionMessages,
+            isLoading: isLoading,
+            isStreamingResponse: isStreamingResponse,
+            isTemporarySession: isTemporarySession,
+            currentActivity: currentActivity,
+            currentCalories: profile?.dailyCalorieGoal,
+            currentProtein: profile?.dailyProteinGoal,
+            currentCarbs: profile?.dailyCarbsGoal,
+            currentFat: profile?.dailyFatGoal,
+            enabledMacros: enabledMacrosValue,
+            onSuggestionTapped: sendMessage,
+            onAcceptMeal: acceptMealSuggestion,
+            onEditMeal: { message, meal in
+                editingMealSuggestion = (message, meal)
+            },
+            onDismissMeal: dismissMealSuggestion,
+            onViewLoggedMeal: { entryId in
+                viewingLoggedMealId = entryId
+            },
+            onAcceptPlan: acceptPlanSuggestion,
+            onEditPlan: { message, plan in
+                editingPlanSuggestion = (message, plan)
+            },
+            onDismissPlan: dismissPlanSuggestion,
+            onAcceptFoodEdit: acceptFoodEditSuggestion,
+            onDismissFoodEdit: dismissFoodEditSuggestion,
+            onRetry: retryMessage
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    ChatContentList(
-                        messages: currentSessionMessages,
-                        isLoading: isLoading,
-                        isStreamingResponse: isStreamingResponse,
-                        isTemporarySession: isTemporarySession,
-                        currentActivity: currentActivity,
-                        currentCalories: profile?.dailyCalorieGoal,
-                        currentProtein: profile?.dailyProteinGoal,
-                        currentCarbs: profile?.dailyCarbsGoal,
-                        currentFat: profile?.dailyFatGoal,
-                        onSuggestionTapped: sendMessage,
-                        onAcceptMeal: acceptMealSuggestion,
-                        onEditMeal: { message, meal in
-                            editingMealSuggestion = (message, meal)
-                        },
-                        onDismissMeal: dismissMealSuggestion,
-                        onViewLoggedMeal: { entryId in
-                            viewingLoggedMealId = entryId
-                        },
-                        onAcceptPlan: acceptPlanSuggestion,
-                        onEditPlan: { message, plan in
-                            editingPlanSuggestion = (message, plan)
-                        },
-                        onDismissPlan: dismissPlanSuggestion,
-                        onAcceptFoodEdit: acceptFoodEditSuggestion,
-                        onDismissFoodEdit: dismissFoodEditSuggestion,
-                        onRetry: retryMessage
-                    )
+                    chatContentList
                 }
                 .onTapGesture {
                     isInputFocused = false
@@ -217,7 +226,10 @@ struct ChatView: View {
                 selectedImage = image
             }
             .chatImagePreviewSheet(enlargedImage: $enlargedImage)
-            .chatEditMealSheet(editingMeal: $editingMealSuggestion) { meal, message in
+            .chatEditMealSheet(
+                editingMeal: $editingMealSuggestion,
+                enabledMacros: enabledMacrosValue
+            ) { meal, message in
                 acceptMealSuggestion(meal, for: message)
             }
             .chatEditPlanSheet(
@@ -225,7 +237,8 @@ struct ChatView: View {
                 currentCalories: profile?.dailyCalorieGoal ?? 2000,
                 currentProtein: profile?.dailyProteinGoal ?? 150,
                 currentCarbs: profile?.dailyCarbsGoal ?? 200,
-                currentFat: profile?.dailyFatGoal ?? 65
+                currentFat: profile?.dailyFatGoal ?? 65,
+                enabledMacros: enabledMacrosValue
             ) { plan, message in
                 acceptPlanSuggestion(plan, for: message)
             }

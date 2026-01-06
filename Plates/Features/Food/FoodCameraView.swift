@@ -15,6 +15,7 @@ struct FoodCameraView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
 
     @State private var cameraService = CameraService()
     @State private var capturedImage: UIImage?
@@ -28,6 +29,8 @@ struct FoodCameraView: View {
 
     /// True when reviewing a captured image OR analyzing a text description
     @State private var isAnalyzingTextOnly = false
+
+    private var profile: UserProfile? { profiles.first }
 
     private var isReviewing: Bool {
         capturedImage != nil || isAnalyzingTextOnly
@@ -55,6 +58,7 @@ struct FoodCameraView: View {
                         isAnalyzing: isAnalyzing,
                         analysisResult: analysisResult,
                         errorMessage: errorMessage,
+                        enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                         onAnalyze: analyzeFood,
                         onSave: saveEntry,
                         onSaveRefined: saveRefinedEntry
@@ -162,6 +166,7 @@ struct FoodCameraView: View {
         entry.carbsGrams = result.carbsGrams
         entry.fatGrams = result.fatGrams
         entry.fiberGrams = result.fiberGrams
+        entry.sugarGrams = result.sugarGrams
         entry.servingSize = result.servingSize
         entry.emoji = result.emoji
         entry.imageData = capturedImage?.jpegData(compressionQuality: 0.8)
@@ -183,6 +188,7 @@ struct FoodCameraView: View {
         entry.carbsGrams = suggestion.carbsGrams
         entry.fatGrams = suggestion.fatGrams
         entry.fiberGrams = suggestion.fiberGrams
+        entry.sugarGrams = suggestion.sugarGrams
         entry.servingSize = suggestion.servingSize
         entry.emoji = suggestion.emoji
         entry.imageData = capturedImage?.jpegData(compressionQuality: 0.8)

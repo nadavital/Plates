@@ -10,6 +10,7 @@ import SwiftData
 
 struct DailyFoodTimeline: View {
     let entries: [FoodEntry]
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var onAddFood: (() -> Void)?
     var onAddToSession: ((UUID) -> Void)?
     let onEditEntry: (FoodEntry) -> Void
@@ -83,6 +84,7 @@ struct DailyFoodTimeline: View {
                         case .single(let entry):
                             FoodEntryTimelineRow(
                                 entry: entry,
+                                enabledMacros: enabledMacros,
                                 onTap: { onEditEntry(entry) },
                                 onDelete: { onDeleteEntry(entry) }
                             )
@@ -90,6 +92,7 @@ struct DailyFoodTimeline: View {
                         case .session(let sessionId, let sessionEntries):
                             FoodSessionCard(
                                 entries: sessionEntries,
+                                enabledMacros: enabledMacros,
                                 onAddMore: onAddToSession.map { action in { action(sessionId) } },
                                 onEditEntry: onEditEntry,
                                 onDeleteEntry: onDeleteEntry

@@ -54,6 +54,7 @@ struct EmptyMealsView: View {
 
 struct FoodSessionCard: View {
     let entries: [FoodEntry]
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     var onAddMore: (() -> Void)?
     let onEditEntry: (FoodEntry) -> Void
     let onDeleteEntry: (FoodEntry) -> Void
@@ -64,8 +65,21 @@ struct FoodSessionCard: View {
         entries.reduce(0) { $0 + $1.calories }
     }
 
-    private var totalProtein: Double {
-        entries.reduce(0) { $0 + $1.proteinGrams }
+    /// First enabled macro for subtitle display
+    private var firstEnabledMacro: MacroType? {
+        MacroType.displayOrder.first { enabledMacros.contains($0) }
+    }
+
+    private func totalFor(_ macro: MacroType) -> Double {
+        entries.reduce(0) { total, entry in
+            switch macro {
+            case .protein: total + entry.proteinGrams
+            case .carbs: total + entry.carbsGrams
+            case .fat: total + entry.fatGrams
+            case .fiber: total + (entry.fiberGrams ?? 0)
+            case .sugar: total + (entry.sugarGrams ?? 0)
+            }
+        }
     }
 
     private var sessionTime: Date {
@@ -104,9 +118,11 @@ struct FoodSessionCard: View {
                             .font(.subheadline)
                             .foregroundStyle(.primary)
 
-                        Text("\(Int(totalProtein))g protein")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if let macro = firstEnabledMacro {
+                            Text("\(Int(totalFor(macro)))g \(macro.displayName.lowercased())")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Image(systemName: "chevron.right")
@@ -215,10 +231,26 @@ struct SessionEntryRow: View {
 
 struct FoodEntryTimelineRow: View {
     let entry: FoodEntry
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onTap: () -> Void
     let onDelete: () -> Void
 
     @State private var showingDeleteConfirm = false
+
+    /// First enabled macro for subtitle display
+    private var firstEnabledMacro: MacroType? {
+        MacroType.displayOrder.first { enabledMacros.contains($0) }
+    }
+
+    private func valueFor(_ macro: MacroType) -> Double {
+        switch macro {
+        case .protein: entry.proteinGrams
+        case .carbs: entry.carbsGrams
+        case .fat: entry.fatGrams
+        case .fiber: entry.fiberGrams ?? 0
+        case .sugar: entry.sugarGrams ?? 0
+        }
+    }
 
     var body: some View {
         Button(action: onTap) {
@@ -266,9 +298,11 @@ struct FoodEntryTimelineRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.primary)
 
-                    Text("\(Int(entry.proteinGrams))g protein")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let macro = firstEnabledMacro {
+                        Text("\(Int(valueFor(macro)))g \(macro.displayName.lowercased())")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Button(action: { showingDeleteConfirm = true }) {

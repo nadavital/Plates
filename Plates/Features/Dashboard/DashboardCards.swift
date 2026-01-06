@@ -116,15 +116,47 @@ struct CalorieProgressCard: View {
 // MARK: - Macro Breakdown Card
 
 struct MacroBreakdownCard: View {
-    let protein: Double
-    let carbs: Double
-    let fat: Double
-    var fiber: Double = 0
-    let proteinGoal: Int
-    let carbsGoal: Int
-    let fatGoal: Int
-    var fiberGoal: Int = 30
+    let macroValues: [MacroType: Double]
+    let macroGoals: [MacroType: Int]
+    let enabledMacros: Set<MacroType>
     var onTap: (() -> Void)?
+
+    /// Convenience initializer for legacy usage
+    init(
+        protein: Double,
+        carbs: Double,
+        fat: Double,
+        fiber: Double = 0,
+        sugar: Double = 0,
+        proteinGoal: Int,
+        carbsGoal: Int,
+        fatGoal: Int,
+        fiberGoal: Int = 30,
+        sugarGoal: Int = 50,
+        enabledMacros: Set<MacroType> = MacroType.defaultEnabled,
+        onTap: (() -> Void)? = nil
+    ) {
+        self.macroValues = [
+            .protein: protein,
+            .carbs: carbs,
+            .fat: fat,
+            .fiber: fiber,
+            .sugar: sugar
+        ]
+        self.macroGoals = [
+            .protein: proteinGoal,
+            .carbs: carbsGoal,
+            .fat: fatGoal,
+            .fiber: fiberGoal,
+            .sugar: sugarGoal
+        ]
+        self.enabledMacros = enabledMacros
+        self.onTap = onTap
+    }
+
+    private var orderedEnabledMacros: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
 
     var body: some View {
         Button {
@@ -143,34 +175,19 @@ struct MacroBreakdownCard: View {
                     }
                 }
 
-                HStack(spacing: 16) {
-                    MacroRingItem(
-                        name: "Protein",
-                        current: protein,
-                        goal: Double(proteinGoal),
-                        color: .blue
-                    )
-
-                    MacroRingItem(
-                        name: "Carbs",
-                        current: carbs,
-                        goal: Double(carbsGoal),
-                        color: .orange
-                    )
-
-                    MacroRingItem(
-                        name: "Fat",
-                        current: fat,
-                        goal: Double(fatGoal),
-                        color: .purple
-                    )
-
-                    MacroRingItem(
-                        name: "Fiber",
-                        current: fiber,
-                        goal: Double(fiberGoal),
-                        color: .green
-                    )
+                if orderedEnabledMacros.isEmpty {
+                    emptyStateView
+                } else {
+                    HStack(spacing: 16) {
+                        ForEach(orderedEnabledMacros) { macro in
+                            MacroRingItem(
+                                name: macro.displayName,
+                                current: macroValues[macro] ?? 0,
+                                goal: Double(macroGoals[macro] ?? 100),
+                                color: macro.color
+                            )
+                        }
+                    }
                 }
             }
             .padding()
@@ -178,6 +195,20 @@ struct MacroBreakdownCard: View {
             .clipShape(.rect(cornerRadius: 16))
         }
         .buttonStyle(.plain)
+    }
+
+    private var emptyStateView: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "chart.pie")
+                .font(.title2)
+                .foregroundStyle(.tertiary)
+
+            Text("Tracking calories only")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 }
 

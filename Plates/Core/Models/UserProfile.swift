@@ -32,6 +32,10 @@ final class UserProfile {
     var dailyCarbsGoal: Int = 200
     var dailyFatGoal: Int = 65
     var dailyFiberGoal: Int = 30
+    var dailySugarGoal: Int = 50
+
+    // Macro tracking preferences (stored as JSON for CloudKit)
+    var enabledMacrosJSON: String = ""
 
     // Training/Rest day calorie adjustments
     var trainingDayCalories: Int?
@@ -256,4 +260,53 @@ extension UserProfile {
         }
     }
 
+}
+
+// MARK: - Macro Tracking Preferences
+
+extension UserProfile {
+    /// The set of macros the user wants to track
+    var enabledMacros: Set<MacroType> {
+        get {
+            if enabledMacrosJSON.isEmpty {
+                return MacroType.defaultEnabled
+            }
+            return Set(jsonString: enabledMacrosJSON)
+        }
+        set {
+            enabledMacrosJSON = newValue.jsonString
+        }
+    }
+
+    /// Check if a specific macro is enabled for tracking
+    func isMacroEnabled(_ macro: MacroType) -> Bool {
+        enabledMacros.contains(macro)
+    }
+
+    /// Get the daily goal for a specific macro type
+    func goalFor(_ macro: MacroType) -> Int {
+        switch macro {
+        case .protein: dailyProteinGoal
+        case .carbs: dailyCarbsGoal
+        case .fat: dailyFatGoal
+        case .fiber: dailyFiberGoal
+        case .sugar: dailySugarGoal
+        }
+    }
+
+    /// Set the daily goal for a specific macro type
+    func setGoal(_ value: Int, for macro: MacroType) {
+        switch macro {
+        case .protein: dailyProteinGoal = value
+        case .carbs: dailyCarbsGoal = value
+        case .fat: dailyFatGoal = value
+        case .fiber: dailyFiberGoal = value
+        case .sugar: dailySugarGoal = value
+        }
+    }
+
+    /// Get enabled macros in display order
+    var enabledMacrosOrdered: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
 }

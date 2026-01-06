@@ -34,12 +34,15 @@ struct OnboardingView: View {
     @State private var selectedGoal: UserProfile.GoalType?
     @State private var additionalGoalNotes = ""
 
+    // Step 4: Macro Preferences
+    @State private var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+
     private enum NavigationDirection {
         case forward, backward
     }
 
-    // Step 4: Summary (review before AI)
-    // Step 5: Plan Review
+    // Step 5: Summary (review before AI)
+    // Step 6: Plan Review
     @State private var generatedPlan: NutritionPlan?
     @State private var isGeneratingPlan = false
     @State private var planError: String?
@@ -50,7 +53,7 @@ struct OnboardingView: View {
 
     @State private var geminiService = GeminiService()
 
-    private let totalSteps = 6
+    private let totalSteps = 7
 
     var body: some View {
         ZStack {
@@ -142,6 +145,8 @@ struct OnboardingView: View {
                     additionalNotes: $additionalGoalNotes
                 )
             case 4:
+                MacroPreferencesStepView(enabledMacros: $enabledMacros)
+            case 5:
                 SummaryStepView(
                     userName: userName,
                     dateOfBirth: dateOfBirth,
@@ -156,7 +161,7 @@ struct OnboardingView: View {
                     selectedGoal: selectedGoal,
                     additionalNotes: additionalGoalNotes
                 )
-            case 5:
+            case 6:
                 PlanReviewStepView(
                     plan: $generatedPlan,
                     planRequest: buildPlanRequest(),
@@ -216,7 +221,7 @@ struct OnboardingView: View {
                 Text(primaryButtonText)
                     .fontWeight(.semibold)
 
-                if currentStep < totalSteps - 1 && currentStep != 4 {
+                if currentStep < totalSteps - 1 && currentStep != 5 {
                     Image(systemName: "arrow.right")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -236,7 +241,7 @@ struct OnboardingView: View {
     private var primaryButtonText: String {
         switch currentStep {
         case 0: return "Let's Go"
-        case 4: return "Generate My Plan"
+        case 5: return "Generate My Plan"
         case totalSteps - 1: return isGeneratingPlan ? "Creating Plan..." : "Start Your Journey"
         default: return "Continue"
         }
@@ -255,8 +260,10 @@ struct OnboardingView: View {
         case 3:
             return selectedGoal != nil
         case 4:
-            return true // Summary step
+            return true // Macro preferences step (always valid)
         case 5:
+            return true // Summary step
+        case 6:
             return canComplete
         default:
             return true
@@ -280,7 +287,7 @@ struct OnboardingView: View {
         }
 
         // Trigger plan generation when entering the plan review step
-        if currentStep == 5 {
+        if currentStep == 6 {
             generatePlan()
         }
     }
@@ -399,6 +406,9 @@ struct OnboardingView: View {
         // Goals
         profile.goalType = (selectedGoal ?? .health).rawValue
         profile.additionalGoalNotes = additionalGoalNotes
+
+        // Macro tracking preferences
+        profile.enabledMacros = enabledMacros
 
         // Nutrition targets (from adjusted values or plan)
         profile.dailyCalorieGoal = Int(adjustedCalories) ?? 2000

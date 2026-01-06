@@ -6,18 +6,32 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct EditFoodEntrySheet: View {
     @Bindable var entry: FoodEntry
     @Environment(\.dismiss) private var dismiss
+    @Query private var profiles: [UserProfile]
 
     @State private var name: String
     @State private var caloriesText: String
     @State private var proteinText: String
     @State private var carbsText: String
     @State private var fatText: String
+    @State private var fiberText: String
+    @State private var sugarText: String
     @State private var servingSize: String
     @State private var notes: String
+
+    private var profile: UserProfile? { profiles.first }
+
+    private var enabledMacros: Set<MacroType> {
+        profile?.enabledMacros ?? MacroType.defaultEnabled
+    }
+
+    private var orderedEnabledMacros: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
 
     init(entry: FoodEntry) {
         self.entry = entry
@@ -26,6 +40,8 @@ struct EditFoodEntrySheet: View {
         _proteinText = State(initialValue: String(format: "%.1f", entry.proteinGrams))
         _carbsText = State(initialValue: String(format: "%.1f", entry.carbsGrams))
         _fatText = State(initialValue: String(format: "%.1f", entry.fatGrams))
+        _fiberText = State(initialValue: entry.fiberGrams.map { String(format: "%.1f", $0) } ?? "")
+        _sugarText = State(initialValue: entry.sugarGrams.map { String(format: "%.1f", $0) } ?? "")
         _servingSize = State(initialValue: entry.servingSize ?? "")
         _notes = State(initialValue: entry.userDescription ?? "")
     }
@@ -67,26 +83,14 @@ struct EditFoodEntrySheet: View {
                         color: .orange
                     )
 
-                    MacroInputRow(
-                        label: "Protein",
-                        value: $proteinText,
-                        unit: "g",
-                        color: .red
-                    )
-
-                    MacroInputRow(
-                        label: "Carbs",
-                        value: $carbsText,
-                        unit: "g",
-                        color: .blue
-                    )
-
-                    MacroInputRow(
-                        label: "Fat",
-                        value: $fatText,
-                        unit: "g",
-                        color: .yellow
-                    )
+                    ForEach(orderedEnabledMacros) { macro in
+                        MacroInputRow(
+                            label: macro.displayName,
+                            value: bindingFor(macro),
+                            unit: "g",
+                            color: macro.color
+                        )
+                    }
                 }
 
                 // Notes
@@ -132,12 +136,24 @@ struct EditFoodEntrySheet: View {
         }
     }
 
+    private func bindingFor(_ macro: MacroType) -> Binding<String> {
+        switch macro {
+        case .protein: $proteinText
+        case .carbs: $carbsText
+        case .fat: $fatText
+        case .fiber: $fiberText
+        case .sugar: $sugarText
+        }
+    }
+
     private func saveChanges() {
         entry.name = name
         entry.calories = Int(caloriesText) ?? entry.calories
         entry.proteinGrams = Double(proteinText) ?? entry.proteinGrams
         entry.carbsGrams = Double(carbsText) ?? entry.carbsGrams
         entry.fatGrams = Double(fatText) ?? entry.fatGrams
+        entry.fiberGrams = Double(fiberText).flatMap { $0 > 0 ? $0 : nil }
+        entry.sugarGrams = Double(sugarText).flatMap { $0 > 0 ? $0 : nil }
         entry.servingSize = servingSize.isEmpty ? nil : servingSize
         entry.userDescription = notes.isEmpty ? nil : notes
 

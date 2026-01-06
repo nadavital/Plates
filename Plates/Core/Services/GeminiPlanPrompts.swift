@@ -11,7 +11,7 @@ import Foundation
 
 extension GeminiPromptBuilder {
 
-    static func buildPlanGenerationPrompt(request: PlanGenerationRequest) -> String {
+    static func buildPlanGenerationPrompt(request: PlanGenerationRequest, enabledMacros: Set<MacroType>? = nil) -> String {
         var prompt = """
         You are Trai, a certified nutritionist and fitness coach creating a personalized nutrition plan. Never mention being an AI or assistant.
 
@@ -39,6 +39,17 @@ extension GeminiPromptBuilder {
 
         if !request.additionalNotes.isEmpty {
             prompt += "\n- Additional Notes: \(request.additionalNotes)"
+        }
+
+        // Add macro tracking preferences
+        if let macros = enabledMacros {
+            let macroNames = macros.map { $0.displayName }.sorted().joined(separator: ", ")
+            prompt += "\n- Tracking Macros: \(macroNames.isEmpty ? "Calories only" : macroNames)"
+
+            // Note if user is tracking sugar
+            if macros.contains(.sugar) {
+                prompt += "\n  (User wants to monitor sugar intake)"
+            }
         }
 
         prompt += """
@@ -76,9 +87,10 @@ extension GeminiPromptBuilder {
                         "protein": ["type": "integer"],
                         "carbs": ["type": "integer"],
                         "fat": ["type": "integer"],
-                        "fiber": ["type": "integer"]
+                        "fiber": ["type": "integer"],
+                        "sugar": ["type": "integer"]
                     ],
-                    "required": ["calories", "protein", "carbs", "fat", "fiber"]
+                    "required": ["calories", "protein", "carbs", "fat", "fiber", "sugar"]
                 ],
                 "rationale": ["type": "string"],
                 "macroSplit": [
@@ -159,6 +171,7 @@ extension GeminiPromptBuilder {
         - Carbs: \(currentPlan.dailyTargets.carbs)g
         - Fat: \(currentPlan.dailyTargets.fat)g
         - Fiber: \(currentPlan.dailyTargets.fiber)g
+        - Sugar: \(currentPlan.dailyTargets.sugar)g
 
         """
 
@@ -198,9 +211,10 @@ extension GeminiPromptBuilder {
                         "protein": ["type": "integer"],
                         "carbs": ["type": "integer"],
                         "fat": ["type": "integer"],
-                        "fiber": ["type": "integer"]
+                        "fiber": ["type": "integer"],
+                        "sugar": ["type": "integer"]
                     ],
-                    "required": ["calories", "protein", "carbs", "fat", "fiber"]
+                    "required": ["calories", "protein", "carbs", "fat", "fiber", "sugar"]
                 ],
                 "rationale": ["type": "string"],
                 "macroSplit": [

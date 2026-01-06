@@ -17,6 +17,7 @@ struct ChatContentList: View {
     let currentProtein: Int?
     let currentCarbs: Int?
     let currentFat: Int?
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onSuggestionTapped: (String) -> Void
     let onAcceptMeal: (SuggestedFoodEntry, ChatMessage) -> Void
     let onEditMeal: (ChatMessage, SuggestedFoodEntry) -> Void
@@ -47,6 +48,7 @@ struct ChatContentList: View {
                                 currentProtein: currentProtein,
                                 currentCarbs: currentCarbs,
                                 currentFat: currentFat,
+                                enabledMacros: enabledMacros,
                                 onAcceptMeal: { meal in
                                     onAcceptMeal(meal, message)
                                 },

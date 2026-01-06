@@ -13,6 +13,7 @@ struct FoodCameraReviewView: View {
     let isAnalyzing: Bool
     let analysisResult: FoodAnalysis?
     let errorMessage: String?
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onAnalyze: () -> Void
     let onSave: () -> Void
     let onSaveRefined: (SuggestedFoodEntry) -> Void
@@ -40,6 +41,7 @@ struct FoodCameraReviewView: View {
             carbsGrams: result.carbsGrams,
             fatGrams: result.fatGrams,
             fiberGrams: result.fiberGrams,
+            sugarGrams: result.sugarGrams,
             servingSize: result.servingSize,
             emoji: result.emoji
         )
@@ -91,6 +93,7 @@ struct FoodCameraReviewView: View {
                     FoodCameraSuggestionCard(
                         suggestion: suggestion,
                         isRefining: isRefining,
+                        enabledMacros: enabledMacros,
                         onSave: {
                             if refinedSuggestion != nil {
                                 onSaveRefined(suggestion)
@@ -186,8 +189,23 @@ struct FoodCameraReviewView: View {
 struct FoodCameraSuggestionCard: View {
     let suggestion: SuggestedFoodEntry
     let isRefining: Bool
+    var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onSave: () -> Void
     let onStartRefine: () -> Void
+
+    private var orderedEnabledMacros: [MacroType] {
+        MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
+
+    private func valueFor(_ macro: MacroType) -> Double {
+        switch macro {
+        case .protein: suggestion.proteinGrams
+        case .carbs: suggestion.carbsGrams
+        case .fat: suggestion.fatGrams
+        case .fiber: suggestion.fiberGrams ?? 0
+        case .sugar: suggestion.sugarGrams ?? 0
+        }
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -230,13 +248,16 @@ struct FoodCameraSuggestionCard: View {
                 }
             }
 
-            // Macros
-            HStack(spacing: 12) {
-                FoodCameraMacroPill(label: "Protein", value: Int(suggestion.proteinGrams), color: .blue)
-                FoodCameraMacroPill(label: "Carbs", value: Int(suggestion.carbsGrams), color: .green)
-                FoodCameraMacroPill(label: "Fat", value: Int(suggestion.fatGrams), color: .yellow)
-                if let fiber = suggestion.fiberGrams, fiber > 0 {
-                    FoodCameraMacroPill(label: "Fiber", value: Int(fiber), color: .brown)
+            // Macros (filtered by enabledMacros)
+            if !orderedEnabledMacros.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(orderedEnabledMacros) { macro in
+                        FoodCameraMacroPill(
+                            label: macro.displayName,
+                            value: Int(valueFor(macro)),
+                            color: macro.color
+                        )
+                    }
                 }
             }
 
