@@ -30,9 +30,8 @@ struct OnboardingView: View {
     @State private var activityLevel: UserProfile.ActivityLevel?
     @State private var activityNotes = ""
 
-    // Step 3: Goals & Dietary
+    // Step 3: Goals
     @State private var selectedGoal: UserProfile.GoalType?
-    @State private var dietaryRestrictions: Set<DietaryRestriction> = []
     @State private var additionalGoalNotes = ""
 
     private enum NavigationDirection {
@@ -140,7 +139,6 @@ struct OnboardingView: View {
             case 3:
                 GoalsStepView(
                     selectedGoal: $selectedGoal,
-                    dietaryRestrictions: $dietaryRestrictions,
                     additionalNotes: $additionalGoalNotes
                 )
             case 4:
@@ -156,7 +154,6 @@ struct OnboardingView: View {
                     activityLevel: activityLevel,
                     activityNotes: activityNotes,
                     selectedGoal: selectedGoal,
-                    dietaryRestrictions: dietaryRestrictions,
                     additionalNotes: additionalGoalNotes
                 )
             case 5:
@@ -310,7 +307,6 @@ struct OnboardingView: View {
             activityLevel: activityLevel ?? .moderate,
             activityNotes: activityNotes,
             goal: selectedGoal ?? .health,
-            dietaryRestrictions: dietaryRestrictions,
             additionalNotes: additionalGoalNotes
         )
 
@@ -373,7 +369,6 @@ struct OnboardingView: View {
             activityLevel: activityLevel ?? .moderate,
             activityNotes: activityNotes,
             goal: selectedGoal ?? .health,
-            dietaryRestrictions: dietaryRestrictions,
             additionalNotes: additionalGoalNotes
         )
     }
@@ -403,7 +398,6 @@ struct OnboardingView: View {
 
         // Goals
         profile.goalType = (selectedGoal ?? .health).rawValue
-        profile.dietaryRestrictions = dietaryRestrictions
         profile.additionalGoalNotes = additionalGoalNotes
 
         // Nutrition targets (from adjusted values or plan)
@@ -421,6 +415,39 @@ struct OnboardingView: View {
 
         profile.hasCompletedOnboarding = true
         modelContext.insert(profile)
+
+        // Create memories from user notes
+        createMemoriesFromNotes()
+    }
+
+    // MARK: - Memory Creation
+
+    private func createMemoriesFromNotes() {
+        // Import activity notes as a memory
+        let trimmedActivityNotes = activityNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedActivityNotes.isEmpty {
+            let activityMemory = CoachMemory(
+                content: trimmedActivityNotes,
+                category: .context,
+                topic: .workout,
+                source: "onboarding",
+                importance: 4
+            )
+            modelContext.insert(activityMemory)
+        }
+
+        // Import additional goal notes as a memory
+        let trimmedGoalNotes = additionalGoalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedGoalNotes.isEmpty {
+            let goalMemory = CoachMemory(
+                content: trimmedGoalNotes,
+                category: .context,
+                topic: .general,
+                source: "onboarding",
+                importance: 4
+            )
+            modelContext.insert(goalMemory)
+        }
     }
 }
 

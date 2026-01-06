@@ -14,6 +14,17 @@ extension GeminiFunctionExecutor {
 
     /// Save a new memory about the user
     func executeSaveMemory(_ args: [String: Any]) -> ExecutionResult {
+        // Don't save memories in incognito mode
+        if isIncognitoMode {
+            return .dataResponse(FunctionResult(
+                name: "save_memory",
+                response: [
+                    "success": false,
+                    "reason": "Memory not saved - incognito mode is active"
+                ]
+            ))
+        }
+
         guard let content = args["content"] as? String,
               let categoryRaw = args["category"] as? String,
               let topicRaw = args["topic"] as? String else {

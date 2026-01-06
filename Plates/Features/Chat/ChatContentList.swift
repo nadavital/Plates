@@ -11,6 +11,7 @@ struct ChatContentList: View {
     let messages: [ChatMessage]
     let isLoading: Bool
     let isStreamingResponse: Bool
+    let isTemporarySession: Bool
     let currentActivity: String?
     let currentCalories: Int?
     let currentProtein: Int?
@@ -31,7 +32,11 @@ struct ChatContentList: View {
     var body: some View {
         LazyVStack(spacing: 12) {
             if messages.isEmpty {
-                EmptyChatView(onSuggestionTapped: onSuggestionTapped, isLoading: isLoading)
+                EmptyChatView(
+                    onSuggestionTapped: onSuggestionTapped,
+                    isLoading: isLoading,
+                    isTemporary: isTemporarySession
+                )
             } else {
                 ForEach(messages) { message in
                     if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit {

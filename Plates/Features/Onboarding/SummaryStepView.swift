@@ -17,7 +17,6 @@ struct SummaryStepView: View {
     let activityLevel: UserProfile.ActivityLevel?
     let activityNotes: String
     let selectedGoal: UserProfile.GoalType?
-    let dietaryRestrictions: Set<DietaryRestriction>
     let additionalNotes: String
 
     @State private var headerVisible = false
@@ -117,12 +116,6 @@ struct SummaryStepView: View {
             SummaryCard(title: "Goals", icon: "target", color: .green) {
                 if let selectedGoal {
                     SummaryRow(label: "Primary Goal", value: selectedGoal.displayName)
-                }
-                if !dietaryRestrictions.isEmpty {
-                    SummaryRow(
-                        label: "Dietary",
-                        value: dietaryRestrictions.map(\.displayName).sorted().joined(separator: ", ")
-                    )
                 }
                 if !additionalNotes.isEmpty {
                     SummaryRow(label: "Notes", value: additionalNotes)
@@ -238,7 +231,6 @@ struct SummaryRow: View {
         activityLevel: .moderate,
         activityNotes: "I go to the gym 4x per week",
         selectedGoal: .loseWeight,
-        dietaryRestrictions: [.vegetarian, .glutenFree],
-        additionalNotes: ""
+        additionalNotes: "Vegetarian, gluten-free"
     )
 }

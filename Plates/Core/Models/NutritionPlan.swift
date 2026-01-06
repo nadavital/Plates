@@ -94,7 +94,6 @@ struct PlanGenerationRequest {
     let activityLevel: UserProfile.ActivityLevel
     let activityNotes: String
     let goal: UserProfile.GoalType
-    let dietaryRestrictions: Set<DietaryRestriction>
     let additionalNotes: String
 
     /// Calculate BMR using Mifflin-St Jeor equation
@@ -252,10 +251,6 @@ extension NutritionPlan {
             if weightDiff > 20 {
                 warnings.append("Your weight loss goal is ambitious. Consider setting intermediate milestones.")
             }
-        }
-
-        if request.dietaryRestrictions.contains(.vegan) || request.dietaryRestrictions.contains(.vegetarian) {
-            warnings.append("With a plant-based diet, pay attention to complete protein sources and B12 intake.")
         }
 
         return warnings.isEmpty ? nil : warnings

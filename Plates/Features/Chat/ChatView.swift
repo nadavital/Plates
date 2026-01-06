@@ -13,44 +13,46 @@ import PhotosUI
 
 struct ChatView: View {
     // Track if we've started a fresh session this app launch
-    private static var hasStartedFreshSession = false
+    static var hasStartedFreshSession = false
 
     @Query(sort: \ChatMessage.timestamp, order: .forward)
-    private var allMessages: [ChatMessage]
+    var allMessages: [ChatMessage]
 
-    @Query private var profiles: [UserProfile]
+    @Query var profiles: [UserProfile]
     @Query(sort: \FoodEntry.loggedAt, order: .reverse)
-    private var allFoodEntries: [FoodEntry]
+    var allFoodEntries: [FoodEntry]
     @Query(sort: \WorkoutSession.loggedAt, order: .reverse)
-    private var recentWorkouts: [WorkoutSession]
+    var recentWorkouts: [WorkoutSession]
     @Query(sort: \LiveWorkout.startedAt, order: .reverse)
-    private var liveWorkouts: [LiveWorkout]
+    var liveWorkouts: [LiveWorkout]
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
-    private var weightEntries: [WeightEntry]
+    var weightEntries: [WeightEntry]
     @Query(filter: #Predicate<CoachMemory> { $0.isActive }, sort: \CoachMemory.importance, order: .reverse)
-    private var activeMemories: [CoachMemory]
+    var activeMemories: [CoachMemory]
 
-    @Environment(\.modelContext) private var modelContext
-    @State private var geminiService = GeminiService()
-    @State private var messageText = ""
-    @State private var isLoading = false
-    @State private var currentActivity: String?
-    @State private var selectedImage: UIImage?
-    @State private var selectedPhotoItem: PhotosPickerItem?
+    @Environment(\.modelContext) var modelContext
+    @State var geminiService = GeminiService()
+    @State var messageText = ""
+    @State var isLoading = false
+    @State var currentActivity: String?
+    @State var selectedImage: UIImage?
+    @State var selectedPhotoItem: PhotosPickerItem?
     @State private var showingCamera = false
     @State private var enlargedImage: UIImage?
     @State private var editingMealSuggestion: (message: ChatMessage, meal: SuggestedFoodEntry)?
     @State private var editingPlanSuggestion: (message: ChatMessage, plan: PlanUpdateSuggestionEntry)?
     @State private var viewingLoggedMealId: UUID?
     @FocusState private var isInputFocused: Bool
-    @AppStorage("currentChatSessionId") private var currentSessionIdString: String = ""
-    @AppStorage("lastChatActivityDate") private var lastActivityTimestamp: Double = 0
+    @AppStorage("currentChatSessionId") var currentSessionIdString: String = ""
+    @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
+    @State var isTemporarySession = false
+    @State var temporaryMessages: [ChatMessage] = []
 
-    private let sessionTimeoutHours: Double = 1.5
+    let sessionTimeoutHours: Double = 1.5
 
-    private var profile: UserProfile? { profiles.first }
+    var profile: UserProfile? { profiles.first }
 
-    private var currentSessionId: UUID {
+    var currentSessionId: UUID {
         if let uuid = UUID(uuidString: currentSessionIdString) {
             return uuid
         }
@@ -59,8 +61,11 @@ struct ChatView: View {
         return newId
     }
 
-    private var currentSessionMessages: [ChatMessage] {
-        allMessages.filter { $0.sessionId == currentSessionId }
+    var currentSessionMessages: [ChatMessage] {
+        if isTemporarySession {
+            return temporaryMessages.sorted { $0.timestamp < $1.timestamp }
+        }
+        return allMessages.filter { $0.sessionId == currentSessionId }
     }
 
     private var chatSessions: [(id: UUID, firstMessage: String, date: Date)] {
@@ -80,16 +85,15 @@ struct ChatView: View {
 
     private var isStreamingResponse: Bool {
         guard let lastMessage = currentSessionMessages.last else { return false }
-        // Only consider it "streaming" if the AI message already has content
         return !lastMessage.isFromUser && isLoading && !lastMessage.content.isEmpty
     }
 
-    private var todaysFoodEntries: [FoodEntry] {
+    var todaysFoodEntries: [FoodEntry] {
         let startOfDay = Calendar.current.startOfDay(for: Date())
         return allFoodEntries.filter { $0.loggedAt >= startOfDay }
     }
 
-    private var pendingMealSuggestion: (message: ChatMessage, meal: SuggestedFoodEntry)? {
+    var pendingMealSuggestion: (message: ChatMessage, meal: SuggestedFoodEntry)? {
         for message in currentSessionMessages.reversed() {
             if message.hasPendingMealSuggestion, let meal = message.suggestedMeal {
                 return (message, meal)
@@ -111,6 +115,7 @@ struct ChatView: View {
                         messages: currentSessionMessages,
                         isLoading: isLoading,
                         isStreamingResponse: isStreamingResponse,
+                        isTemporarySession: isTemporarySession,
                         currentActivity: currentActivity,
                         currentCalories: profile?.dailyCalorieGoal,
                         currentProtein: profile?.dailyProteinGoal,
@@ -168,6 +173,34 @@ struct ChatView: View {
                 }
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            toggleTemporaryMode()
+                        }
+                        HapticManager.lightTap()
+                    } label: {
+                        Image(systemName: isTemporarySession ? "text.bubble.badge.clock.fill" : "text.bubble.badge.clock")
+                            .foregroundStyle(isTemporarySession ? .orange : .secondary)
+                    }
+                    .help(isTemporarySession ? "Exit incognito mode" : "Start incognito chat")
+                }
+                ToolbarItem(placement: .principal) {
+                    if isTemporarySession {
+                        HStack(spacing: 6) {
+                            Image(systemName: "text.bubble.badge.clock.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Text("Incognito")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.orange)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(.orange.opacity(0.15), in: .capsule)
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     ChatHistoryMenu(
                         sessions: chatSessions,
@@ -198,436 +231,6 @@ struct ChatView: View {
             }
             .chatViewFoodEntrySheet(viewingEntry: viewingFoodEntry, viewingLoggedMealId: $viewingLoggedMealId)
         }
-    }
-}
-
-// MARK: - Session Management
-
-extension ChatView {
-    private func checkSessionTimeout() {
-        // Start fresh chat on every app launch
-        if !ChatView.hasStartedFreshSession {
-            ChatView.hasStartedFreshSession = true
-            startNewSession(silent: true)
-            return
-        }
-
-        // Also start new session if timed out
-        let lastActivity = Date(timeIntervalSince1970: lastActivityTimestamp)
-        let hoursSinceLastActivity = Date().timeIntervalSince(lastActivity) / 3600
-
-        if hoursSinceLastActivity > sessionTimeoutHours {
-            startNewSession(silent: true)
-        }
-    }
-
-    private func startNewSession(silent: Bool = false) {
-        let newId = UUID()
-        currentSessionIdString = newId.uuidString
-        lastActivityTimestamp = Date().timeIntervalSince1970
-        if !silent {
-            HapticManager.lightTap()
-        }
-    }
-
-    private func switchToSession(_ sessionId: UUID) {
-        currentSessionIdString = sessionId.uuidString
-        HapticManager.lightTap()
-    }
-
-    private func updateLastActivity() {
-        lastActivityTimestamp = Date().timeIntervalSince1970
-    }
-
-    private func clearAllChats() {
-        for message in allMessages {
-            modelContext.delete(message)
-        }
-        startNewSession()
-    }
-}
-
-// MARK: - Messaging
-
-extension ChatView {
-    private func friendlyFunctionName(_ name: String) -> String {
-        switch name {
-        case "suggest_food_log":
-            return "Analyzing food..."
-        case "edit_food_entry":
-            return "Preparing edit..."
-        case "get_todays_food_log":
-            return "Getting food log..."
-        case "get_user_plan":
-            return "Checking your plan..."
-        case "update_user_plan":
-            return "Updating plan..."
-        case "get_recent_workouts":
-            return "Getting workouts..."
-        case "log_workout":
-            return "Logging workout..."
-        case "get_weight_history":
-            return "Getting weight history..."
-        case "save_memory":
-            return "Remembering..."
-        case "delete_memory":
-            return "Updating memory..."
-        default:
-            return "Working..."
-        }
-    }
-
-    private func sendMessage(_ text: String) {
-        let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
-        let hasImage = selectedImage != nil
-
-        guard hasText || hasImage else { return }
-
-        updateLastActivity()
-
-        // Capture conversation history BEFORE inserting new messages
-        let previousMessages = Array(currentSessionMessages.suffix(10))
-
-        let imageData = selectedImage?.jpegData(compressionQuality: 0.8)
-        let userMessage = ChatMessage(
-            content: text,
-            isFromUser: true,
-            sessionId: currentSessionId,
-            imageData: imageData
-        )
-        modelContext.insert(userMessage)
-        messageText = ""
-        let capturedImage = selectedImage
-        selectedImage = nil
-        selectedPhotoItem = nil
-
-        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
-        let baseContext = buildFitnessContext()
-        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
-        modelContext.insert(aiMessage)
-
-        Task {
-            isLoading = true
-
-            do {
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
-                let currentDateTime = dateFormatter.string(from: Date())
-
-                let historyString = previousMessages.suffix(6)
-                    .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
-                    .joined(separator: "\n")
-
-                let memoriesContext = activeMemories.formatForPrompt()
-
-                let functionContext = GeminiService.ChatFunctionContext(
-                    profile: profile,
-                    todaysFoodEntries: todaysFoodEntries,
-                    currentDateTime: currentDateTime,
-                    conversationHistory: historyString,
-                    memoriesContext: memoriesContext,
-                    pendingSuggestion: pendingMealSuggestion?.meal
-                )
-
-                let result = try await geminiService.chatWithFunctions(
-                    message: text,
-                    imageData: capturedImage?.jpegData(compressionQuality: 0.8),
-                    context: functionContext,
-                    conversationHistory: previousMessages,
-                    modelContext: modelContext,
-                    onTextChunk: { chunk in
-                        aiMessage.content = chunk
-                    },
-                    onFunctionCall: { functionName in
-                        currentActivity = friendlyFunctionName(functionName)
-                    }
-                )
-
-                if let foodData = result.suggestedFood {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        aiMessage.setSuggestedMeal(foodData)
-                    }
-                    HapticManager.lightTap()
-                }
-
-                if let planData = result.planUpdate {
-                    let suggestion = PlanUpdateSuggestionEntry(
-                        calories: planData.calories,
-                        proteinGrams: planData.proteinGrams,
-                        carbsGrams: planData.carbsGrams,
-                        fatGrams: planData.fatGrams,
-                        goal: planData.goal,
-                        rationale: planData.rationale
-                    )
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        aiMessage.setSuggestedPlan(suggestion)
-                    }
-                    HapticManager.lightTap()
-                }
-
-                if let editData = result.suggestedFoodEdit {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        aiMessage.setSuggestedFoodEdit(editData)
-                    }
-                    HapticManager.lightTap()
-                }
-
-                // Capture saved memories
-                for memory in result.savedMemories {
-                    aiMessage.addSavedMemory(memory)
-                }
-
-                if !result.message.isEmpty {
-                    aiMessage.content = result.message
-                }
-            } catch {
-                aiMessage.content = ""
-                aiMessage.errorMessage = error.localizedDescription
-            }
-
-            isLoading = false
-            currentActivity = nil
-        }
-    }
-
-    private func buildFitnessContext() -> FitnessContext {
-        let totalCalories = todaysFoodEntries.reduce(0) { $0 + $1.calories }
-        let totalProtein = todaysFoodEntries.reduce(0.0) { $0 + $1.proteinGrams }
-        let recentWorkoutNames = Array(recentWorkouts.prefix(5).map { $0.displayName })
-
-        return FitnessContext(
-            userGoal: profile?.goal.displayName ?? "Maintenance",
-            dailyCalorieGoal: profile?.dailyCalorieGoal ?? 2000,
-            dailyProteinGoal: profile?.dailyProteinGoal ?? 150,
-            todaysCalories: totalCalories,
-            todaysProtein: totalProtein,
-            recentWorkouts: recentWorkoutNames,
-            currentWeight: profile?.currentWeightKg,
-            targetWeight: profile?.targetWeightKg
-        )
-    }
-
-    private func retryMessage(_ aiMessage: ChatMessage) {
-        // Find the user message that preceded this AI message
-        guard let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == aiMessage.id }),
-              messageIndex > 0 else { return }
-
-        let userMessage = currentSessionMessages[messageIndex - 1]
-        guard userMessage.isFromUser else { return }
-
-        // Clear the error and retry
-        aiMessage.errorMessage = nil
-        aiMessage.content = ""
-
-        let capturedImage = userMessage.imageData.flatMap { UIImage(data: $0) }
-        let text = userMessage.content
-
-        // Capture conversation history BEFORE this failed message
-        let previousMessages = Array(currentSessionMessages.prefix(messageIndex - 1).suffix(10))
-
-        Task {
-            isLoading = true
-
-            do {
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
-                let currentDateTime = dateFormatter.string(from: Date())
-
-                let historyString = previousMessages.suffix(6)
-                    .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
-                    .joined(separator: "\n")
-
-                let memoriesContext = activeMemories.formatForPrompt()
-
-                let functionContext = GeminiService.ChatFunctionContext(
-                    profile: profile,
-                    todaysFoodEntries: todaysFoodEntries,
-                    currentDateTime: currentDateTime,
-                    conversationHistory: historyString,
-                    memoriesContext: memoriesContext,
-                    pendingSuggestion: pendingMealSuggestion?.meal
-                )
-
-                let result = try await geminiService.chatWithFunctions(
-                    message: text,
-                    imageData: capturedImage?.jpegData(compressionQuality: 0.8),
-                    context: functionContext,
-                    conversationHistory: Array(previousMessages),
-                    modelContext: modelContext,
-                    onTextChunk: { chunk in
-                        aiMessage.content = chunk
-                    },
-                    onFunctionCall: { functionName in
-                        currentActivity = friendlyFunctionName(functionName)
-                    }
-                )
-
-                if let foodData = result.suggestedFood {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        aiMessage.setSuggestedMeal(foodData)
-                    }
-                    HapticManager.lightTap()
-                }
-
-                if let planData = result.planUpdate {
-                    let suggestion = PlanUpdateSuggestionEntry(
-                        calories: planData.calories,
-                        proteinGrams: planData.proteinGrams,
-                        carbsGrams: planData.carbsGrams,
-                        fatGrams: planData.fatGrams,
-                        goal: planData.goal,
-                        rationale: planData.rationale
-                    )
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        aiMessage.setSuggestedPlan(suggestion)
-                    }
-                    HapticManager.lightTap()
-                }
-
-                if let editData = result.suggestedFoodEdit {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        aiMessage.setSuggestedFoodEdit(editData)
-                    }
-                    HapticManager.lightTap()
-                }
-
-                for memory in result.savedMemories {
-                    aiMessage.addSavedMemory(memory)
-                }
-
-                if !result.message.isEmpty {
-                    aiMessage.content = result.message
-                }
-            } catch {
-                aiMessage.content = ""
-                aiMessage.errorMessage = error.localizedDescription
-            }
-
-            isLoading = false
-            currentActivity = nil
-        }
-    }
-}
-
-// MARK: - Meal Suggestion Actions
-
-extension ChatView {
-    private func acceptMealSuggestion(_ meal: SuggestedFoodEntry, for message: ChatMessage) {
-        let messageIndex = currentSessionMessages.firstIndex(where: { $0.id == message.id }) ?? 0
-        let userMessage = messageIndex > 0 ? currentSessionMessages[messageIndex - 1] : nil
-        let imageData = userMessage?.imageData
-
-        let entry = FoodEntry()
-        entry.name = meal.name
-        entry.calories = meal.calories
-        entry.proteinGrams = meal.proteinGrams
-        entry.carbsGrams = meal.carbsGrams
-        entry.fatGrams = meal.fatGrams
-        entry.fiberGrams = meal.fiberGrams
-        entry.servingSize = meal.servingSize
-        entry.emoji = meal.emoji
-        entry.imageData = imageData
-        entry.inputMethod = "chat"
-
-        if let loggedAt = meal.loggedAtDate {
-            entry.loggedAt = loggedAt
-        }
-
-        modelContext.insert(entry)
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.loggedFoodEntryId = entry.id
-        }
-
-        HapticManager.success()
-    }
-
-    private func dismissMealSuggestion(for message: ChatMessage) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            message.suggestedMealDismissed = true
-        }
-        HapticManager.lightTap()
-    }
-}
-
-// MARK: - Plan Suggestion Actions
-
-extension ChatView {
-    private func acceptPlanSuggestion(_ plan: PlanUpdateSuggestionEntry, for message: ChatMessage) {
-        guard let profile else { return }
-
-        // Apply changes to profile
-        if let calories = plan.calories {
-            profile.dailyCalorieGoal = calories
-        }
-        if let protein = plan.proteinGrams {
-            profile.dailyProteinGoal = protein
-        }
-        if let carbs = plan.carbsGrams {
-            profile.dailyCarbsGoal = carbs
-        }
-        if let fat = plan.fatGrams {
-            profile.dailyFatGoal = fat
-        }
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.planUpdateApplied = true
-        }
-
-        HapticManager.success()
-    }
-
-    private func dismissPlanSuggestion(for message: ChatMessage) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            message.suggestedPlanDismissed = true
-        }
-        HapticManager.lightTap()
-    }
-}
-
-// MARK: - Food Edit Suggestion Actions
-
-extension ChatView {
-    private func acceptFoodEditSuggestion(_ edit: SuggestedFoodEdit, for message: ChatMessage) {
-        // Find the food entry to update
-        let descriptor = FetchDescriptor<FoodEntry>(
-            predicate: #Predicate { $0.id == edit.entryId }
-        )
-
-        guard let entry = try? modelContext.fetch(descriptor).first else { return }
-
-        // Apply each change
-        for change in edit.changes {
-            switch change.fieldKey {
-            case "calories":
-                entry.calories = Int(change.newNumericValue)
-            case "proteinGrams":
-                entry.proteinGrams = change.newNumericValue
-            case "carbsGrams":
-                entry.carbsGrams = change.newNumericValue
-            case "fatGrams":
-                entry.fatGrams = change.newNumericValue
-            case "fiberGrams":
-                entry.fiberGrams = change.newNumericValue
-            default:
-                break
-            }
-        }
-
-        try? modelContext.save()
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.foodEditApplied = true
-        }
-
-        HapticManager.success()
-    }
-
-    private func dismissFoodEditSuggestion(for message: ChatMessage) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            message.suggestedFoodEditDismissed = true
-        }
-        HapticManager.lightTap()
     }
 }
 

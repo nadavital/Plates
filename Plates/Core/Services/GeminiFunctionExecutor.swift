@@ -56,10 +56,12 @@ final class GeminiFunctionExecutor {
 
     let modelContext: ModelContext
     let userProfile: UserProfile?
+    let isIncognitoMode: Bool
 
-    init(modelContext: ModelContext, userProfile: UserProfile?) {
+    init(modelContext: ModelContext, userProfile: UserProfile?, isIncognitoMode: Bool = false) {
         self.modelContext = modelContext
         self.userProfile = userProfile
+        self.isIncognitoMode = isIncognitoMode
     }
 
     // MARK: - Execution

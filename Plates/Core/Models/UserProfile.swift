@@ -23,9 +23,6 @@ final class UserProfile {
     var targetWeightKg: Double?
     var currentWeightKg: Double?
 
-    // Dietary restrictions (stored as comma-separated string for CloudKit compatibility)
-    var dietaryRestrictionsRaw: String = ""
-
     // Additional context for AI
     var additionalGoalNotes: String = ""
 
@@ -66,17 +63,6 @@ final class UserProfile {
     var age: Int? {
         guard let dob = dateOfBirth else { return nil }
         return Calendar.current.dateComponents([.year], from: dob, to: Date()).year
-    }
-
-    var dietaryRestrictions: Set<DietaryRestriction> {
-        get {
-            guard !dietaryRestrictionsRaw.isEmpty else { return [] }
-            let rawValues = dietaryRestrictionsRaw.split(separator: ",").map(String.init)
-            return Set(rawValues.compactMap { DietaryRestriction(rawValue: $0) })
-        }
-        set {
-            dietaryRestrictionsRaw = newValue.map(\.rawValue).sorted().joined(separator: ",")
-        }
     }
 }
 
@@ -208,58 +194,6 @@ extension UserProfile {
     var activityLevelValue: ActivityLevel {
         get { ActivityLevel(rawValue: activityLevel) ?? .moderate }
         set { activityLevel = newValue.rawValue }
-    }
-}
-
-// MARK: - Dietary Restrictions
-
-enum DietaryRestriction: String, CaseIterable, Identifiable {
-    case vegetarian = "vegetarian"
-    case vegan = "vegan"
-    case pescatarian = "pescatarian"
-    case glutenFree = "glutenFree"
-    case dairyFree = "dairyFree"
-    case nutFree = "nutFree"
-    case halal = "halal"
-    case kosher = "kosher"
-    case lowSodium = "lowSodium"
-    case diabetic = "diabetic"
-    case keto = "keto"
-    case paleo = "paleo"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .vegetarian: "Vegetarian"
-        case .vegan: "Vegan"
-        case .pescatarian: "Pescatarian"
-        case .glutenFree: "Gluten-Free"
-        case .dairyFree: "Dairy-Free"
-        case .nutFree: "Nut-Free"
-        case .halal: "Halal"
-        case .kosher: "Kosher"
-        case .lowSodium: "Low Sodium"
-        case .diabetic: "Diabetic-Friendly"
-        case .keto: "Keto"
-        case .paleo: "Paleo"
-        }
-    }
-
-    var iconName: String {
-        switch self {
-        case .vegetarian: "leaf.fill"
-        case .vegan: "leaf.circle.fill"
-        case .pescatarian: "fish.fill"
-        case .glutenFree: "xmark.circle.fill"
-        case .dairyFree: "drop.triangle.fill"
-        case .nutFree: "exclamationmark.triangle.fill"
-        case .halal, .kosher: "checkmark.seal.fill"
-        case .lowSodium: "minus.circle.fill"
-        case .diabetic: "heart.text.square.fill"
-        case .keto: "flame.fill"
-        case .paleo: "figure.walk"
-        }
     }
 }
 

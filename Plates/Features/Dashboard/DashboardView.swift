@@ -189,7 +189,7 @@ struct DashboardView: View {
                     NavigationLink {
                         ProfileView()
                     } label: {
-                        Image(systemName: "person.circle.fill")
+                        Image(systemName: "person.fill")
                             .font(.title2)
                             .foregroundStyle(.secondary)
                     }

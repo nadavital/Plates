@@ -18,6 +18,8 @@ struct ProfileView: View {
     private var liveWorkouts: [LiveWorkout]
     @Query(filter: #Predicate<CoachMemory> { $0.isActive }, sort: \CoachMemory.createdAt, order: .reverse)
     private var memories: [CoachMemory]
+    @Query(sort: \ChatMessage.timestamp, order: .forward)
+    private var allChatMessages: [ChatMessage]
 
     @Environment(\.modelContext) private var modelContext
     @State private var planService = PlanService()
@@ -32,6 +34,23 @@ struct ProfileView: View {
         return workouts.contains { $0.loggedAt >= startOfDay }
     }
 
+    private var chatSessions: [(id: UUID, firstMessage: String, date: Date, messageCount: Int)] {
+        var sessions: [UUID: (firstMessage: String, date: Date, messageCount: Int)] = [:]
+
+        for message in allChatMessages {
+            guard let sessionId = message.sessionId else { continue }
+            if let existing = sessions[sessionId] {
+                sessions[sessionId] = (existing.firstMessage, existing.date, existing.messageCount + 1)
+            } else {
+                sessions[sessionId] = (message.content, message.timestamp, 1)
+            }
+        }
+
+        return sessions
+            .map { (id: $0.key, firstMessage: $0.value.firstMessage, date: $0.value.date, messageCount: $0.value.messageCount) }
+            .sorted { $0.date > $1.date }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -41,6 +60,7 @@ struct ProfileView: View {
                         statsGrid(profile)
                         planCard(profile)
                         memoriesCard()
+                        chatHistoryCard()
                         preferencesCard(profile)
                     }
                 }
@@ -73,7 +93,6 @@ struct ProfileView: View {
     @ViewBuilder
     private func headerCard(_ profile: UserProfile) -> some View {
         VStack(spacing: 16) {
-            // Avatar with gradient ring
             ZStack {
                 Circle()
                     .stroke(
@@ -110,7 +129,6 @@ struct ProfileView: View {
                 .foregroundStyle(.secondary)
             }
 
-            // Today's status pill
             HStack(spacing: 8) {
                 Circle()
                     .fill(hasWorkoutToday ? Color.green : Color.orange)
@@ -170,7 +188,6 @@ struct ProfileView: View {
                     color: .purple
                 )
 
-                // Show target weight or a "Set Goal" card
                 if let target = profile.targetWeightKg {
                     StatCard(
                         icon: "target",
@@ -217,7 +234,6 @@ struct ProfileView: View {
                 .controlSize(.small)
             }
 
-            // Calorie display
             let effectiveCalories = planService.getEffectiveCalories(for: profile, hasWorkoutToday: hasWorkoutToday)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -241,14 +257,12 @@ struct ProfileView: View {
                 }
             }
 
-            // Macro pills
             HStack(spacing: 12) {
                 MacroPill(label: "Protein", value: profile.dailyProteinGoal, unit: "g", color: .blue)
                 MacroPill(label: "Carbs", value: profile.dailyCarbsGoal, unit: "g", color: .green)
                 MacroPill(label: "Fat", value: profile.dailyFatGoal, unit: "g", color: .yellow)
             }
 
-            // Weight change prompt
             if let currentWeight = weightEntries.first?.weightKg,
                planService.shouldPromptForRecalculation(profile: profile, currentWeight: currentWeight),
                let diff = planService.getWeightDifference(profile: profile, currentWeight: currentWeight) {
@@ -357,12 +371,85 @@ struct ProfileView: View {
         HapticManager.lightTap()
     }
 
+    // MARK: - Chat History Card
+
+    @ViewBuilder
+    private func chatHistoryCard() -> some View {
+        VStack(spacing: 16) {
+            HStack {
+                Label("Chat History", systemImage: "bubble.left.and.bubble.right.fill")
+                    .font(.headline)
+
+                Spacer()
+
+                if !chatSessions.isEmpty {
+                    Text("\(chatSessions.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.secondary.opacity(0.15), in: .capsule)
+                }
+            }
+
+            if chatSessions.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+
+                    Text("No chat history")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text("Your conversations with Trai will appear here.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(chatSessions.prefix(5), id: \.id) { session in
+                        ChatSessionRow(
+                            session: session,
+                            onDelete: { deleteChatSession(session.id) }
+                        )
+                    }
+
+                    if chatSessions.count > 5 {
+                        NavigationLink {
+                            AllChatSessionsView()
+                        } label: {
+                            Text("See all \(chatSessions.count) chats")
+                                .font(.subheadline)
+                                .foregroundStyle(.accent)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+        )
+    }
+
+    private func deleteChatSession(_ sessionId: UUID) {
+        let messagesToDelete = allChatMessages.filter { $0.sessionId == sessionId }
+        for message in messagesToDelete {
+            modelContext.delete(message)
+        }
+        HapticManager.lightTap()
+    }
+
     // MARK: - Preferences Card
 
     @ViewBuilder
     private func preferencesCard(_ profile: UserProfile) -> some View {
         VStack(spacing: 0) {
-            // Units picker
             HStack(spacing: 12) {
                 Image(systemName: "ruler.fill")
                     .font(.body)
@@ -390,193 +477,11 @@ struct ProfileView: View {
                 .frame(width: 160)
             }
             .padding()
-
-            Divider().padding(.leading, 52)
-
-            NavigationLink {
-                DietaryRestrictionsView(profile: profile)
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "leaf.fill")
-                        .font(.body)
-                        .foregroundStyle(.green)
-                        .frame(width: 32, height: 32)
-                        .background(Color.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-
-                    Text("Dietary Preferences")
-                        .font(.subheadline)
-
-                    Spacer()
-
-                    if !profile.dietaryRestrictions.isEmpty {
-                        Text("\(profile.dietaryRestrictions.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.secondary.opacity(0.15), in: .capsule)
-                    }
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding()
-            }
-            .buttonStyle(.plain)
         }
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(.ultraThinMaterial)
         )
-    }
-}
-
-// MARK: - Supporting Views
-
-struct StatCard: View {
-    let icon: String
-    let label: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(color)
-
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-        )
-    }
-}
-
-struct SetGoalCard: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: "target")
-                    .font(.title3)
-                    .foregroundStyle(.green)
-
-                Text("Target")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.caption)
-                    Text("Set Goal")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                }
-                .foregroundStyle(.green)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.green.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [6]))
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct MacroPill: View {
-    let label: String
-    let value: Int
-    let unit: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Text("\(value)")
-                    .font(.headline)
-                    .fontWeight(.bold)
-
-                Text(unit)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-struct DietaryRestrictionsView: View {
-    @Bindable var profile: UserProfile
-
-    var body: some View {
-        List {
-            ForEach(DietaryRestriction.allCases) { restriction in
-                Button {
-                    toggleRestriction(restriction)
-                    HapticManager.lightTap()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: restriction.iconName)
-                            .font(.body)
-                            .foregroundStyle(profile.dietaryRestrictions.contains(restriction) ? .blue : .secondary)
-                            .frame(width: 32, height: 32)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(profile.dietaryRestrictions.contains(restriction)
-                                          ? Color.blue.opacity(0.15)
-                                          : Color.secondary.opacity(0.1))
-                            )
-
-                        Text(restriction.displayName)
-                            .foregroundStyle(.primary)
-
-                        Spacer()
-
-                        if profile.dietaryRestrictions.contains(restriction) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.blue)
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Dietary Preferences")
-    }
-
-    private func toggleRestriction(_ restriction: DietaryRestriction) {
-        var restrictions = profile.dietaryRestrictions
-        if restrictions.contains(restriction) {
-            restrictions.remove(restriction)
-        } else {
-            restrictions.insert(restriction)
-        }
-        profile.dietaryRestrictions = restrictions
     }
 }
 

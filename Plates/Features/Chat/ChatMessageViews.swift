@@ -33,6 +33,7 @@ struct ThinkingIndicator: View {
 struct EmptyChatView: View {
     let onSuggestionTapped: (String) -> Void
     var isLoading: Bool = false
+    var isTemporary: Bool = false
 
     private var lensState: TraiLensState {
         isLoading ? .thinking : .idle
@@ -42,42 +43,76 @@ struct EmptyChatView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            TraiLensView(size: 100, state: lensState, palette: .energy)
+            if isTemporary {
+                // Incognito mode content
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.15))
+                        .frame(width: 100, height: 100)
 
-            Text("Meet Trai")
-                .font(.title2)
-                .bold()
-
-            Text("Your personal fitness coach. Ask me anything about nutrition, workouts, or your goals!")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Try asking:")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                ForEach(ChatMessage.suggestedPrompts.prefix(4), id: \.title) { prompt in
-                    Button {
-                        onSuggestionTapped(prompt.prompt)
-                    } label: {
-                        HStack {
-                            Text(prompt.title)
-                                .font(.subheadline)
-                            Spacer()
-                            Image(systemName: "arrow.right")
-                                .font(.caption)
-                        }
-                        .padding()
-                        .background(Color(.tertiarySystemBackground))
-                        .clipShape(.rect(cornerRadius: 12))
-                    }
-                    .foregroundStyle(.primary)
+                    Image(systemName: "text.bubble.badge.clock.fill")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.orange)
                 }
+
+                Text("Incognito Chat")
+                    .font(.title2)
+                    .bold()
+
+                Text("This conversation won't be saved. Your messages will disappear when you leave incognito mode or switch chats.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                VStack(spacing: 8) {
+                    Label("Messages won't be saved", systemImage: "clock.badge.xmark")
+                    Label("Memories won't be created", systemImage: "brain.head.profile.slash")
+                    Label("Chat history stays private", systemImage: "lock.fill")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding()
+                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            } else {
+                // Normal mode content
+                TraiLensView(size: 100, state: lensState, palette: .energy)
+
+                Text("Meet Trai")
+                    .font(.title2)
+                    .bold()
+
+                Text("Your personal fitness coach. Ask me anything about nutrition, workouts, or your goals!")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Try asking:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    ForEach(ChatMessage.suggestedPrompts.prefix(4), id: \.title) { prompt in
+                        Button {
+                            onSuggestionTapped(prompt.prompt)
+                        } label: {
+                            HStack {
+                                Text(prompt.title)
+                                    .font(.subheadline)
+                                Spacer()
+                                Image(systemName: "arrow.right")
+                                    .font(.caption)
+                            }
+                            .padding()
+                            .background(Color(.tertiarySystemBackground))
+                            .clipShape(.rect(cornerRadius: 12))
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                }
+                .padding()
             }
-            .padding()
 
             Spacer()
         }

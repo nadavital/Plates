@@ -37,11 +37,6 @@ extension GeminiPromptBuilder {
             prompt += "\n- Activity Details: \(request.activityNotes)"
         }
 
-        if !request.dietaryRestrictions.isEmpty {
-            let restrictions = request.dietaryRestrictions.map(\.displayName).joined(separator: ", ")
-            prompt += "\n- Dietary Restrictions: \(restrictions)"
-        }
-
         if !request.additionalNotes.isEmpty {
             prompt += "\n- Additional Notes: \(request.additionalNotes)"
         }

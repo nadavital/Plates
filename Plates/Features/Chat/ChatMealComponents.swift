@@ -17,7 +17,6 @@ struct SuggestedEditCard: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            // Header
             HStack {
                 HStack(spacing: 6) {
                     Text(edit.displayEmoji)
@@ -42,12 +41,10 @@ struct SuggestedEditCard: View {
                 }
             }
 
-            // Meal name
             Text(edit.name)
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Changes
             VStack(spacing: 8) {
                 ForEach(edit.changes) { change in
                     HStack {
@@ -71,7 +68,6 @@ struct SuggestedEditCard: View {
                 }
             }
 
-            // Action buttons
             HStack(spacing: 10) {
                 Button {
                     onDismiss()
@@ -166,7 +162,6 @@ struct SuggestedMealCard: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            // Header
             HStack {
                 HStack(spacing: 6) {
                     Text(meal.displayEmoji)
@@ -191,7 +186,6 @@ struct SuggestedMealCard: View {
                 }
             }
 
-            // Meal name and calories
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(meal.name)
@@ -218,7 +212,6 @@ struct SuggestedMealCard: View {
                 }
             }
 
-            // Macros
             HStack(spacing: 12) {
                 MealMacroPill(label: "Protein", value: Int(meal.proteinGrams), color: .blue)
                 MealMacroPill(label: "Carbs", value: Int(meal.carbsGrams), color: .green)
@@ -228,7 +221,6 @@ struct SuggestedMealCard: View {
                 }
             }
 
-            // Action buttons
             HStack(spacing: 10) {
                 Button {
                     onEdit()
@@ -344,60 +336,11 @@ struct EditMealSuggestionSheet: View {
                 }
 
                 Section("Nutrition") {
-                    HStack {
-                        Text("Calories")
-                        Spacer()
-                        TextField("0", text: $caloriesText)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("kcal")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Text("Protein")
-                        Spacer()
-                        TextField("0", text: $proteinText)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("g")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Text("Carbs")
-                        Spacer()
-                        TextField("0", text: $carbsText)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("g")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Text("Fat")
-                        Spacer()
-                        TextField("0", text: $fatText)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("g")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Text("Fiber")
-                        Spacer()
-                        TextField("0", text: $fiberText)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text("g")
-                            .foregroundStyle(.secondary)
-                    }
+                    NutritionInputRow(label: "Calories", text: $caloriesText, unit: "kcal")
+                    NutritionInputRow(label: "Protein", text: $proteinText, unit: "g")
+                    NutritionInputRow(label: "Carbs", text: $carbsText, unit: "g")
+                    NutritionInputRow(label: "Fat", text: $fatText, unit: "g")
+                    NutritionInputRow(label: "Fiber", text: $fiberText, unit: "g")
                 }
             }
             .navigationTitle("Edit Meal")
@@ -430,115 +373,23 @@ struct EditMealSuggestionSheet: View {
     }
 }
 
-// MARK: - Memory Saved Badge
+// MARK: - Nutrition Input Row
 
-struct MemorySavedBadge: View {
-    let memories: [String]
-    @Environment(\.modelContext) private var modelContext
-    @State private var showMemories = false
-    @State private var singleMemory: CoachMemory?
-
-    private var displayText: String {
-        if memories.count == 1 {
-            return "Remembered"
-        }
-        return "Remembered \(memories.count) things"
-    }
+private struct NutritionInputRow: View {
+    let label: String
+    @Binding var text: String
+    let unit: String
 
     var body: some View {
-        Button {
-            if memories.count == 1 {
-                // Fetch and show single memory directly
-                fetchSingleMemory()
-            } else {
-                showMemories = true
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "brain.head.profile")
-                    .font(.caption)
-                Text(displayText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.purple.opacity(0.1))
-            .clipShape(.capsule)
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("0", text: $text)
+                .keyboardType(unit == "kcal" ? .numberPad : .decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 80)
+            Text(unit)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .sheet(isPresented: $showMemories) {
-            SavedMemoriesSheet(memoryContents: memories)
-                .presentationDetents([.medium])
-        }
-        .sheet(item: $singleMemory) { memory in
-            MemoryDetailSheet(memory: memory, onDelete: {
-                memory.isActive = false
-                try? modelContext.save()
-                singleMemory = nil
-                HapticManager.lightTap()
-            })
-            .presentationDetents([.medium])
-        }
-    }
-
-    private func fetchSingleMemory() {
-        guard let content = memories.first else { return }
-        let descriptor = FetchDescriptor<CoachMemory>(
-            predicate: #Predicate { $0.isActive },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let allMemories = (try? modelContext.fetch(descriptor)) ?? []
-        singleMemory = allMemories.first { $0.content == content }
-    }
-}
-
-// MARK: - Saved Memories Sheet
-
-struct SavedMemoriesSheet: View {
-    let memoryContents: [String]
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @State private var memories: [CoachMemory] = []
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(memories) { memory in
-                    MemoryListRow(memory: memory, onDelete: {
-                        deleteMemory(memory)
-                    })
-                }
-            }
-            .navigationTitle("Saved Memories")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .onAppear {
-                fetchMemories()
-            }
-        }
-    }
-
-    private func fetchMemories() {
-        // Fetch CoachMemory objects that match the content strings
-        let descriptor = FetchDescriptor<CoachMemory>(
-            predicate: #Predicate { $0.isActive },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let allMemories = (try? modelContext.fetch(descriptor)) ?? []
-        memories = allMemories.filter { memoryContents.contains($0.content) }
-    }
-
-    private func deleteMemory(_ memory: CoachMemory) {
-        memory.isActive = false
-        try? modelContext.save()
-        fetchMemories()
-        HapticManager.lightTap()
     }
 }
