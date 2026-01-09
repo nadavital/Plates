@@ -9,61 +9,61 @@ import SwiftUI
 import SwiftData
 
 struct OnboardingView: View {
-    @Environment(\.modelContext) private var modelContext
-    @State private var currentStep = 0
-    @State private var navigationDirection: NavigationDirection = .forward
+    @Environment(\.modelContext) var modelContext
+    @State var currentStep = 0
+    @State var navigationDirection: NavigationDirection = .forward
 
     // Step 0: Welcome
-    @State private var userName = ""
+    @State var userName = ""
 
     // Step 1: Biometrics
     // Default: August 4, 2002
-    @State private var dateOfBirth = Calendar.current.date(from: DateComponents(year: 2002, month: 8, day: 4)) ?? Date()
-    @State private var gender: UserProfile.Gender?
-    @State private var heightValue = ""
-    @State private var weightValue = ""
-    @State private var targetWeightValue = ""
-    @State private var usesMetricHeight = true
-    @State private var usesMetricWeight = true
+    @State var dateOfBirth = Calendar.current.date(from: DateComponents(year: 2002, month: 8, day: 4)) ?? Date()
+    @State var gender: UserProfile.Gender?
+    @State var heightValue = ""
+    @State var weightValue = ""
+    @State var targetWeightValue = ""
+    @State var usesMetricHeight = true
+    @State var usesMetricWeight = true
 
     // Step 2: Activity Level
-    @State private var activityLevel: UserProfile.ActivityLevel?
-    @State private var activityNotes = ""
+    @State var activityLevel: UserProfile.ActivityLevel?
+    @State var activityNotes = ""
 
     // Step 3: Goals
-    @State private var selectedGoal: UserProfile.GoalType?
-    @State private var additionalGoalNotes = ""
+    @State var selectedGoal: UserProfile.GoalType?
+    @State var additionalGoalNotes = ""
 
     // Step 4: Macro Preferences
-    @State private var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+    @State var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
 
-    private enum NavigationDirection {
+    enum NavigationDirection {
         case forward, backward
     }
 
     // Step 5: Summary (review before AI)
     // Step 6: Plan Review
-    @State private var generatedPlan: NutritionPlan?
-    @State private var isGeneratingPlan = false
-    @State private var planError: String?
-    @State private var adjustedCalories = ""
-    @State private var adjustedProtein = ""
-    @State private var adjustedCarbs = ""
-    @State private var adjustedFat = ""
+    @State var generatedPlan: NutritionPlan?
+    @State var isGeneratingPlan = false
+    @State var planError: String?
+    @State var adjustedCalories = ""
+    @State var adjustedProtein = ""
+    @State var adjustedCarbs = ""
+    @State var adjustedFat = ""
 
     // Step 7: Workout Plan (optional)
-    @State private var wantsWorkoutPlan: Bool?
-    @State private var generatedWorkoutPlan: WorkoutPlan?
-    @State private var isGeneratingWorkoutPlan = false
-    @State private var workoutDaysPerWeek: Int = 3
-    @State private var workoutExperienceLevel: WorkoutPlanGenerationRequest.ExperienceLevel = .beginner
-    @State private var workoutEquipmentAccess: WorkoutPlanGenerationRequest.EquipmentAccess = .fullGym
-    @State private var workoutTimePerSession: Int = 45
-    @State private var workoutNotes: String = ""
+    @State var wantsWorkoutPlan: Bool?
+    @State var generatedWorkoutPlan: WorkoutPlan?
+    @State var isGeneratingWorkoutPlan = false
+    @State var workoutDaysPerWeek: Int = 3
+    @State var workoutExperienceLevel: WorkoutPlanGenerationRequest.ExperienceLevel = .beginner
+    @State var workoutEquipmentAccess: WorkoutPlanGenerationRequest.EquipmentAccess = .fullGym
+    @State var workoutTimePerSession: Int = 45
+    @State var workoutNotes: String = ""
 
-    @State private var geminiService = GeminiService()
+    @State var geminiService = GeminiService()
 
-    private let totalSteps = 8
+    let totalSteps = 8
 
     var body: some View {
         ZStack {
@@ -338,259 +338,6 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Plan Generation
-
-    private func generatePlan() {
-        guard let age = calculateAge(),
-              let heightCm = parseHeight(),
-              let weightKg = parseWeight(weightValue) else {
-            planError = "Please check your profile information and try again."
-            return
-        }
-
-        let targetWeightKg = parseWeight(targetWeightValue)
-
-        let request = PlanGenerationRequest(
-            name: userName.trimmingCharacters(in: .whitespaces),
-            age: age,
-            gender: gender ?? .notSpecified,
-            heightCm: heightCm,
-            weightKg: weightKg,
-            targetWeightKg: targetWeightKg,
-            activityLevel: activityLevel ?? .moderate,
-            activityNotes: activityNotes,
-            goal: selectedGoal ?? .health,
-            additionalNotes: additionalGoalNotes
-        )
-
-        isGeneratingPlan = true
-        planError = nil
-
-        Task {
-            do {
-                let plan = try await geminiService.generateNutritionPlan(request: request)
-                generatedPlan = plan
-                populateAdjustedValues(from: plan)
-            } catch {
-                // Fall back to calculated plan
-                let fallbackPlan = NutritionPlan.createDefault(from: request)
-                generatedPlan = fallbackPlan
-                populateAdjustedValues(from: fallbackPlan)
-            }
-            isGeneratingPlan = false
-        }
-    }
-
-    private func populateAdjustedValues(from plan: NutritionPlan) {
-        adjustedCalories = String(plan.dailyTargets.calories)
-        adjustedProtein = String(plan.dailyTargets.protein)
-        adjustedCarbs = String(plan.dailyTargets.carbs)
-        adjustedFat = String(plan.dailyTargets.fat)
-    }
-
-    // MARK: - Workout Plan Generation
-
-    private func generateWorkoutPlan() {
-        guard let age = calculateAge() else { return }
-
-        // Parse focus areas from notes (simple extraction)
-        let trimmedNotes = workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let focusAreas = parseFocusAreas(from: trimmedNotes)
-        let injuryNotes = trimmedNotes.isEmpty ? nil : trimmedNotes
-
-        let request = WorkoutPlanGenerationRequest(
-            name: userName.trimmingCharacters(in: .whitespaces),
-            age: age,
-            gender: gender ?? .notSpecified,
-            goal: selectedGoal ?? .health,
-            activityLevel: activityLevel ?? .moderate,
-            workoutType: .strength,
-            selectedWorkoutTypes: nil,
-            experienceLevel: workoutExperienceLevel,
-            equipmentAccess: workoutEquipmentAccess,
-            availableDays: workoutDaysPerWeek,
-            timePerWorkout: workoutTimePerSession,
-            preferredSplit: nil,
-            cardioTypes: nil,
-            customWorkoutType: nil,
-            customExperience: nil,
-            customEquipment: nil,
-            customCardioType: nil,
-            specificGoals: focusAreas.isEmpty ? nil : focusAreas,
-            weakPoints: nil,
-            injuries: injuryNotes,
-            preferences: nil
-        )
-
-        isGeneratingWorkoutPlan = true
-
-        Task {
-            do {
-                let plan = try await geminiService.generateWorkoutPlan(request: request)
-                generatedWorkoutPlan = plan
-            } catch {
-                // Fall back to default plan
-                let fallbackPlan = WorkoutPlan.createDefault(from: request)
-                generatedWorkoutPlan = fallbackPlan
-            }
-            isGeneratingWorkoutPlan = false
-        }
-    }
-
-    private func parseFocusAreas(from notes: String) -> [String] {
-        let lowercased = notes.lowercased()
-        var areas: [String] = []
-
-        // Simple keyword matching for common focus areas
-        let focusKeywords = [
-            ("chest", ["chest", "pecs"]),
-            ("back", ["back", "lats"]),
-            ("shoulders", ["shoulders", "delts"]),
-            ("arms", ["arms", "biceps", "triceps"]),
-            ("legs", ["legs", "quads", "hamstrings", "glutes"]),
-            ("core", ["core", "abs", "abdominals"]),
-            ("upper body", ["upper body", "upper-body"]),
-            ("lower body", ["lower body", "lower-body"])
-        ]
-
-        for (area, keywords) in focusKeywords {
-            for keyword in keywords {
-                if lowercased.contains(keyword) {
-                    areas.append(area)
-                    break
-                }
-            }
-        }
-
-        return areas
-    }
-
-    // MARK: - Parsing Helpers
-
-    private func calculateAge() -> Int? {
-        let components = Calendar.current.dateComponents([.year], from: dateOfBirth, to: Date())
-        return components.year
-    }
-
-    private func parseHeight() -> Double? {
-        guard let value = Double(heightValue) else { return nil }
-        return usesMetricHeight ? value : value * 2.54
-    }
-
-    private func parseWeight(_ value: String) -> Double? {
-        guard !value.isEmpty, let parsed = Double(value) else { return nil }
-        return usesMetricWeight ? parsed : parsed * 0.453592
-    }
-
-    private func buildPlanRequest() -> PlanGenerationRequest? {
-        guard let age = calculateAge(),
-              let heightCm = parseHeight(),
-              let weightKg = parseWeight(weightValue) else {
-            return nil
-        }
-
-        return PlanGenerationRequest(
-            name: userName.trimmingCharacters(in: .whitespaces),
-            age: age,
-            gender: gender ?? .notSpecified,
-            heightCm: heightCm,
-            weightKg: weightKg,
-            targetWeightKg: parseWeight(targetWeightValue),
-            activityLevel: activityLevel ?? .moderate,
-            activityNotes: activityNotes,
-            goal: selectedGoal ?? .health,
-            additionalNotes: additionalGoalNotes
-        )
-    }
-
-    // MARK: - Complete Onboarding
-
-    private func completeOnboarding() {
-        HapticManager.success()
-
-        let profile = UserProfile()
-
-        // Basic info
-        profile.name = userName.trimmingCharacters(in: .whitespaces)
-        profile.dateOfBirth = dateOfBirth
-        profile.gender = (gender ?? .notSpecified).rawValue
-
-        // Biometrics (always store in metric)
-        profile.heightCm = parseHeight()
-        profile.currentWeightKg = parseWeight(weightValue)
-        profile.targetWeightKg = parseWeight(targetWeightValue)
-        profile.usesMetricHeight = usesMetricHeight
-        profile.usesMetricWeight = usesMetricWeight
-
-        // Activity
-        profile.activityLevel = (activityLevel ?? .moderate).rawValue
-        profile.activityNotes = activityNotes
-
-        // Goals
-        profile.goalType = (selectedGoal ?? .health).rawValue
-        profile.additionalGoalNotes = additionalGoalNotes
-
-        // Macro tracking preferences
-        profile.enabledMacros = enabledMacros
-
-        // Nutrition targets (from adjusted values or plan)
-        profile.dailyCalorieGoal = Int(adjustedCalories) ?? 2000
-        profile.dailyProteinGoal = Int(adjustedProtein) ?? 150
-        profile.dailyCarbsGoal = Int(adjustedCarbs) ?? 200
-        profile.dailyFatGoal = Int(adjustedFat) ?? 65
-
-        // AI plan metadata
-        if let plan = generatedPlan {
-            profile.aiPlanRationale = plan.rationale
-            profile.aiPlanGeneratedAt = Date()
-            profile.dailyFiberGoal = plan.dailyTargets.fiber
-        }
-
-        // Workout plan (if user opted in)
-        if wantsWorkoutPlan == true, let workoutPlan = generatedWorkoutPlan {
-            profile.workoutPlan = workoutPlan
-            profile.preferredWorkoutDays = workoutDaysPerWeek
-            profile.workoutExperience = workoutExperienceLevel
-            profile.workoutEquipment = workoutEquipmentAccess
-            profile.workoutTimePerSession = workoutTimePerSession
-        }
-
-        profile.hasCompletedOnboarding = true
-        modelContext.insert(profile)
-
-        // Create memories from user notes
-        createMemoriesFromNotes()
-    }
-
-    // MARK: - Memory Creation
-
-    private func createMemoriesFromNotes() {
-        // Import activity notes as a memory
-        let trimmedActivityNotes = activityNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedActivityNotes.isEmpty {
-            let activityMemory = CoachMemory(
-                content: trimmedActivityNotes,
-                category: .context,
-                topic: .workout,
-                source: "onboarding",
-                importance: 4
-            )
-            modelContext.insert(activityMemory)
-        }
-
-        // Import additional goal notes as a memory
-        let trimmedGoalNotes = additionalGoalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedGoalNotes.isEmpty {
-            let goalMemory = CoachMemory(
-                content: trimmedGoalNotes,
-                category: .context,
-                topic: .general,
-                source: "onboarding",
-                importance: 4
-            )
-            modelContext.insert(goalMemory)
-        }
-    }
 }
 
 #Preview {
