@@ -32,6 +32,11 @@ final class Exercise {
         self.category = category
         self.muscleGroup = muscleGroup
     }
+
+    /// Convenience initializer with enum types
+    convenience init(name: String, category: Category, muscleGroup: MuscleGroup? = nil) {
+        self.init(name: name, category: category.rawValue, muscleGroup: muscleGroup?.rawValue)
+    }
 }
 
 // MARK: - Category Helper
@@ -92,6 +97,19 @@ extension Exercise {
             case .legs: "Legs"
             case .core: "Core"
             case .fullBody: "Full Body"
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .chest: "figure.arms.open"
+            case .back: "figure.walk"
+            case .shoulders: "figure.boxing"
+            case .biceps: "figure.strengthtraining.functional"
+            case .triceps: "figure.strengthtraining.traditional"
+            case .legs: "figure.run"
+            case .core: "figure.core.training"
+            case .fullBody: "figure.mixed.cardio"
             }
         }
     }

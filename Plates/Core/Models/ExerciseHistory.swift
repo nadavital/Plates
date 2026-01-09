@@ -41,6 +41,12 @@ final class ExerciseHistory {
     /// Reference to the source workout entry
     var sourceWorkoutEntryId: UUID?
 
+    /// Rep pattern as comma-separated values (e.g., "12,10,8")
+    var repPattern: String?
+
+    /// Weight pattern as comma-separated values (e.g., "60,70,80")
+    var weightPattern: String?
+
     init() {}
 
     init(from entry: LiveWorkoutEntry, performedAt: Date = Date()) {
@@ -58,6 +64,24 @@ final class ExerciseHistory {
         self.totalReps = entry.totalReps
         self.estimatedOneRepMax = entry.estimatedOneRepMax
         self.sourceWorkoutEntryId = entry.id
+
+        // Store rep and weight patterns from completed sets
+        if let completedSets = entry.completedSets, !completedSets.isEmpty {
+            self.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
+            self.weightPattern = completedSets.map { String(format: "%.1f", $0.weightKg) }.joined(separator: ",")
+        }
+    }
+
+    /// Get rep pattern as array of integers
+    var repPatternArray: [Int] {
+        guard let pattern = repPattern else { return [] }
+        return pattern.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    /// Get weight pattern as array of doubles
+    var weightPatternArray: [Double] {
+        guard let pattern = weightPattern else { return [] }
+        return pattern.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
     }
 }
 

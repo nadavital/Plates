@@ -170,39 +170,60 @@ extension GeminiFunctionExecutor {
             ))
         }
 
+        let workoutName = args["name"] as? String  // Trai-generated name
         let durationMinutes = args["duration_minutes"] as? Int
         let notes = args["notes"] as? String
 
-        // Create workout session
-        let workout = WorkoutSession()
-        workout.exerciseName = type.capitalized
+        // Parse exercises with per-set data
+        var exercises: [SuggestedWorkoutLog.LoggedExercise] = []
+        if let exercisesData = args["exercises"] as? [[String: Any]] {
+            for exerciseData in exercisesData {
+                guard let name = exerciseData["name"] as? String else { continue }
 
-        let isStrength = ["strength", "weights", "lifting"].contains(type.lowercased())
-        if isStrength {
-            workout.sets = 1  // Default to 1 set so isStrengthTraining computed property works
-            workout.reps = 1
+                var sets: [SuggestedWorkoutLog.LoggedExercise.SetData] = []
+
+                // New format: sets is an array of {reps, weight_kg}
+                if let setsArray = exerciseData["sets"] as? [[String: Any]] {
+                    for setData in setsArray {
+                        let reps = setData["reps"] as? Int ?? 10
+                        let weight = setData["weight_kg"] as? Double
+                        sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
+                            reps: reps,
+                            weightKg: weight
+                        ))
+                    }
+                }
+                // Legacy format: sets/reps as integers
+                else if let setCount = exerciseData["sets"] as? Int {
+                    let reps = exerciseData["reps"] as? Int ?? 10
+                    let weight = exerciseData["weight_kg"] as? Double
+                    for _ in 0..<setCount {
+                        sets.append(SuggestedWorkoutLog.LoggedExercise.SetData(
+                            reps: reps,
+                            weightKg: weight
+                        ))
+                    }
+                }
+
+                if !sets.isEmpty {
+                    exercises.append(SuggestedWorkoutLog.LoggedExercise(
+                        name: name,
+                        sets: sets
+                    ))
+                }
+            }
         }
 
-        if let duration = durationMinutes {
-            workout.durationMinutes = Double(duration)
-        }
+        // Return suggestion for user approval (don't save yet)
+        let suggestion = SuggestedWorkoutLog(
+            name: workoutName,
+            workoutType: type,
+            durationMinutes: durationMinutes,
+            exercises: exercises,
+            notes: notes
+        )
 
-        if let notes = notes {
-            workout.notes = notes
-        }
-
-        modelContext.insert(workout)
-        try? modelContext.save()
-
-        return .dataResponse(FunctionResult(
-            name: "log_workout",
-            response: [
-                "success": true,
-                "workout_id": workout.id.uuidString,
-                "type": type,
-                "duration_minutes": durationMinutes ?? 0
-            ]
-        ))
+        return .suggestedWorkoutLog(suggestion)
     }
 
     // MARK: - Weight Functions

@@ -15,6 +15,9 @@ struct ChatView: View {
     // Track if we've started a fresh session this app launch
     static var hasStartedFreshSession = false
 
+    /// Optional workout context for mid-workout chat
+    var workoutContext: GeminiService.WorkoutContext?
+
     @Query(sort: \ChatMessage.timestamp, order: .forward)
     var allMessages: [ChatMessage]
 
@@ -139,6 +142,11 @@ struct ChatView: View {
             onDismissPlan: dismissPlanSuggestion,
             onAcceptFoodEdit: acceptFoodEditSuggestion,
             onDismissFoodEdit: dismissFoodEditSuggestion,
+            onAcceptWorkout: acceptWorkoutSuggestion,
+            onDismissWorkout: dismissWorkoutSuggestion,
+            onAcceptWorkoutLog: acceptWorkoutLogSuggestion,
+            onDismissWorkoutLog: dismissWorkoutLogSuggestion,
+            useExerciseWeightLbs: !(profile?.usesMetricExerciseWeight ?? true),
             onRetry: retryMessage
         )
     }

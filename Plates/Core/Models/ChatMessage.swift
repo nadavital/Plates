@@ -158,6 +158,81 @@ final class ChatMessage {
         }
     }
 
+    // MARK: - Workout Suggestions
+
+    /// Suggested workout data (JSON encoded) - for confirmation before starting
+    var suggestedWorkoutData: Data?
+
+    /// Whether the user has dismissed the workout suggestion
+    var suggestedWorkoutDismissed: Bool = false
+
+    /// Whether the workout was started from this message
+    var workoutStarted: Bool = false
+
+    /// ID of the started workout (for navigation)
+    var startedWorkoutId: UUID?
+
+    /// Whether this message has a pending workout suggestion (not yet started or dismissed)
+    var hasPendingWorkoutSuggestion: Bool {
+        suggestedWorkoutData != nil && !workoutStarted && !suggestedWorkoutDismissed
+    }
+
+    /// Whether this message has a started workout
+    var hasStartedWorkout: Bool {
+        suggestedWorkoutData != nil && workoutStarted
+    }
+
+    /// Decode the suggested workout data
+    var suggestedWorkout: SuggestedWorkoutEntry? {
+        guard let data = suggestedWorkoutData else { return nil }
+        return try? JSONDecoder().decode(SuggestedWorkoutEntry.self, from: data)
+    }
+
+    /// Set the suggested workout data
+    func setSuggestedWorkout(_ workout: SuggestedWorkoutEntry?) {
+        if let workout {
+            suggestedWorkoutData = try? JSONEncoder().encode(workout)
+        } else {
+            suggestedWorkoutData = nil
+        }
+    }
+
+    // MARK: - Workout Log Suggestions
+
+    /// Suggested workout log data (JSON encoded) - for confirmation before saving
+    var suggestedWorkoutLogData: Data?
+
+    /// Whether the user has dismissed the workout log suggestion
+    var suggestedWorkoutLogDismissed: Bool = false
+
+    /// Whether the workout log was saved from this message
+    var workoutLogSaved: Bool = false
+
+    /// Whether this message has a pending workout log suggestion (not yet saved or dismissed)
+    var hasPendingWorkoutLogSuggestion: Bool {
+        suggestedWorkoutLogData != nil && !workoutLogSaved && !suggestedWorkoutLogDismissed
+    }
+
+    /// Whether this message has a saved workout log
+    var hasSavedWorkoutLog: Bool {
+        suggestedWorkoutLogData != nil && workoutLogSaved
+    }
+
+    /// Decode the suggested workout log data
+    var suggestedWorkoutLog: SuggestedWorkoutLog? {
+        guard let data = suggestedWorkoutLogData else { return nil }
+        return try? JSONDecoder().decode(SuggestedWorkoutLog.self, from: data)
+    }
+
+    /// Set the suggested workout log data
+    func setSuggestedWorkoutLog(_ workoutLog: SuggestedWorkoutLog?) {
+        if let workoutLog {
+            suggestedWorkoutLogData = try? JSONEncoder().encode(workoutLog)
+        } else {
+            suggestedWorkoutLogData = nil
+        }
+    }
+
     /// Create a loading placeholder message for AI response
     static func loadingMessage() -> ChatMessage {
         let message = ChatMessage(content: "", isFromUser: false)

@@ -131,6 +131,23 @@ extension LiveWorkout {
         static var pushMuscles: [MuscleGroup] { [.chest, .shoulders, .triceps] }
         static var pullMuscles: [MuscleGroup] { [.back, .biceps, .forearms] }
         static var legMuscles: [MuscleGroup] { [.quads, .hamstrings, .glutes, .calves] }
+
+        /// Convert to Exercise.MuscleGroup for exercise list filtering
+        var toExerciseMuscleGroup: Exercise.MuscleGroup {
+            switch self {
+            case .chest: .chest
+            case .back: .back
+            case .shoulders: .shoulders
+            case .biceps: .biceps
+            case .triceps: .triceps
+            case .core: .core
+            case .fullBody: .fullBody
+            // Map leg sub-groups to "legs"
+            case .quads, .hamstrings, .glutes, .calves: .legs
+            // Forearms maps to biceps (arm work)
+            case .forearms: .biceps
+            }
+        }
     }
 
     var muscleGroups: [MuscleGroup] {

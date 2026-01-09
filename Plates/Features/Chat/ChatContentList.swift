@@ -28,6 +28,11 @@ struct ChatContentList: View {
     let onDismissPlan: (ChatMessage) -> Void
     let onAcceptFoodEdit: (SuggestedFoodEdit, ChatMessage) -> Void
     let onDismissFoodEdit: (ChatMessage) -> Void
+    let onAcceptWorkout: (SuggestedWorkoutEntry, ChatMessage) -> Void
+    let onDismissWorkout: (ChatMessage) -> Void
+    let onAcceptWorkoutLog: (SuggestedWorkoutLog, ChatMessage) -> Void
+    let onDismissWorkoutLog: (ChatMessage) -> Void
+    var useExerciseWeightLbs: Bool = false
     let onRetry: (ChatMessage) -> Void
 
     var body: some View {
@@ -40,7 +45,7 @@ struct ChatContentList: View {
                 )
             } else {
                 ForEach(messages) { message in
-                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit {
+                    if !message.content.isEmpty || message.isFromUser || message.errorMessage != nil || message.hasPendingMealSuggestion || message.loggedFoodEntryId != nil || message.hasPendingPlanSuggestion || message.planUpdateApplied || message.hasPendingFoodEdit || message.hasAppliedFoodEdit || message.hasPendingWorkoutSuggestion || message.hasStartedWorkout || message.hasPendingWorkoutLogSuggestion || message.hasSavedWorkoutLog {
                         VStack(spacing: 0) {
                             ChatBubble(
                                 message: message,
@@ -76,6 +81,19 @@ struct ChatContentList: View {
                                 onDismissFoodEdit: {
                                     onDismissFoodEdit(message)
                                 },
+                                onAcceptWorkout: { workout in
+                                    onAcceptWorkout(workout, message)
+                                },
+                                onDismissWorkout: {
+                                    onDismissWorkout(message)
+                                },
+                                onAcceptWorkoutLog: { workoutLog in
+                                    onAcceptWorkoutLog(workoutLog, message)
+                                },
+                                onDismissWorkoutLog: {
+                                    onDismissWorkoutLog(message)
+                                },
+                                useExerciseWeightLbs: useExerciseWeightLbs,
                                 onRetry: {
                                     onRetry(message)
                                 }

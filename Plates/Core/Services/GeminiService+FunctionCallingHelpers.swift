@@ -28,7 +28,7 @@ extension GeminiService {
 
         You have access to tools for:
         - Logging food the user has eaten (suggest_food_log)
-        - Checking today's food log and nutrition progress (get_todays_food_log)
+        - Checking food log and nutrition progress (get_food_log)
         - Viewing and updating the user's nutrition plan (get_user_plan, update_user_plan)
         - Checking workout history (get_recent_workouts)
         - Logging workouts (log_workout)
@@ -48,6 +48,10 @@ extension GeminiService {
 
         if let pending = context.pendingSuggestion {
             prompt += buildPendingSuggestionSection(pending: pending)
+        }
+
+        if let workout = context.activeWorkout {
+            prompt += buildActiveWorkoutSection(workout: workout)
         }
 
         prompt += buildGuidelinesSection()
@@ -113,21 +117,44 @@ extension GeminiService {
         """
     }
 
+    private func buildActiveWorkoutSection(workout: WorkoutContext) -> String {
+        """
+
+        🏋️ ACTIVE WORKOUT IN PROGRESS:
+        \(workout.description)
+
+        The user is currently working out and opened chat mid-workout. Be especially helpful about:
+        - Form tips for their current exercise
+        - Rest time suggestions
+        - Exercise alternatives if something hurts
+        - Motivation and encouragement
+        - Quick questions about their workout
+
+        Keep responses SHORT - they're in the middle of a workout and checking their phone between sets.
+
+        """
+    }
+
     private func buildGuidelinesSection() -> String {
         """
 
         IMPORTANT GUIDELINES:
         1. Follow the user's current intent. If they switch topics, follow along naturally.
-        2. ONLY use suggest_food_log when the user EXPLICITLY says they ate/had/consumed something (e.g., "I just had an apple", "I ate a sandwich", "Had coffee this morning").
+        2. ONLY use suggest_food_log when the user EXPLICITLY says they ate/had/consumed something NEW (e.g., "I just had an apple", "I ate a sandwich", "Had coffee this morning").
            - Do NOT suggest logging for questions about food ("is this healthy?", "what about bananas?")
            - Do NOT suggest logging when discussing food hypothetically
            - Do NOT suggest logging in follow-up responses unless the user mentions eating something new
-        3. When asked about progress or what they've eaten, use get_todays_food_log.
-        4. Be conversational and concise. Answer questions directly.
-        5. For food photos, analyze and use suggest_food_log with nutritional estimates.
-        6. Don't say "I've logged this" - you can only suggest, the user confirms.
-        7. Include relevant emojis for food items (☕, 🥗, 🍳, etc.)
-        8. When using update_user_plan to suggest plan changes, ALWAYS include a conversational message explaining WHY you're suggesting the changes. Never just return the plan update without context - the user needs to understand your reasoning before seeing the suggestion card.
+           - Do NOT use suggest_food_log to correct/edit an already-logged meal - use edit_food_entry instead
+        3. EDITING LOGGED MEALS: When the user wants to change/correct an already-logged meal:
+           - First use get_food_log to find the entry and its ID
+           - Then use edit_food_entry with the entry_id to modify it
+           - NEVER create a new entry with suggest_food_log when editing existing meals
+        4. When asked about progress or what they've eaten, use get_food_log.
+        5. Be conversational and concise. Answer questions directly.
+        6. For food photos, analyze and use suggest_food_log with nutritional estimates.
+        7. Don't say "I've logged this" - you can only suggest, the user confirms.
+        8. Include relevant emojis for food items (☕, 🥗, 🍳, etc.)
+        9. When using update_user_plan to suggest plan changes, ALWAYS include a conversational message explaining WHY you're suggesting the changes. Never just return the plan update without context - the user needs to understand your reasoning before seeing the suggestion card.
 
         MEMORY USAGE:
         - Use save_memory to remember important facts about the user that will help you be a better coach.
@@ -373,6 +400,24 @@ extension GeminiService {
                     case .dataResponse(let nextFuncResult):
                         additionalFunctionResults.append(nextFuncResult)
 
+                    case .suggestedWorkout(let suggestion):
+                        log("💪 Got workout suggestion - stopping chain", type: .info)
+                        // Workout suggestions handled in WorkoutsView
+                        _ = suggestion
+
+                    case .suggestedWorkoutStart(let workout):
+                        result.suggestedWorkout = workout
+                        log("🏋️ Got workout start suggestion - stopping chain", type: .info)
+
+                    case .suggestedWorkoutLog(let workoutLog):
+                        result.suggestedWorkoutLog = workoutLog
+                        log("📝 Got workout log suggestion - stopping chain", type: .info)
+
+                    case .startedLiveWorkout(let workout):
+                        log("🏋️ Started workout (legacy) - stopping chain", type: .info)
+                        // User should navigate to workout view
+                        _ = workout
+
                     case .noAction:
                         break
                     }
@@ -380,7 +425,7 @@ extension GeminiService {
             }
         }
 
-        let hasSuggestion = result.suggestedFood != nil || result.planUpdate != nil || result.suggestedFoodEdit != nil
+        let hasSuggestion = result.suggestedFood != nil || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil
         if !additionalFunctionResults.isEmpty && !hasSuggestion {
             let chainedResult = try await sendParallelFunctionResults(
                 functionResults: additionalFunctionResults,

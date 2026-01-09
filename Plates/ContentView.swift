@@ -35,6 +35,16 @@ enum AppTab: String, CaseIterable {
 
 struct MainTabView: View {
     @State private var selectedTab: AppTab = .dashboard
+    @Query(filter: #Predicate<LiveWorkout> { $0.completedAt == nil })
+    private var activeWorkouts: [LiveWorkout]
+
+    // Capture the workout when opening sheet to avoid nil issues when workout completes
+    @State private var presentedWorkout: LiveWorkout?
+    @State private var showingEndConfirmation = false
+
+    private var activeWorkout: LiveWorkout? {
+        activeWorkouts.first
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -49,6 +59,34 @@ struct MainTabView: View {
             Tab("Workouts", systemImage: "figure.run", value: .workouts) {
                 WorkoutsView()
             }
+        }
+        .tabViewBottomAccessory(isEnabled: activeWorkout != nil) {
+            if let workout = activeWorkout {
+                WorkoutBanner(
+                    workout: workout,
+                    onTap: { presentedWorkout = workout },
+                    onEnd: { showingEndConfirmation = true }
+                )
+            }
+        }
+        .sheet(item: $presentedWorkout) { workout in
+            NavigationStack {
+                LiveWorkoutView(workout: workout)
+            }
+        }
+        .confirmationDialog(
+            "End Workout?",
+            isPresented: $showingEndConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("End Workout", role: .destructive) {
+                if let workout = activeWorkout {
+                    workout.completedAt = Date()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to end this workout?")
         }
     }
 }

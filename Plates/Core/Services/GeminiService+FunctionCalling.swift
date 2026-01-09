@@ -125,6 +125,8 @@ extension GeminiService {
         var suggestedFood: SuggestedFoodEntry?
         var planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
         var suggestedFoodEdit: SuggestedFoodEdit?
+        var suggestedWorkout: SuggestedWorkoutEntry?
+        var suggestedWorkoutLog: SuggestedWorkoutLog?
         var savedMemories: [String] = []
         var accumulatedParts: [[String: Any]] = []
 
@@ -198,6 +200,24 @@ extension GeminiService {
                 case .dataResponse(let functionResult):
                     pendingFunctionResults.append(functionResult)
                     log("📊 Data: \(functionResult.name)", type: .debug)
+
+                case .suggestedWorkout(let suggestion):
+                    // Workout suggestions are shown in WorkoutsView, not chat (for now)
+                    log("💪 Workout suggested: \(suggestion.name)", type: .info)
+
+                case .suggestedWorkoutStart(let workout):
+                    // Workout start suggestion - needs user approval
+                    suggestedWorkout = workout
+                    log("🏋️ Workout suggestion: \(workout.name) (\(workout.exercises.count) exercises)", type: .info)
+
+                case .suggestedWorkoutLog(let workoutLog):
+                    // Workout log suggestion - needs user approval
+                    suggestedWorkoutLog = workoutLog
+                    log("📝 Workout log suggestion: \(workoutLog.displayName) (\(workoutLog.exercises.count) exercises)", type: .info)
+
+                case .startedLiveWorkout(let workout):
+                    // Legacy: Workout started directly (shouldn't happen with new flow)
+                    log("🏋️ Started workout: \(workout.name)", type: .info)
 
                 case .noAction:
                     break
@@ -282,6 +302,47 @@ extension GeminiService {
             onTextChunk?(textResponse)
         }
 
+        if let workout = suggestedWorkout, textResponse.isEmpty {
+            let exerciseNames = workout.exercises.prefix(3).map { $0.name }.joined(separator: ", ")
+            let followUp = try await sendFunctionResultForSuggestion(
+                name: "start_live_workout",
+                response: [
+                    "status": "suggestion_ready",
+                    "workout_name": workout.name,
+                    "workout_type": workout.workoutType,
+                    "exercise_count": workout.exercises.count,
+                    "exercises_preview": exerciseNames,
+                    "duration_minutes": workout.durationMinutes,
+                    "instruction": "The user will see a card with this workout suggestion. Please write a brief, encouraging message about the workout you're suggesting. Mention why this workout is good for them based on their goals/recovery. Be conversational and motivating."
+                ],
+                previousContents: contents,
+                originalParts: accumulatedParts,
+                executor: executor
+            )
+            textResponse = followUp.text
+            onTextChunk?(textResponse)
+        }
+
+        if let workoutLog = suggestedWorkoutLog, textResponse.isEmpty {
+            let exercisesSummary = workoutLog.exercises.isEmpty ? "general workout" : workoutLog.exercises.map { $0.name }.joined(separator: ", ")
+            let followUp = try await sendFunctionResultForSuggestion(
+                name: "log_workout",
+                response: [
+                    "status": "suggestion_ready",
+                    "workout_type": workoutLog.workoutType,
+                    "exercise_count": workoutLog.exercises.count,
+                    "exercises": exercisesSummary,
+                    "duration_minutes": workoutLog.durationMinutes as Any,
+                    "instruction": "The user will see a card to confirm logging this workout. Please write a brief, encouraging message acknowledging their workout. Congratulate them on completing it and be motivating. Be conversational."
+                ],
+                previousContents: contents,
+                originalParts: accumulatedParts,
+                executor: executor
+            )
+            textResponse = followUp.text
+            onTextChunk?(textResponse)
+        }
+
         log("✅ Complete: \(textResponse.count) chars, functions: \(functionsCalled.joined(separator: ", "))", type: .info)
 
         return ChatFunctionResult(
@@ -289,6 +350,8 @@ extension GeminiService {
             suggestedFood: suggestedFood,
             planUpdate: planUpdate,
             suggestedFoodEdit: suggestedFoodEdit,
+            suggestedWorkout: suggestedWorkout,
+            suggestedWorkoutLog: suggestedWorkoutLog,
             functionsCalled: functionsCalled,
             savedMemories: savedMemories
         )

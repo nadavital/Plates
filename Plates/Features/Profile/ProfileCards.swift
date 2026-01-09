@@ -109,3 +109,79 @@ struct MacroPill: View {
         .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
     }
 }
+
+// MARK: - Preference Row
+
+struct PreferenceRow<Content: View>: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let value: String?
+    let showChevron: Bool
+    let content: Content?
+
+    init(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        value: String?,
+        showChevron: Bool,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.icon = icon
+        self.iconColor = iconColor
+        self.title = title
+        self.value = value
+        self.showChevron = showChevron
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundStyle(iconColor)
+                .frame(width: 32, height: 32)
+                .background(iconColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+
+            Text(title)
+                .font(.subheadline)
+
+            Spacer()
+
+            if let value {
+                Text(value)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let content {
+                content
+            }
+
+            if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding()
+    }
+}
+
+extension PreferenceRow where Content == EmptyView {
+    init(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        value: String?,
+        showChevron: Bool
+    ) {
+        self.icon = icon
+        self.iconColor = iconColor
+        self.title = title
+        self.value = value
+        self.showChevron = showChevron
+        self.content = nil
+    }
+}

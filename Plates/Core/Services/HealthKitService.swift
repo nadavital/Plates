@@ -85,7 +85,8 @@ final class HealthKitService {
     // MARK: - Workouts
 
     func fetchWorkouts(from startDate: Date, to endDate: Date) async throws -> [WorkoutSession] {
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        // Don't use strictStartDate - we want any workout that overlaps with the time range
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -122,6 +123,14 @@ final class HealthKitService {
             }
             healthStore.execute(query)
         }
+    }
+
+    /// Fetch workouts for merging - uses a wider time window to catch overlapping workouts
+    func fetchWorkoutsForMerge(around date: Date, windowMinutes: Int = 30) async throws -> [WorkoutSession] {
+        // Expand the search window to catch workouts that started before or ended after
+        let startDate = date.addingTimeInterval(-Double(windowMinutes) * 60)
+        let endDate = date.addingTimeInterval(Double(windowMinutes) * 60)
+        return try await fetchWorkouts(from: startDate, to: endDate)
     }
 
     // MARK: - Nutrition

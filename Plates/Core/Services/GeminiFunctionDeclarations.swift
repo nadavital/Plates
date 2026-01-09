@@ -22,6 +22,9 @@ enum GeminiFunctionDeclarations {
             updateUserPlan,
             getRecentWorkouts,
             logWorkout,
+            getMuscleRecoveryStatus,
+            suggestWorkout,
+            startLiveWorkout,
             getWeightHistory,
             saveMemory,
             deleteMemory
@@ -238,10 +241,14 @@ enum GeminiFunctionDeclarations {
     static var logWorkout: [String: Any] {
         [
             "name": "log_workout",
-            "description": "Log a workout session for the user. Use when the user mentions completing a workout or exercise.",
+            "description": "Log a completed workout session for the user. Use when the user mentions finishing a workout or exercise. Ask for details about exercises, sets, reps, and weights if not provided. Always provide a descriptive workout name.",
             "parameters": [
                 "type": "object",
                 "properties": [
+                    "name": [
+                        "type": "string",
+                        "description": "A descriptive name for the workout (e.g., 'Morning Push Day', 'Leg Day', 'Upper Body Strength', 'Back & Biceps'). Generate a meaningful name based on the exercises."
+                    ],
                     "type": [
                         "type": "string",
                         "description": "Type of workout",
@@ -260,16 +267,116 @@ enum GeminiFunctionDeclarations {
                         "items": [
                             "type": "object",
                             "properties": [
-                                "name": ["type": "string"],
-                                "sets": ["type": "integer"],
-                                "reps": ["type": "integer"],
-                                "weight_kg": ["type": "number"]
-                            ]
+                                "name": [
+                                    "type": "string",
+                                    "description": "Name of the exercise"
+                                ],
+                                "sets": [
+                                    "type": "array",
+                                    "items": [
+                                        "type": "object",
+                                        "properties": [
+                                            "reps": ["type": "integer", "description": "Number of reps in this set"],
+                                            "weight_kg": ["type": "number", "description": "Weight used in kg (optional)"]
+                                        ],
+                                        "required": ["reps"]
+                                    ],
+                                    "description": "Array of sets with reps and optional weight for each"
+                                ]
+                            ],
+                            "required": ["name", "sets"]
                         ],
-                        "description": "List of exercises performed (for strength training)"
+                        "description": "List of exercises with detailed set information"
                     ]
                 ],
-                "required": ["type"]
+                "required": ["name", "type"]
+            ]
+        ]
+    }
+
+    /// Get muscle recovery status
+    static var getMuscleRecoveryStatus: [String: Any] {
+        [
+            "name": "get_muscle_recovery_status",
+            "description": "Get the user's muscle group recovery status showing which muscles are ready to train, recovering, or tired. Use when the user asks what to work out, which muscles are ready, or wants workout suggestions based on recovery.",
+            "parameters": [
+                "type": "object",
+                "properties": [:],
+                "required": []
+            ]
+        ]
+    }
+
+    /// Suggest a workout based on recovery and preferences
+    static var suggestWorkout: [String: Any] {
+        [
+            "name": "suggest_workout",
+            "description": "Generate a workout suggestion based on the user's muscle recovery status and preferences. Use when the user asks for a workout recommendation, what they should train today, or wants help planning their workout.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "workout_type": [
+                        "type": "string",
+                        "description": "Preferred workout type (optional - will auto-select if not specified)",
+                        "enum": ["strength", "cardio", "mixed"]
+                    ],
+                    "target_muscle_groups": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Specific muscle groups to target (optional - e.g., ['chest', 'triceps'])"
+                    ],
+                    "duration_minutes": [
+                        "type": "integer",
+                        "description": "Target workout duration in minutes (default: 45)"
+                    ],
+                    "equipment": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Available equipment (e.g., ['dumbbells', 'barbell', 'cables'])"
+                    ]
+                ],
+                "required": []
+            ]
+        ]
+    }
+
+    /// Start a live workout session
+    static var startLiveWorkout: [String: Any] {
+        [
+            "name": "start_live_workout",
+            "description": "Start a live workout tracking session for the user. Use when the user says they want to start a workout, begin training, or are ready to work out. This creates a new workout that they can track exercises in.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "name": [
+                        "type": "string",
+                        "description": "Name for the workout (e.g., 'Push Day', 'Leg Day', 'Morning Cardio')"
+                    ],
+                    "workout_type": [
+                        "type": "string",
+                        "description": "Type of workout",
+                        "enum": ["strength", "cardio", "mixed"]
+                    ],
+                    "target_muscle_groups": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "description": "Target muscle groups (e.g., ['chest', 'triceps', 'shoulders'])"
+                    ],
+                    "suggested_exercises": [
+                        "type": "array",
+                        "items": [
+                            "type": "object",
+                            "properties": [
+                                "name": ["type": "string", "description": "Exercise name"],
+                                "sets": ["type": "integer", "description": "Recommended sets"],
+                                "reps": ["type": "integer", "description": "Recommended reps"],
+                                "weight_kg": ["type": "number", "description": "Recommended weight in kg (optional)"]
+                            ]
+                        ],
+                        "description": "Pre-populated exercises for the workout (optional)"
+                    ]
+                ],
+                "required": ["name", "workout_type"]
             ]
         ]
     }

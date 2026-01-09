@@ -20,6 +20,9 @@ final class LiveWorkoutEntry {
     /// Exercise name (stored for display, in case exercise is deleted)
     var exerciseName: String = ""
 
+    /// Type of exercise: "strength", "cardio", or "flexibility"
+    var exerciseType: String = "strength"
+
     /// JSON-encoded sets data for strength exercises
     /// Format: [{"reps": 10, "weightKg": 50.0, "completed": true, "isWarmup": false}]
     var setsData: String = "[]"
@@ -44,16 +47,28 @@ final class LiveWorkoutEntry {
 
     init() {}
 
+    /// Whether this is a cardio exercise
+    var isCardio: Bool {
+        exerciseType == "cardio"
+    }
+
+    /// Whether this is a strength exercise
+    var isStrength: Bool {
+        exerciseType == "strength"
+    }
+
     init(exercise: Exercise, orderIndex: Int) {
         self.exerciseId = exercise.id
         self.exerciseName = exercise.name
+        self.exerciseType = exercise.category
         self.orderIndex = orderIndex
     }
 
-    init(exerciseName: String, orderIndex: Int, exerciseId: UUID? = nil) {
+    init(exerciseName: String, orderIndex: Int, exerciseId: UUID? = nil, exerciseType: String = "strength") {
         self.exerciseName = exerciseName
         self.orderIndex = orderIndex
         self.exerciseId = exerciseId
+        self.exerciseType = exerciseType
     }
 }
 
@@ -66,12 +81,25 @@ extension LiveWorkoutEntry {
         var weightKg: Double
         var completed: Bool
         var isWarmup: Bool
+        var notes: String
 
-        init(reps: Int = 0, weightKg: Double = 0, completed: Bool = false, isWarmup: Bool = false) {
+        init(reps: Int = 0, weightKg: Double = 0, completed: Bool = false, isWarmup: Bool = false, notes: String = "") {
             self.reps = reps
             self.weightKg = weightKg
             self.completed = completed
             self.isWarmup = isWarmup
+            self.notes = notes
+        }
+
+        // Custom decoder to handle missing notes field in existing data
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+            reps = try container.decode(Int.self, forKey: .reps)
+            weightKg = try container.decode(Double.self, forKey: .weightKg)
+            completed = try container.decode(Bool.self, forKey: .completed)
+            isWarmup = try container.decode(Bool.self, forKey: .isWarmup)
+            notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
         }
 
         /// Volume for this set (weight × reps)

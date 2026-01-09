@@ -51,9 +51,19 @@ struct OnboardingView: View {
     @State private var adjustedCarbs = ""
     @State private var adjustedFat = ""
 
+    // Step 7: Workout Plan (optional)
+    @State private var wantsWorkoutPlan: Bool?
+    @State private var generatedWorkoutPlan: WorkoutPlan?
+    @State private var isGeneratingWorkoutPlan = false
+    @State private var workoutDaysPerWeek: Int = 3
+    @State private var workoutExperienceLevel: WorkoutPlanGenerationRequest.ExperienceLevel = .beginner
+    @State private var workoutEquipmentAccess: WorkoutPlanGenerationRequest.EquipmentAccess = .fullGym
+    @State private var workoutTimePerSession: Int = 45
+    @State private var workoutNotes: String = ""
+
     @State private var geminiService = GeminiService()
 
-    private let totalSteps = 7
+    private let totalSteps = 8
 
     var body: some View {
         ZStack {
@@ -173,6 +183,19 @@ struct OnboardingView: View {
                     adjustedFat: $adjustedFat,
                     onRetry: generatePlan
                 )
+            case 7:
+                WorkoutPlanOnboardingStepView(
+                    wantsWorkoutPlan: $wantsWorkoutPlan,
+                    workoutPlan: $generatedWorkoutPlan,
+                    daysPerWeek: $workoutDaysPerWeek,
+                    experienceLevel: $workoutExperienceLevel,
+                    equipmentAccess: $workoutEquipmentAccess,
+                    timePerSession: $workoutTimePerSession,
+                    workoutNotes: $workoutNotes,
+                    userProfile: buildPlanRequest(),
+                    isGenerating: isGeneratingWorkoutPlan,
+                    onGenerate: generateWorkoutPlan
+                )
             default:
                 EmptyView()
             }
@@ -242,7 +265,15 @@ struct OnboardingView: View {
         switch currentStep {
         case 0: return "Let's Go"
         case 5: return "Generate My Plan"
-        case totalSteps - 1: return isGeneratingPlan ? "Creating Plan..." : "Start Your Journey"
+        case 6: return "Continue"
+        case 7:
+            if wantsWorkoutPlan == false {
+                return "Start Your Journey"
+            } else if wantsWorkoutPlan == true && generatedWorkoutPlan != nil {
+                return "Start Your Journey"
+            } else {
+                return "Continue"
+            }
         default: return "Continue"
         }
     }
@@ -264,16 +295,31 @@ struct OnboardingView: View {
         case 5:
             return true // Summary step
         case 6:
-            return canComplete
+            return canCompleteNutritionPlan
+        case 7:
+            return canCompleteWorkoutStep
         default:
             return true
         }
     }
 
-    private var canComplete: Bool {
+    private var canCompleteNutritionPlan: Bool {
         guard generatedPlan != nil && !isGeneratingPlan else { return false }
         guard let calories = Int(adjustedCalories), calories > 0 else { return false }
         return true
+    }
+
+    private var canCompleteWorkoutStep: Bool {
+        // User hasn't decided yet
+        if wantsWorkoutPlan == nil {
+            return false
+        }
+        // User skipped workout plan
+        if wantsWorkoutPlan == false {
+            return true
+        }
+        // User wants workout plan - must have generated one
+        return generatedWorkoutPlan != nil && !isGeneratingWorkoutPlan
     }
 
     // MARK: - Navigation
@@ -340,6 +386,83 @@ struct OnboardingView: View {
         adjustedProtein = String(plan.dailyTargets.protein)
         adjustedCarbs = String(plan.dailyTargets.carbs)
         adjustedFat = String(plan.dailyTargets.fat)
+    }
+
+    // MARK: - Workout Plan Generation
+
+    private func generateWorkoutPlan() {
+        guard let age = calculateAge() else { return }
+
+        // Parse focus areas from notes (simple extraction)
+        let trimmedNotes = workoutNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let focusAreas = parseFocusAreas(from: trimmedNotes)
+        let injuryNotes = trimmedNotes.isEmpty ? nil : trimmedNotes
+
+        let request = WorkoutPlanGenerationRequest(
+            name: userName.trimmingCharacters(in: .whitespaces),
+            age: age,
+            gender: gender ?? .notSpecified,
+            goal: selectedGoal ?? .health,
+            activityLevel: activityLevel ?? .moderate,
+            workoutType: .strength,
+            selectedWorkoutTypes: nil,
+            experienceLevel: workoutExperienceLevel,
+            equipmentAccess: workoutEquipmentAccess,
+            availableDays: workoutDaysPerWeek,
+            timePerWorkout: workoutTimePerSession,
+            preferredSplit: nil,
+            cardioTypes: nil,
+            customWorkoutType: nil,
+            customExperience: nil,
+            customEquipment: nil,
+            customCardioType: nil,
+            specificGoals: focusAreas.isEmpty ? nil : focusAreas,
+            weakPoints: nil,
+            injuries: injuryNotes,
+            preferences: nil
+        )
+
+        isGeneratingWorkoutPlan = true
+
+        Task {
+            do {
+                let plan = try await geminiService.generateWorkoutPlan(request: request)
+                generatedWorkoutPlan = plan
+            } catch {
+                // Fall back to default plan
+                let fallbackPlan = WorkoutPlan.createDefault(from: request)
+                generatedWorkoutPlan = fallbackPlan
+            }
+            isGeneratingWorkoutPlan = false
+        }
+    }
+
+    private func parseFocusAreas(from notes: String) -> [String] {
+        let lowercased = notes.lowercased()
+        var areas: [String] = []
+
+        // Simple keyword matching for common focus areas
+        let focusKeywords = [
+            ("chest", ["chest", "pecs"]),
+            ("back", ["back", "lats"]),
+            ("shoulders", ["shoulders", "delts"]),
+            ("arms", ["arms", "biceps", "triceps"]),
+            ("legs", ["legs", "quads", "hamstrings", "glutes"]),
+            ("core", ["core", "abs", "abdominals"]),
+            ("upper body", ["upper body", "upper-body"]),
+            ("lower body", ["lower body", "lower-body"])
+        ]
+
+        for (area, keywords) in focusKeywords {
+            for keyword in keywords {
+                if lowercased.contains(keyword) {
+                    areas.append(area)
+                    break
+                }
+            }
+        }
+
+        return areas
     }
 
     // MARK: - Parsing Helpers
@@ -421,6 +544,15 @@ struct OnboardingView: View {
             profile.aiPlanRationale = plan.rationale
             profile.aiPlanGeneratedAt = Date()
             profile.dailyFiberGoal = plan.dailyTargets.fiber
+        }
+
+        // Workout plan (if user opted in)
+        if wantsWorkoutPlan == true, let workoutPlan = generatedWorkoutPlan {
+            profile.workoutPlan = workoutPlan
+            profile.preferredWorkoutDays = workoutDaysPerWeek
+            profile.workoutExperience = workoutExperienceLevel
+            profile.workoutEquipment = workoutEquipmentAccess
+            profile.workoutTimePerSession = workoutTimePerSession
         }
 
         profile.hasCompletedOnboarding = true

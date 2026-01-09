@@ -75,7 +75,7 @@ extension ChatView {
             return "Analyzing food..."
         case "edit_food_entry":
             return "Preparing edit..."
-        case "get_todays_food_log":
+        case "get_food_log", "get_todays_food_log":
             return "Getting food log..."
         case "get_user_plan":
             return "Checking your plan..."
@@ -85,6 +85,12 @@ extension ChatView {
             return "Getting workouts..."
         case "log_workout":
             return "Logging workout..."
+        case "get_muscle_recovery_status":
+            return "Checking muscle recovery..."
+        case "suggest_workout":
+            return "Planning workout..."
+        case "start_live_workout":
+            return "Starting workout..."
         case "get_weight_history":
             return "Getting weight history..."
         case "save_memory":
@@ -167,7 +173,8 @@ extension ChatView {
                 conversationHistory: historyString,
                 memoriesContext: memoriesContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
-                isIncognitoMode: isTemporarySession
+                isIncognitoMode: isTemporarySession,
+                activeWorkout: workoutContext
             )
 
             let result = try await geminiService.chatWithFunctions(
@@ -220,6 +227,20 @@ extension ChatView {
         if let editData = result.suggestedFoodEdit {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 aiMessage.setSuggestedFoodEdit(editData)
+            }
+            HapticManager.lightTap()
+        }
+
+        if let workoutData = result.suggestedWorkout {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                aiMessage.setSuggestedWorkout(workoutData)
+            }
+            HapticManager.lightTap()
+        }
+
+        if let workoutLogData = result.suggestedWorkoutLog {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                aiMessage.setSuggestedWorkoutLog(workoutLogData)
             }
             HapticManager.lightTap()
         }

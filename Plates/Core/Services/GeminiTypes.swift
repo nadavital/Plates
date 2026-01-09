@@ -196,6 +196,134 @@ struct PlanUpdateSuggestionEntry: Codable, Sendable {
     }
 }
 
+// MARK: - Suggested Workout Entry
+
+/// Workout suggested by AI for user confirmation before starting
+struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
+    var id: UUID = UUID()
+    let name: String
+    let workoutType: String
+    let targetMuscleGroups: [String]
+    let exercises: [SuggestedExercise]
+    let durationMinutes: Int
+    let rationale: String
+
+    struct SuggestedExercise: Codable, Sendable, Identifiable {
+        var id: UUID = UUID()
+        let name: String
+        let sets: Int
+        let reps: Int
+        let weightKg: Double?
+    }
+
+    /// Summary for display
+    var exercisesSummary: String {
+        let count = exercises.count
+        return "\(count) exercise\(count == 1 ? "" : "s")"
+    }
+
+    /// Muscle groups summary
+    var muscleGroupsSummary: String {
+        targetMuscleGroups.map { $0.capitalized }.joined(separator: ", ")
+    }
+}
+
+// MARK: - Suggested Workout Log
+
+/// Completed workout log suggested by AI for user confirmation before saving
+struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
+    var id: UUID = UUID()
+    let name: String?  // Trai-generated workout name
+    let workoutType: String
+    let durationMinutes: Int?
+    let exercises: [LoggedExercise]
+    let notes: String?
+
+    struct LoggedExercise: Codable, Sendable, Identifiable {
+        var id: UUID = UUID()
+        let name: String
+        let sets: [SetData]
+
+        struct SetData: Codable, Sendable, Identifiable {
+            var id: UUID = UUID()
+            let reps: Int
+            let weightKg: Double?
+
+            /// Formatted weight in user's preferred unit
+            func formattedWeight(useLbs: Bool) -> String? {
+                guard let weight = weightKg, weight > 0 else { return nil }
+                if useLbs {
+                    let lbs = weight * 2.20462
+                    return "\(Int(lbs)) lbs"
+                } else {
+                    return "\(Int(weight)) kg"
+                }
+            }
+        }
+
+        /// Total sets count
+        var setCount: Int { sets.count }
+
+        /// Summary string for display (e.g., "3×10" or "12, 10, 8")
+        var setsSummary: String {
+            guard !sets.isEmpty else { return "" }
+            let allSameReps = sets.dropFirst().allSatisfy { $0.reps == sets.first?.reps }
+            if allSameReps, let firstReps = sets.first?.reps {
+                return "\(sets.count)×\(firstReps)"
+            } else {
+                return sets.map { "\($0.reps)" }.joined(separator: ", ")
+            }
+        }
+
+        /// Weight summary (uses max weight)
+        var maxWeightKg: Double? {
+            sets.compactMap { $0.weightKg }.max()
+        }
+
+        /// Formatted weight in user's preferred unit
+        func formattedWeight(useLbs: Bool) -> String? {
+            guard let weight = maxWeightKg, weight > 0 else { return nil }
+            if useLbs {
+                let lbs = weight * 2.20462
+                return "\(Int(lbs)) lbs"
+            } else {
+                return "\(Int(weight)) kg"
+            }
+        }
+    }
+
+    /// Display name for the workout (uses Trai-generated name or falls back to type)
+    var displayName: String {
+        if let name, !name.isEmpty {
+            return name
+        }
+        return workoutType.capitalized
+    }
+
+    /// Total sets across all exercises
+    var totalSets: Int {
+        exercises.reduce(0) { $0 + $1.setCount }
+    }
+
+    /// Summary for display
+    var summary: String {
+        var parts: [String] = []
+        if !exercises.isEmpty {
+            parts.append("\(exercises.count) exercise\(exercises.count == 1 ? "" : "s")")
+            parts.append("\(totalSets) sets")
+        }
+        if let duration = durationMinutes, duration > 0 {
+            parts.append("\(duration) min")
+        }
+        return parts.isEmpty ? workoutType.capitalized : parts.joined(separator: " • ")
+    }
+
+    /// Whether this is a strength workout
+    var isStrength: Bool {
+        ["strength", "weights", "lifting"].contains(workoutType.lowercased())
+    }
+}
+
 // MARK: - Errors
 
 enum GeminiError: LocalizedError {

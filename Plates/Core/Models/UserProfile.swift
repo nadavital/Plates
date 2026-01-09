@@ -15,8 +15,9 @@ final class UserProfile {
     var activityNotes: String = ""
 
     // Unit preferences
-    var usesMetricWeight: Bool = true
+    var usesMetricWeight: Bool = true      // For body weight (scale)
     var usesMetricHeight: Bool = true
+    var usesMetricExerciseWeight: Bool = true  // For exercise/lifting weights
 
     /// Goal type: "weightLoss", "muscleGain", "maintenance", etc.
     var goalType: String = "maintenance"
@@ -47,6 +48,26 @@ final class UserProfile {
 
     // Weight tracking for plan recalculation
     var lastWeightForPlanKg: Double?
+
+    // MARK: - Workout Plan Storage
+
+    /// Full workout plan stored as JSON
+    var savedWorkoutPlanJSON: String?
+
+    /// When the workout plan was generated
+    var workoutPlanGeneratedAt: Date?
+
+    /// Preferred workout days per week
+    var preferredWorkoutDays: Int = 3
+
+    /// Experience level: "beginner", "intermediate", "advanced"
+    var workoutExperienceLevel: String = "beginner"
+
+    /// Equipment access: "fullGym", "homeAdvanced", "homeBasic", "bodyweightOnly"
+    var workoutEquipmentAccess: String = "fullGym"
+
+    /// Preferred workout duration in minutes
+    var workoutTimePerSession: Int = 45
 
     // Weekly check-in preferences
     /// Preferred check-in day (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
@@ -308,5 +329,76 @@ extension UserProfile {
     /// Get enabled macros in display order
     var enabledMacrosOrdered: [MacroType] {
         MacroType.displayOrder.filter { enabledMacros.contains($0) }
+    }
+}
+
+// MARK: - Workout Plan Helpers
+
+extension UserProfile {
+    /// The user's current workout plan
+    var workoutPlan: WorkoutPlan? {
+        get {
+            guard let json = savedWorkoutPlanJSON else { return nil }
+            return WorkoutPlan.fromJSON(json)
+        }
+        set {
+            savedWorkoutPlanJSON = newValue?.toJSON()
+            if newValue != nil {
+                workoutPlanGeneratedAt = Date()
+            }
+        }
+    }
+
+    /// Whether the user has a workout plan
+    var hasWorkoutPlan: Bool {
+        savedWorkoutPlanJSON != nil
+    }
+
+    /// Experience level as enum
+    var workoutExperience: WorkoutPlanGenerationRequest.ExperienceLevel {
+        get { WorkoutPlanGenerationRequest.ExperienceLevel(rawValue: workoutExperienceLevel) ?? .beginner }
+        set { workoutExperienceLevel = newValue.rawValue }
+    }
+
+    /// Equipment access as enum
+    var workoutEquipment: WorkoutPlanGenerationRequest.EquipmentAccess {
+        get { WorkoutPlanGenerationRequest.EquipmentAccess(rawValue: workoutEquipmentAccess) ?? .fullGym }
+        set { workoutEquipmentAccess = newValue.rawValue }
+    }
+
+    /// Build a workout plan generation request from profile data
+    func buildWorkoutPlanRequest(
+        workoutType: WorkoutPlanGenerationRequest.WorkoutType = .mixed,
+        selectedWorkoutTypes: [WorkoutPlanGenerationRequest.WorkoutType]? = nil,
+        preferredSplit: WorkoutPlanGenerationRequest.PreferredSplit? = nil,
+        cardioTypes: [WorkoutPlanGenerationRequest.CardioType]? = nil,
+        specificGoals: [String]? = nil,
+        weakPoints: [String]? = nil,
+        injuries: String? = nil,
+        preferences: String? = nil
+    ) -> WorkoutPlanGenerationRequest {
+        WorkoutPlanGenerationRequest(
+            name: name,
+            age: age ?? 30,
+            gender: genderValue,
+            goal: goal,
+            activityLevel: activityLevelValue,
+            workoutType: workoutType,
+            selectedWorkoutTypes: selectedWorkoutTypes,
+            experienceLevel: workoutExperience,
+            equipmentAccess: workoutEquipment,
+            availableDays: preferredWorkoutDays,
+            timePerWorkout: workoutTimePerSession,
+            preferredSplit: preferredSplit,
+            cardioTypes: cardioTypes,
+            customWorkoutType: nil,
+            customExperience: nil,
+            customEquipment: nil,
+            customCardioType: nil,
+            specificGoals: specificGoals,
+            weakPoints: weakPoints,
+            injuries: injuries,
+            preferences: preferences
+        )
     }
 }

@@ -223,9 +223,20 @@ struct ProfileView: View {
     private func planCard(_ profile: UserProfile) -> some View {
         VStack(spacing: 16) {
             HStack {
-                Label("Nutrition Plan", systemImage: "chart.pie.fill")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Nutrition Plan", systemImage: "chart.pie.fill")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    // Show the user's goal
+                    HStack(spacing: 4) {
+                        Image(systemName: profile.goal.iconName)
+                            .font(.caption2)
+                        Text(profile.goal.displayName)
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.secondary)
+                }
 
                 Spacer()
 
@@ -263,10 +274,20 @@ struct ProfileView: View {
                 }
             }
 
-            HStack(spacing: 12) {
-                MacroPill(label: "Protein", value: profile.dailyProteinGoal, unit: "g", color: .blue)
-                MacroPill(label: "Carbs", value: profile.dailyCarbsGoal, unit: "g", color: .green)
-                MacroPill(label: "Fat", value: profile.dailyFatGoal, unit: "g", color: .yellow)
+            // Show enabled macros with dynamic grid layout
+            let macros = profile.enabledMacrosOrdered
+            if !macros.isEmpty {
+                let columns = macroGridColumns(for: macros.count)
+                LazyVGrid(columns: columns, spacing: 8) {
+                    ForEach(macros) { macro in
+                        MacroPill(
+                            label: macro.displayName,
+                            value: profile.goalFor(macro),
+                            unit: "g",
+                            color: macro.color
+                        )
+                    }
+                }
             }
 
             if let currentWeight = weightEntries.first?.weightKg,
@@ -311,65 +332,39 @@ struct ProfileView: View {
 
     @ViewBuilder
     private func memoriesCard() -> some View {
-        VStack(spacing: 16) {
+        NavigationLink {
+            AllMemoriesView()
+        } label: {
             HStack {
-                Label("What I Know About You", systemImage: "brain.head.profile")
-                    .font(.headline)
+                Image(systemName: "brain.head.profile")
+                    .font(.title2)
+                    .foregroundStyle(.purple)
+                    .frame(width: 40, height: 40)
+                    .background(Color.purple.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Trai Memories")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(memories.isEmpty ? "No memories yet" : "\(memories.count) memories saved")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer()
 
-                if !memories.isEmpty {
-                    Text("\(memories.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.secondary.opacity(0.15), in: .capsule)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-
-            if memories.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "brain")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tertiary)
-
-                    Text("No memories yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    Text("As you chat with Trai, important things about your preferences and goals will be remembered.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(memories.prefix(5)) { memory in
-                        MemoryRow(memory: memory, onDelete: {
-                            deleteMemory(memory)
-                        })
-                    }
-
-                    if memories.count > 5 {
-                        NavigationLink {
-                            AllMemoriesView()
-                        } label: {
-                            Text("See all \(memories.count) memories")
-                                .font(.subheadline)
-                                .foregroundStyle(.accent)
-                        }
-                    }
-                }
-            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+            )
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-        )
+        .buttonStyle(.plain)
     }
 
     private func deleteMemory(_ memory: CoachMemory) {
@@ -381,66 +376,39 @@ struct ProfileView: View {
 
     @ViewBuilder
     private func chatHistoryCard() -> some View {
-        VStack(spacing: 16) {
+        NavigationLink {
+            AllChatSessionsView()
+        } label: {
             HStack {
-                Label("Chat History", systemImage: "bubble.left.and.bubble.right.fill")
-                    .font(.headline)
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                    .frame(width: 40, height: 40)
+                    .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Chat History")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(chatSessions.isEmpty ? "No conversations yet" : "\(chatSessions.count) conversations")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer()
 
-                if !chatSessions.isEmpty {
-                    Text("\(chatSessions.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.secondary.opacity(0.15), in: .capsule)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-
-            if chatSessions.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tertiary)
-
-                    Text("No chat history")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    Text("Your conversations with Trai will appear here.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(chatSessions.prefix(5), id: \.id) { session in
-                        ChatSessionRow(
-                            session: session,
-                            onDelete: { deleteChatSession(session.id) }
-                        )
-                    }
-
-                    if chatSessions.count > 5 {
-                        NavigationLink {
-                            AllChatSessionsView()
-                        } label: {
-                            Text("See all \(chatSessions.count) chats")
-                                .font(.subheadline)
-                                .foregroundStyle(.accent)
-                        }
-                    }
-                }
-            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+            )
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-        )
+        .buttonStyle(.plain)
     }
 
     private func deleteChatSession(_ sessionId: UUID) {
@@ -455,68 +423,82 @@ struct ProfileView: View {
 
     @ViewBuilder
     private func preferencesCard(_ profile: UserProfile) -> some View {
-        VStack(spacing: 0) {
-            // Macro Tracking row
-            Button {
-                showMacroTrackingSheet = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "chart.pie.fill")
-                        .font(.body)
-                        .foregroundStyle(.purple)
-                        .frame(width: 32, height: 32)
-                        .background(Color.purple.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-
-                    Text("Macro Tracking")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    Text(macroTrackingSummary(profile))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .padding()
-            }
-            .buttonStyle(.plain)
-
-            Divider()
-                .padding(.leading, 56)
-
-            // Units row
-            HStack(spacing: 12) {
-                Image(systemName: "ruler.fill")
-                    .font(.body)
-                    .foregroundStyle(.blue)
-                    .frame(width: 32, height: 32)
-                    .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-
-                Text("Units")
-                    .font(.subheadline)
-
+        VStack(spacing: 16) {
+            HStack {
+                Label("Preferences", systemImage: "gearshape.fill")
+                    .font(.headline)
                 Spacer()
-
-                Picker("Units", selection: Binding(
-                    get: { profile.usesMetricWeight },
-                    set: {
-                        profile.usesMetricWeight = $0
-                        profile.usesMetricHeight = $0
-                        HapticManager.lightTap()
-                    }
-                )) {
-                    Text("Metric").tag(true)
-                    Text("Imperial").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 160)
             }
-            .padding()
+
+            VStack(spacing: 0) {
+                // Macro Tracking row
+                Button {
+                    showMacroTrackingSheet = true
+                } label: {
+                    PreferenceRow(
+                        icon: "chart.pie.fill",
+                        iconColor: .purple,
+                        title: "Macro Tracking",
+                        value: macroTrackingSummary(profile),
+                        showChevron: true
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Divider()
+                    .padding(.leading, 56)
+
+                // Body weight units row
+                PreferenceRow(
+                    icon: "scalemass.fill",
+                    iconColor: .blue,
+                    title: "Body Weight",
+                    value: nil,
+                    showChevron: false
+                ) {
+                    Picker("Body Weight", selection: Binding(
+                        get: { profile.usesMetricWeight },
+                        set: {
+                            profile.usesMetricWeight = $0
+                            profile.usesMetricHeight = $0
+                            HapticManager.lightTap()
+                        }
+                    )) {
+                        Text("kg").tag(true)
+                        Text("lbs").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 110)
+                }
+
+                Divider()
+                    .padding(.leading, 56)
+
+                // Exercise weight units row
+                PreferenceRow(
+                    icon: "dumbbell.fill",
+                    iconColor: .orange,
+                    title: "Exercise Weight",
+                    value: nil,
+                    showChevron: false
+                ) {
+                    Picker("Exercise Weight", selection: Binding(
+                        get: { profile.usesMetricExerciseWeight },
+                        set: {
+                            profile.usesMetricExerciseWeight = $0
+                            HapticManager.lightTap()
+                        }
+                    )) {
+                        Text("kg").tag(true)
+                        Text("lbs").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 110)
+                }
+            }
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
         }
+        .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(.ultraThinMaterial)
@@ -532,6 +514,22 @@ struct ProfileView: View {
         } else {
             return "\(count) macros"
         }
+    }
+
+    /// Calculate grid columns for macro pills based on count
+    /// - 1-3: single row with that many columns
+    /// - 4: 2x2 grid
+    /// - 5-6: 3 columns (fills rows as evenly as possible)
+    private func macroGridColumns(for count: Int) -> [GridItem] {
+        let columnCount: Int
+        switch count {
+        case 1: columnCount = 1
+        case 2: columnCount = 2
+        case 3: columnCount = 3
+        case 4: columnCount = 2  // 2x2 grid
+        default: columnCount = 3  // 5+ uses 3 columns
+        }
+        return Array(repeating: GridItem(.flexible()), count: columnCount)
     }
 }
 

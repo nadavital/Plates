@@ -39,8 +39,33 @@ final class GeminiFunctionExecutor {
         case suggestedPlanUpdate(PlanUpdateSuggestion)
         /// Food edit suggestion to show user (needs confirmation before applying)
         case suggestedFoodEdit(SuggestedFoodEdit)
+        /// Workout suggestion to show user (needs confirmation)
+        case suggestedWorkout(WorkoutSuggestion)
+        /// Workout start suggestion (needs user approval before starting)
+        case suggestedWorkoutStart(SuggestedWorkoutEntry)
+        /// Workout log suggestion (needs user approval before saving)
+        case suggestedWorkoutLog(SuggestedWorkoutLog)
+        /// Live workout started - navigate to tracker
+        case startedLiveWorkout(LiveWorkout)
         /// No special action needed
         case noAction
+    }
+
+    struct WorkoutSuggestion {
+        let name: String
+        let workoutType: LiveWorkout.WorkoutType
+        let targetMuscleGroups: [LiveWorkout.MuscleGroup]
+        let exercises: [SuggestedExercise]
+        let durationMinutes: Int
+        let rationale: String
+
+        struct SuggestedExercise: Identifiable {
+            let id = UUID()
+            let name: String
+            let sets: Int
+            let reps: Int
+            let weightKg: Double?
+        }
     }
 
     struct PlanUpdateSuggestion {
@@ -89,6 +114,15 @@ final class GeminiFunctionExecutor {
 
         case "log_workout":
             return executeLogWorkout(call.arguments)
+
+        case "get_muscle_recovery_status":
+            return executeGetMuscleRecoveryStatus()
+
+        case "suggest_workout":
+            return executeSuggestWorkout(call.arguments)
+
+        case "start_live_workout":
+            return executeStartLiveWorkout(call.arguments)
 
         case "get_weight_history":
             return executeGetWeightHistory(call.arguments)
