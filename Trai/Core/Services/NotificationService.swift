@@ -35,6 +35,46 @@ final class NotificationService {
         }
     }
 
+    // MARK: - Notification Actions
+
+    enum NotificationAction: String {
+        case complete = "COMPLETE_ACTION"
+        case snooze = "SNOOZE_ACTION"
+    }
+
+    // MARK: - Initialization
+
+    init() {
+        registerNotificationCategories()
+    }
+
+    /// Register notification categories with actions for long-press menu
+    private func registerNotificationCategories() {
+        let completeAction = UNNotificationAction(
+            identifier: NotificationAction.complete.rawValue,
+            title: "Mark Complete",
+            options: []
+        )
+
+        let snoozeAction = UNNotificationAction(
+            identifier: NotificationAction.snooze.rawValue,
+            title: "Snooze 10 min",
+            options: []
+        )
+
+        // Create categories for each reminder type with actions
+        let categories: [UNNotificationCategory] = NotificationCategory.allCases.map { category in
+            UNNotificationCategory(
+                identifier: category.rawValue,
+                actions: [completeAction, snoozeAction],
+                intentIdentifiers: [],
+                options: []
+            )
+        }
+
+        center.setNotificationCategories(Set(categories))
+    }
+
     // MARK: - Authorization
 
     /// Request notification authorization
@@ -77,6 +117,11 @@ final class NotificationService {
         content.body = meal.message
         content.sound = .default
         content.categoryIdentifier = NotificationCategory.mealReminder.rawValue
+        content.userInfo = [
+            "mealId": meal.id,
+            "reminderHour": meal.hour,
+            "reminderMinute": meal.minute
+        ]
 
         var dateComponents = DateComponents()
         dateComponents.hour = meal.hour
@@ -180,9 +225,16 @@ final class NotificationService {
 
         let content = UNMutableNotificationContent()
         content.title = reminder.title
-        content.body = reminder.body.isEmpty ? "Tap to open Trai" : reminder.body
+        if !reminder.body.isEmpty {
+            content.body = reminder.body
+        }
         content.sound = .default
         content.categoryIdentifier = NotificationCategory.customReminder.rawValue
+        content.userInfo = [
+            "reminderId": reminder.id.uuidString,
+            "reminderHour": reminder.hour,
+            "reminderMinute": reminder.minute
+        ]
 
         if reminder.isDaily {
             // Schedule daily at the specified time
@@ -264,6 +316,31 @@ final class NotificationService {
     /// Cancel all reminders
     func cancelAllReminders() {
         center.removeAllPendingNotificationRequests()
+    }
+
+    // MARK: - Snooze
+
+    /// Schedule a snoozed notification for 10 minutes from now
+    func scheduleSnooze(title: String, body: String, category: NotificationCategory, userInfo: [AnyHashable: Any]) async {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = category.rawValue
+        content.userInfo = userInfo
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 600, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "SNOOZE_\(UUID().uuidString)",
+            content: content,
+            trigger: trigger
+        )
+
+        do {
+            try await center.add(request)
+        } catch {
+            print("Failed to schedule snoozed notification: \(error)")
+        }
     }
 
     // MARK: - Query

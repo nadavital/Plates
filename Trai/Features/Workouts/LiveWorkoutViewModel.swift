@@ -39,6 +39,9 @@ final class LiveWorkoutViewModel {
     // Cache of last performances for exercises
     var lastPerformances: [String: ExerciseHistory] = [:]
 
+    // Cache of personal records (all-time max weight) for exercises
+    var personalRecords: [String: ExerciseHistory] = [:]
+
     // User preferences cache (exercise usage frequency)
     var exerciseUsageFrequency: [String: Int] = [:]
 
@@ -282,7 +285,7 @@ final class LiveWorkoutViewModel {
         }
     }
 
-    // MARK: - Last Performance
+    // MARK: - Last Performance & Personal Records
 
     /// Load last performances for all exercises in the workout
     func loadLastPerformances() {
@@ -294,6 +297,13 @@ final class LiveWorkoutViewModel {
                 modelContext: modelContext
             ) {
                 lastPerformances[entry.exerciseName] = lastPerformance
+            }
+            // Also load PR
+            if let pr = templateService.getPersonalRecord(
+                exerciseName: entry.exerciseName,
+                modelContext: modelContext
+            ) {
+                personalRecords[entry.exerciseName] = pr
             }
         }
     }
@@ -315,6 +325,25 @@ final class LiveWorkoutViewModel {
             lastPerformances[exerciseName] = performance
         }
         return performance
+    }
+
+    /// Get personal record (all-time max weight) for a specific exercise
+    func getPersonalRecord(for exerciseName: String) -> ExerciseHistory? {
+        // Check cache first
+        if let cached = personalRecords[exerciseName] {
+            return cached
+        }
+
+        // Fetch if not cached
+        guard let modelContext else { return nil }
+        let pr = templateService.getPersonalRecord(
+            exerciseName: exerciseName,
+            modelContext: modelContext
+        )
+        if let pr {
+            personalRecords[exerciseName] = pr
+        }
+        return pr
     }
 
     // MARK: - Timer

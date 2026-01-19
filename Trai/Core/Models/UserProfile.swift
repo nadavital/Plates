@@ -110,6 +110,11 @@ final class UserProfile {
     /// Weight reminder hour
     var weightReminderHour: Int = 8
 
+    // MARK: - HealthKit Sync Preferences
+
+    /// Whether to sync food entries to Apple Health
+    var syncFoodToHealthKit: Bool = true
+
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
 

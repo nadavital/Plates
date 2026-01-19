@@ -12,6 +12,7 @@ import SwiftUI
 struct ExerciseCard: View {
     let entry: LiveWorkoutEntry
     let lastPerformance: ExerciseHistory?
+    let personalRecord: ExerciseHistory?
     let usesMetricWeight: Bool
     let onAddSet: () -> Void
     let onRemoveSet: (Int) -> Void
@@ -37,6 +38,18 @@ struct ExerciseCard: View {
         let weight = Int(displayWeight)
 
         return "Last: \(sets)×\(reps) @ \(weight)\(weightUnit)"
+    }
+
+    private var prDisplay: String? {
+        guard let pr = personalRecord,
+              pr.bestSetWeightKg > 0 else { return nil }
+
+        let weightKg = pr.bestSetWeightKg
+        let displayWeight = usesMetricWeight ? weightKg : weightKg * 2.20462
+        let weight = Int(displayWeight)
+        let reps = pr.bestSetReps
+
+        return "PR: \(weight)\(weightUnit) × \(reps)"
     }
 
     var body: some View {
@@ -65,6 +78,19 @@ struct ExerciseCard: View {
                                     Text(lastTime)
                                         .font(.caption)
                                         .foregroundStyle(.blue)
+                                }
+
+                                if let pr = prDisplay {
+                                    Text("•")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "trophy.fill")
+                                            .font(.caption2)
+                                        Text(pr)
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
                                 }
                             }
                         }
@@ -319,6 +345,7 @@ struct SetRow: View {
             return entry
         }(),
         lastPerformance: nil,
+        personalRecord: nil,
         usesMetricWeight: true,
         onAddSet: {},
         onRemoveSet: { _ in },

@@ -23,6 +23,9 @@ struct TodaysRemindersCard: View {
         let isCustom: Bool
     }
 
+    /// Track which reminders are in the completing animation state
+    @State private var completingIds: Set<UUID> = []
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -43,7 +46,20 @@ struct TodaysRemindersCard: View {
 
             VStack(spacing: 8) {
                 ForEach(reminders.prefix(3)) { reminder in
-                    reminderRow(reminder)
+                    ReminderRow(
+                        reminder: reminder,
+                        isCompleting: completingIds.contains(reminder.id),
+                        onComplete: {
+                            completeWithAnimation(reminder)
+                        },
+                        onTap: {
+                            onReminderTap(reminder)
+                        }
+                    )
+                    .transition(.asymmetric(
+                        insertion: .opacity,
+                        removal: .scale(scale: 0.8).combined(with: .opacity)
+                    ))
                 }
 
                 if reminders.count > 3 {
@@ -52,6 +68,7 @@ struct TodaysRemindersCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .animation(.easeInOut(duration: 0.3), value: reminders.map(\.id))
         }
         .padding()
         .background(
@@ -60,20 +77,53 @@ struct TodaysRemindersCard: View {
         )
     }
 
-    private func reminderRow(_ reminder: ReminderItem) -> some View {
+    private func completeWithAnimation(_ reminder: ReminderItem) {
+        // Show completing state with checkmark
+        withAnimation(.easeInOut(duration: 0.2)) {
+            completingIds.insert(reminder.id)
+        }
+
+        // After a brief delay, call the actual completion
+        Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            onComplete(reminder)
+        }
+    }
+}
+
+// MARK: - Reminder Row View
+
+private struct ReminderRow: View {
+    let reminder: TodaysRemindersCard.ReminderItem
+    let isCompleting: Bool
+    let onComplete: () -> Void
+    let onTap: () -> Void
+
+    var body: some View {
         HStack(spacing: 12) {
-            // Complete button
+            // Complete button with animated checkmark
             Button {
-                onComplete(reminder)
+                onComplete()
             } label: {
-                Image(systemName: "circle")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                ZStack {
+                    Image(systemName: "circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .opacity(isCompleting ? 0 : 1)
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.green)
+                        .scaleEffect(isCompleting ? 1 : 0.5)
+                        .opacity(isCompleting ? 1 : 0)
+                }
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isCompleting)
             }
             .buttonStyle(.plain)
+            .disabled(isCompleting)
 
             Button {
-                onReminderTap(reminder)
+                onTap()
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: reminder.isCustom ? "bell.badge" : "bell")
@@ -85,8 +135,9 @@ struct TodaysRemindersCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(reminder.title)
                             .font(.subheadline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(isCompleting ? .secondary : .primary)
                             .lineLimit(1)
+                            .strikethrough(isCompleting)
 
                         Text(reminder.time)
                             .font(.caption)
@@ -95,7 +146,7 @@ struct TodaysRemindersCard: View {
 
                     Spacer()
 
-                    if reminder.isCustom {
+                    if reminder.isCustom && !isCompleting {
                         Image(systemName: "chevron.right")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
@@ -103,8 +154,10 @@ struct TodaysRemindersCard: View {
                 }
             }
             .buttonStyle(.plain)
+            .disabled(isCompleting)
         }
         .padding(.vertical, 4)
+        .opacity(isCompleting ? 0.6 : 1)
     }
 }
 
@@ -155,7 +208,7 @@ extension TodaysRemindersCard {
             for meal in MealReminderTime.allMeals where enabledMeals.contains(meal.id) {
                 if isUpcoming(hour: meal.hour, minute: meal.minute) {
                     items.append(ReminderItem(
-                        id: UUID(uuidString: "MEAL-\(meal.id)") ?? UUID(),
+                        id: stableUUID(for: "MEAL-\(meal.id)"),
                         title: meal.displayName,
                         time: formatTime(hour: meal.hour, minute: meal.minute),
                         hour: meal.hour,
@@ -170,7 +223,7 @@ extension TodaysRemindersCard {
         if workoutRemindersEnabled && workoutDays.contains(currentWeekday) {
             if isUpcoming(hour: workoutHour, minute: workoutMinute) {
                 items.append(ReminderItem(
-                    id: UUID(uuidString: "WORKOUT-REMINDER") ?? UUID(),
+                    id: stableUUID(for: "WORKOUT-REMINDER"),
                     title: "Workout",
                     time: formatTime(hour: workoutHour, minute: workoutMinute),
                     hour: workoutHour,
@@ -188,6 +241,25 @@ extension TodaysRemindersCard {
         let period = hour >= 12 ? "PM" : "AM"
         let displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
         return String(format: "%d:%02d %@", displayHour, minute, period)
+    }
+
+    /// Generate a stable UUID from a string identifier (for meal/workout reminders)
+    private static func stableUUID(for identifier: String) -> UUID {
+        // Create a deterministic UUID by hashing the identifier
+        var hasher = Hasher()
+        hasher.combine(identifier)
+        let hash = hasher.finalize()
+
+        // Format as UUID string (use hash to fill bytes)
+        let bytes = withUnsafeBytes(of: hash) { Array($0) }
+        let uuidString = String(format: "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+            bytes[0 % bytes.count], bytes[1 % bytes.count], bytes[2 % bytes.count], bytes[3 % bytes.count],
+            bytes[4 % bytes.count], bytes[5 % bytes.count],
+            bytes[6 % bytes.count], bytes[7 % bytes.count],
+            bytes[0 % bytes.count], bytes[1 % bytes.count],
+            bytes[2 % bytes.count], bytes[3 % bytes.count], bytes[4 % bytes.count], bytes[5 % bytes.count], bytes[6 % bytes.count], bytes[7 % bytes.count])
+
+        return UUID(uuidString: uuidString) ?? UUID()
     }
 }
 

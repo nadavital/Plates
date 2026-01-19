@@ -6,12 +6,15 @@
 //
 
 import SwiftUI
+import SwiftData
 
 // MARK: - Workout Summary Sheet
 
 struct WorkoutSummarySheet: View {
-    let workout: LiveWorkout
+    @Bindable var workout: LiveWorkout
     let onDismiss: () -> Void
+
+    @State private var showConfetti = false
 
     var body: some View {
         NavigationStack {
@@ -21,6 +24,7 @@ struct WorkoutSummarySheet: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 64))
                         .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: showConfetti)
 
                     Text("Workout Complete!")
                         .font(.title)
@@ -88,6 +92,20 @@ struct WorkoutSummarySheet: View {
                     Button("Done", action: onDismiss)
                 }
             }
+            .onAppear {
+                withAnimation {
+                    showConfetti = true
+                }
+                HapticManager.success()
+            }
+        }
+        .overlay {
+            // Confetti overlay - covers entire sheet
+            if showConfetti {
+                ConfettiView()
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+            }
         }
     }
 }
@@ -114,4 +132,18 @@ struct SummaryStatRow: View {
                 .bold()
         }
     }
+}
+
+// MARK: - Preview
+
+#Preview("LiveWorkout Summary") {
+    WorkoutSummarySheet(workout: {
+        let workout = LiveWorkout(
+            name: "Push Day",
+            workoutType: .strength,
+            targetMuscleGroups: [.chest, .shoulders, .triceps]
+        )
+        workout.completedAt = Date()
+        return workout
+    }(), onDismiss: {})
 }

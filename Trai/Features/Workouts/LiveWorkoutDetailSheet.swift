@@ -6,11 +6,14 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct LiveWorkoutDetailSheet: View {
-    let workout: LiveWorkout
+    @Bindable var workout: LiveWorkout
     var useLbs: Bool = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var isEditing = false
 
     private var exerciseCount: Int {
         workout.entries?.count ?? 0
@@ -61,7 +64,21 @@ struct LiveWorkoutDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
+                        if isEditing {
+                            try? modelContext.save()
+                        }
                         dismiss()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(isEditing ? "Save" : "Edit") {
+                        if isEditing {
+                            try? modelContext.save()
+                            HapticManager.success()
+                        }
+                        withAnimation(.snappy(duration: 0.2)) {
+                            isEditing.toggle()
+                        }
                     }
                 }
             }
@@ -112,7 +129,7 @@ struct LiveWorkoutDetailSheet: View {
 
             VStack(spacing: 12) {
                 ForEach(entries) { entry in
-                    LiveWorkoutExerciseCard(entry: entry, useLbs: useLbs)
+                    LiveWorkoutExerciseCard(entry: entry, useLbs: useLbs, isEditing: isEditing)
                 }
             }
         }
@@ -195,8 +212,9 @@ struct StatPill: View {
 // MARK: - Live Workout Exercise Card
 
 struct LiveWorkoutExerciseCard: View {
-    let entry: LiveWorkoutEntry
+    @Bindable var entry: LiveWorkoutEntry
     let useLbs: Bool
+    var isEditing: Bool = false
 
     private var weightUnit: String {
         useLbs ? "lbs" : "kg"
@@ -213,15 +231,23 @@ struct LiveWorkoutExerciseCard: View {
             if !entry.sets.isEmpty {
                 VStack(spacing: 6) {
                     ForEach(entry.sets.indices, id: \.self) { index in
-                        let set = entry.sets[index]
-                        SetDetailRow(
-                            setNumber: index + 1,
-                            reps: set.reps,
-                            weight: set.weightKg,
-                            isWarmup: set.isWarmup,
-                            notes: set.notes,
-                            useLbs: useLbs
-                        )
+                        if isEditing {
+                            EditableSetRow(
+                                entry: entry,
+                                setIndex: index,
+                                useLbs: useLbs
+                            )
+                        } else {
+                            let set = entry.sets[index]
+                            SetDetailRow(
+                                setNumber: index + 1,
+                                reps: set.reps,
+                                weight: set.weightKg,
+                                isWarmup: set.isWarmup,
+                                notes: set.notes,
+                                useLbs: useLbs
+                            )
+                        }
                     }
                 }
             }
@@ -238,6 +264,89 @@ struct LiveWorkoutExerciseCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground))
         .clipShape(.rect(cornerRadius: 12))
+    }
+}
+
+// MARK: - Editable Set Row
+
+struct EditableSetRow: View {
+    @Bindable var entry: LiveWorkoutEntry
+    let setIndex: Int
+    let useLbs: Bool
+
+    @State private var repsText: String = ""
+    @State private var weightText: String = ""
+
+    private var set: LiveWorkoutEntry.SetData {
+        entry.sets[setIndex]
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Set number indicator
+            Text(set.isWarmup ? "W" : "\(setIndex + 1)")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .frame(width: 24, height: 24)
+                .background(set.isWarmup ? Color.orange.opacity(0.2) : Color(.tertiarySystemFill))
+                .foregroundStyle(set.isWarmup ? .orange : .secondary)
+                .clipShape(.circle)
+
+            // Reps input
+            TextField("0", text: $repsText)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .frame(width: 50)
+                .padding(.vertical, 6)
+                .background(Color(.tertiarySystemFill))
+                .clipShape(.rect(cornerRadius: 6))
+                .onChange(of: repsText) { _, newValue in
+                    if let reps = Int(newValue) {
+                        var updated = set
+                        updated.reps = reps
+                        entry.updateSet(at: setIndex, with: updated)
+                    }
+                }
+
+            Text("reps")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            // Weight input
+            TextField("0", text: $weightText)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.center)
+                .frame(width: 60)
+                .padding(.vertical, 6)
+                .background(Color(.tertiarySystemFill))
+                .clipShape(.rect(cornerRadius: 6))
+                .onChange(of: weightText) { _, newValue in
+                    if let weight = Double(newValue) {
+                        var updated = set
+                        updated.weightKg = useLbs ? weight / 2.20462 : weight
+                        entry.updateSet(at: setIndex, with: updated)
+                    }
+                }
+
+            Text(useLbs ? "lbs" : "kg")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+        .onAppear {
+            repsText = set.reps > 0 ? "\(set.reps)" : ""
+            let displayWeight = useLbs ? set.weightKg * 2.20462 : set.weightKg
+            weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
+        }
+    }
+
+    private func formatWeight(_ weight: Double) -> String {
+        if weight.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(weight))"
+        }
+        return String(format: "%.1f", weight)
     }
 }
 

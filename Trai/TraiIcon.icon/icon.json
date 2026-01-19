@@ -1,0 +1,226 @@
+{
+  "fill" : "automatic",
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "automatic-gradient" : "srgb:0.85098,0.25098,0.20000,1.00000"
+          },
+          "image-name" : "solid-circle-png-thumb16 2.png",
+          "name" : "Bubble",
+          "opacity" : 0.1,
+          "position" : {
+            "scale" : 1.5,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.85098,0.25098,0.20000,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.85098,0.25098,0.20000,1.00000"
+              }
+            }
+          ],
+          "image-name" : "solid-circle-png-thumb16.png",
+          "name" : "circle",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              -63,
+              -110
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.94902,0.40000,0.25098,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.94902,0.40000,0.25098,1.00000"
+              }
+            }
+          ],
+          "image-name" : "solid-circle-png-thumb16.png",
+          "name" : "circle",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              63,
+              -110
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.98039,0.54902,0.30196,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.98039,0.54902,0.30196,1.00000"
+              }
+            }
+          ],
+          "image-name" : "solid-circle-png-thumb16.png",
+          "name" : "circle",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              63,
+              110
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.90196,0.34902,0.27843,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.90196,0.34902,0.27843,1.00000"
+              }
+            }
+          ],
+          "image-name" : "solid-circle-png-thumb16.png",
+          "name" : "circle",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              -63,
+              110
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.87843,0.27843,0.45098,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.87843,0.27843,0.45098,1.00000"
+              }
+            }
+          ],
+          "image-name" : "solid-circle-png-thumb16.png",
+          "name" : "circle",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:1.00000,0.65098,0.20000,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:1.00000,0.65098,0.20000,1.00000"
+              }
+            }
+          ],
+          "image-name" : "solid-circle-png-thumb16.png",
+          "name" : "circle",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              125,
+              0
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.74902,0.18039,0.14902,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.74902,0.18039,0.14902,1.00000"
+              }
+            }
+          ],
+          "image-name" : "solid-circle-png-thumb16.png",
+          "name" : "circle",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              -125,
+              0
+            ]
+          }
+        }
+      ],
+      "name" : "Hexagon",
+      "position" : {
+        "scale" : 2,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

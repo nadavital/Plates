@@ -305,6 +305,27 @@ extension ProfileView {
                 Divider()
                     .padding(.leading, 56)
 
+                // Apple Health sync row
+                PreferenceRow(
+                    icon: "heart.fill",
+                    iconColor: .pink,
+                    title: "Sync Food to Health",
+                    value: nil,
+                    showChevron: false
+                ) {
+                    Toggle("", isOn: Binding(
+                        get: { profile.syncFoodToHealthKit },
+                        set: {
+                            profile.syncFoodToHealthKit = $0
+                            HapticManager.lightTap()
+                        }
+                    ))
+                    .labelsHidden()
+                }
+
+                Divider()
+                    .padding(.leading, 56)
+
                 // Reminders row
                 NavigationLink {
                     ReminderSettingsView(profile: profile)
@@ -373,5 +394,55 @@ extension ProfileView {
         default: columnCount = 3  // 5+ uses 3 columns
         }
         return Array(repeating: GridItem(.flexible()), count: columnCount)
+    }
+
+    // MARK: - Exercises Card
+
+    @ViewBuilder
+    func exercisesCard() -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("My Exercises", systemImage: "dumbbell.fill")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+            }
+
+            NavigationLink {
+                CustomExercisesView()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "figure.strengthtraining.traditional")
+                        .font(.title2)
+                        .foregroundStyle(.accent)
+                        .frame(width: 40)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Custom Exercises")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        Text("View and manage your custom exercises")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding()
+                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+        )
     }
 }

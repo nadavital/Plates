@@ -8,6 +8,19 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Environment Key for Notification Trigger
+
+private struct ShowRemindersFromNotificationKey: EnvironmentKey {
+    static let defaultValue: Binding<Bool> = .constant(false)
+}
+
+extension EnvironmentValues {
+    var showRemindersFromNotification: Binding<Bool> {
+        get { self[ShowRemindersFromNotificationKey.self] }
+        set { self[ShowRemindersFromNotificationKey.self] = newValue }
+    }
+}
+
 struct ContentView: View {
     @Query private var profiles: [UserProfile]
     @Environment(\.modelContext) private var modelContext
@@ -74,6 +87,7 @@ enum AppTab: String, CaseIterable {
 
 struct MainTabView: View {
     @AppStorage("selectedTab") private var selectedTabRaw: String = AppTab.dashboard.rawValue
+    @Environment(\.showRemindersFromNotification) private var showRemindersFromNotification
 
     private var selectedTab: Binding<AppTab> {
         Binding(
@@ -87,6 +101,7 @@ struct MainTabView: View {
     // Capture the workout when opening sheet to avoid nil issues when workout completes
     @State private var presentedWorkout: LiveWorkout?
     @State private var showingEndConfirmation = false
+    @State private var showingReminders = false
 
     private var activeWorkout: LiveWorkout? {
         activeWorkouts.first
@@ -95,7 +110,7 @@ struct MainTabView: View {
     var body: some View {
         TabView(selection: selectedTab) {
             Tab("Dashboard", systemImage: "house.fill", value: .dashboard) {
-                DashboardView()
+                DashboardView(showRemindersBinding: $showingReminders)
             }
 
             Tab("Trai", systemImage: "circle.hexagongrid.circle", value: .trai, role: .search) {
@@ -104,6 +119,14 @@ struct MainTabView: View {
 
             Tab("Workouts", systemImage: "figure.run", value: .workouts) {
                 WorkoutsView()
+            }
+        }
+        .onChange(of: showRemindersFromNotification.wrappedValue) { _, shouldShow in
+            if shouldShow {
+                // Switch to dashboard and show reminders
+                selectedTabRaw = AppTab.dashboard.rawValue
+                showingReminders = true
+                showRemindersFromNotification.wrappedValue = false
             }
         }
         .tabViewBottomAccessory(isEnabled: activeWorkout != nil) {

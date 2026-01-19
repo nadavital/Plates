@@ -29,11 +29,28 @@ extension ChatView {
         entry.imageData = imageData
         entry.inputMethod = "chat"
 
+        let logDate: Date
         if let loggedAt = meal.loggedAtDate {
             entry.loggedAt = loggedAt
+            logDate = loggedAt
+        } else {
+            logDate = entry.loggedAt
         }
 
         modelContext.insert(entry)
+
+        // Sync to Apple Health if enabled
+        if profile?.syncFoodToHealthKit == true {
+            Task {
+                do {
+                    try await healthKitService.requestAuthorization()
+                    try await healthKitService.saveDietaryEnergy(Double(meal.calories), date: logDate)
+                    print("HealthKit: Saved \(meal.calories) calories for \(meal.name)")
+                } catch {
+                    print("HealthKit: Failed to save dietary energy - \(error.localizedDescription)")
+                }
+            }
+        }
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.markMealLogged(mealId: meal.id, entryId: entry.id)

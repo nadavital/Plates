@@ -9,6 +9,9 @@ import SwiftUI
 import SwiftData
 
 struct DashboardView: View {
+    /// Optional binding to control reminders sheet from parent (for notification taps)
+    @Binding var showRemindersBinding: Bool
+
     @Query private var profiles: [UserProfile]
     @Query(sort: \FoodEntry.loggedAt, order: .reverse)
     private var allFoodEntries: [FoodEntry]
@@ -31,13 +34,16 @@ struct DashboardView: View {
 
     // Sheet presentation state
     @State private var showingLogFood = false
-    @State private var showingReminders = false
     @State private var showingAddWorkout = false
     @State private var showingLogWeight = false
     @State private var showingCalorieDetail = false
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
     @State private var sessionIdToAddTo: UUID?
+
+    init(showRemindersBinding: Binding<Bool> = .constant(false)) {
+        _showRemindersBinding = showRemindersBinding
+    }
 
     // Date navigation
     @State private var selectedDate = Date()
@@ -112,9 +118,9 @@ struct DashboardView: View {
                         if !todaysReminderItems.isEmpty {
                             TodaysRemindersCard(
                                 reminders: todaysReminderItems,
-                                onReminderTap: { _ in showingReminders = true },
+                                onReminderTap: { _ in showRemindersBinding = true },
                                 onComplete: completeReminder,
-                                onViewAll: { showingReminders = true }
+                                onViewAll: { showRemindersBinding = true }
                             )
                         }
                     }
@@ -254,14 +260,14 @@ struct DashboardView: View {
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
             }
-            .sheet(isPresented: $showingReminders) {
+            .sheet(isPresented: $showRemindersBinding) {
                 if let profile {
                     NavigationStack {
                         ReminderSettingsView(profile: profile)
                     }
                 }
             }
-            .onChange(of: showingReminders) { _, isShowing in
+            .onChange(of: showRemindersBinding) { _, isShowing in
                 if !isShowing { fetchCustomReminders() }
             }
             .toolbar {
@@ -355,8 +361,10 @@ struct DashboardView: View {
         )
         modelContext.insert(completion)
 
-        // Update local state immediately for responsive UI
-        todaysCompletedReminderIds.insert(reminder.id)
+        // Update local state with animation for smooth removal
+        withAnimation(.easeInOut(duration: 0.3)) {
+            todaysCompletedReminderIds.insert(reminder.id)
+        }
 
         HapticManager.success()
     }

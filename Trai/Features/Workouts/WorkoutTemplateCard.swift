@@ -112,7 +112,7 @@ struct WorkoutTemplateCard: View {
                     .clipShape(.rect(cornerRadius: 6))
             }
 
-            // Start button
+            // Start button (always enabled - user can override recovery warnings)
             Button(action: {
                 onStart()
                 HapticManager.selectionChanged()
@@ -127,7 +127,6 @@ struct WorkoutTemplateCard: View {
                 .padding(.vertical, 12)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(recoveryScore < 0.3)
         }
         .padding()
         .background(Color(.secondarySystemBackground))

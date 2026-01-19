@@ -109,6 +109,19 @@ final class WorkoutTemplateService {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
+    /// Get personal record (all-time max weight) for an exercise
+    func getPersonalRecord(
+        exerciseName: String,
+        modelContext: ModelContext
+    ) -> ExerciseHistory? {
+        let descriptor = FetchDescriptor<ExerciseHistory>(
+            predicate: #Predicate { $0.exerciseName == exerciseName },
+            sortBy: [SortDescriptor(\.bestSetWeightKg, order: .reverse)]
+        )
+
+        return try? modelContext.fetch(descriptor).first
+    }
+
     // MARK: - Progressive Overload
 
     /// Suggest weight progression based on history and strategy

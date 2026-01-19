@@ -11,6 +11,9 @@ import SwiftData
 @main
 struct TraiApp: App {
     let modelContainer: ModelContainer
+    @State private var notificationService = NotificationService()
+    @State private var notificationDelegate: NotificationDelegate?
+    @State private var showRemindersFromNotification = false
 
     init() {
         do {
@@ -54,8 +57,25 @@ struct TraiApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(notificationService)
+                .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
+                .onAppear {
+                    setupNotificationDelegate()
+                }
         }
         .modelContainer(modelContainer)
+    }
+
+    private func setupNotificationDelegate() {
+        guard notificationDelegate == nil else { return }
+        let delegate = NotificationDelegate(
+            modelContainer: modelContainer,
+            notificationService: notificationService
+        )
+        delegate.onShowReminders = {
+            showRemindersFromNotification = true
+        }
+        notificationDelegate = delegate
     }
 }
 

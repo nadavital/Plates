@@ -68,6 +68,7 @@ struct ProfileView: View {
                         memoriesCard()
                         chatHistoryCard()
                         preferencesCard(profile)
+                        exercisesCard()
                     }
                 }
                 .padding()

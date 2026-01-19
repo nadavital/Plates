@@ -81,6 +81,7 @@ struct LiveWorkoutView: View {
                                 ExerciseCard(
                                     entry: entry,
                                     lastPerformance: viewModel.getLastPerformance(for: entry.exerciseName),
+                                    personalRecord: viewModel.getPersonalRecord(for: entry.exerciseName),
                                     usesMetricWeight: usesMetricExerciseWeight,
                                     onAddSet: { viewModel.addSet(to: entry) },
                                     onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },

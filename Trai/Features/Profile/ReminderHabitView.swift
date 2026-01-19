@@ -13,6 +13,7 @@ struct ReminderHabitView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var completions: [ReminderCompletion] = []
     @State private var showEditSheet = false
+    @State private var notificationService = NotificationService()
 
     var body: some View {
         List {
@@ -89,15 +90,9 @@ struct ReminderHabitView: View {
 
                             Spacer()
 
-                            if completion.wasOnTime {
-                                Text("On time")
-                                    .font(.caption)
-                                    .foregroundStyle(.green)
-                            } else {
-                                Text("Late")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
+                            Text("Completed")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -121,9 +116,12 @@ struct ReminderHabitView: View {
         }
         .onAppear {
             fetchCompletions()
+            Task {
+                await notificationService.updateAuthorizationStatus()
+            }
         }
         .sheet(isPresented: $showEditSheet) {
-            CustomReminderSheet(reminder: reminder, notificationService: nil)
+            CustomReminderSheet(reminder: reminder, notificationService: notificationService)
         }
         .onChange(of: showEditSheet) { _, isShowing in
             if !isShowing { fetchCompletions() }
