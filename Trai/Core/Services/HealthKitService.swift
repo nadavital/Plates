@@ -285,8 +285,9 @@ final class HealthKitService {
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, statistics, error in
-                if let error {
-                    continuation.resume(throwing: error)
+                // Return 0 if no data or error (common when no activity recorded yet)
+                if error != nil || statistics == nil {
+                    continuation.resume(returning: 0)
                 } else {
                     let value = statistics?.sumQuantity()?.doubleValue(for: unit) ?? 0
                     continuation.resume(returning: Int(value))

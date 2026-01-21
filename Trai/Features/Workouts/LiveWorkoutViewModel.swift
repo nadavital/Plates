@@ -5,6 +5,7 @@
 //  Manages state for live workout tracking
 //
 
+import ActivityKit
 import Foundation
 import SwiftData
 import SwiftUI
@@ -15,6 +16,10 @@ final class LiveWorkoutViewModel {
 
     var workout: LiveWorkout
     var isTimerRunning = true
+
+    // Live Activity manager
+    private let liveActivityManager = LiveActivityManager()
+    private var liveActivityUpdateTimer: Timer?
 
     // Timer state - use date calculation for accuracy
     private(set) var pausedDuration: TimeInterval = 0
@@ -211,6 +216,9 @@ final class LiveWorkoutViewModel {
 
         // Start heart rate streaming from Apple Watch
         startHeartRateMonitoring()
+
+        // Start Live Activity
+        startLiveActivity()
     }
 
     // MARK: - Heart Rate Monitoring
@@ -389,6 +397,7 @@ final class LiveWorkoutViewModel {
     func pauseTimer() {
         isTimerRunning = false
         pauseStartTime = Date()  // Record when pause started
+        updateLiveActivity()
     }
 
     func resumeTimer() {
@@ -398,6 +407,7 @@ final class LiveWorkoutViewModel {
             pauseStartTime = nil
         }
         isTimerRunning = true
+        updateLiveActivity()
     }
 
     func stopTimer() {
@@ -408,6 +418,7 @@ final class LiveWorkoutViewModel {
         }
         isTimerRunning = false
         stopHeartRateMonitoring()
+        stopLiveActivityUpdates()
     }
 
     // MARK: - Suggestion Management
@@ -666,11 +677,16 @@ final class LiveWorkoutViewModel {
             await mergeWithAppleWatchWorkout()
         }
 
+        // End Live Activity with summary
+        liveActivityManager.endActivity(showSummary: true)
+
         save()
     }
 
     func cancelWorkout() {
         stopTimer()
+        // End Live Activity immediately (no summary)
+        liveActivityManager.endActivity(showSummary: false)
         modelContext?.delete(workout)
         try? modelContext?.save()
     }
@@ -688,5 +704,50 @@ final class LiveWorkoutViewModel {
 
     func save() {
         try? modelContext?.save()
+        // Update Live Activity when data changes
+        updateLiveActivity()
+    }
+
+    // MARK: - Live Activity
+
+    private func startLiveActivity() {
+        liveActivityManager.startActivity(
+            workoutName: workoutName,
+            targetMuscles: targetMuscleGroups,
+            startedAt: workout.startedAt
+        )
+
+        // Start periodic updates for elapsed time
+        startLiveActivityUpdates()
+    }
+
+    private func startLiveActivityUpdates() {
+        // Update every 1 second for timer accuracy
+        liveActivityUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.updateLiveActivity()
+            }
+        }
+    }
+
+    private func stopLiveActivityUpdates() {
+        liveActivityUpdateTimer?.invalidate()
+        liveActivityUpdateTimer = nil
+    }
+
+    private func updateLiveActivity() {
+        // Get current exercise (first incomplete or last one)
+        let currentExercise = entries.first { entry in
+            entry.sets.isEmpty || entry.sets.contains { !$0.completed }
+        }?.exerciseName ?? entries.last?.exerciseName
+
+        liveActivityManager.updateActivity(
+            elapsedSeconds: Int(elapsedTime),
+            currentExercise: currentExercise,
+            completedSets: completedSets,
+            totalSets: totalSets,
+            heartRate: currentHeartRate.map { Int($0) },
+            isPaused: !isTimerRunning
+        )
     }
 }

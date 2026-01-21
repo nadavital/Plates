@@ -95,8 +95,19 @@ struct DashboardView: View {
         }
     }
 
+    /// HealthKit workout IDs that have been merged into LiveWorkouts (to avoid double-counting)
+    private var mergedHealthKitIDs: Set<String> {
+        Set(liveWorkouts.compactMap { $0.mergedHealthKitWorkoutID })
+    }
+
+    /// Workouts for today, excluding HealthKit workouts that were merged into in-app workouts
     private var todayTotalWorkoutCount: Int {
-        selectedDayWorkouts.count + selectedDayLiveWorkouts.count
+        // Filter out HealthKit workouts that have been merged into LiveWorkouts
+        let uniqueHealthKitWorkouts = selectedDayWorkouts.filter { workout in
+            guard let hkID = workout.healthKitWorkoutID else { return true }
+            return !mergedHealthKitIDs.contains(hkID)
+        }
+        return uniqueHealthKitWorkouts.count + selectedDayLiveWorkouts.count
     }
 
     /// Returns the workout name to display on the quick action button

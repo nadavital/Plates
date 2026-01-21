@@ -10,10 +10,22 @@ import SwiftData
 
 @main
 struct TraiApp: App {
+    /// Shared ModelContainer for App Intents and other extension access
+    @MainActor static var sharedModelContainer: ModelContainer?
+
     let modelContainer: ModelContainer
     @State private var notificationService = NotificationService()
     @State private var notificationDelegate: NotificationDelegate?
     @State private var showRemindersFromNotification = false
+    @State private var deepLinkDestination: DeepLinkDestination?
+
+    /// Deep link destinations for URL scheme handling
+    enum DeepLinkDestination: Equatable {
+        case logFood
+        case logWeight
+        case workout
+        case chat
+    }
 
     init() {
         do {
@@ -44,9 +56,10 @@ struct TraiApp: App {
                 configurations: [modelConfiguration]
             )
 
-            // Run one-time migration to fix existing workout sets
+            // Set shared container for App Intents access
             let container = modelContainer
             Task { @MainActor in
+                TraiApp.sharedModelContainer = container
                 migrateExistingWorkoutSets(modelContainer: container)
             }
         } catch {
@@ -56,14 +69,34 @@ struct TraiApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(deepLinkDestination: $deepLinkDestination)
                 .environment(notificationService)
                 .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
                 .onAppear {
                     setupNotificationDelegate()
                 }
+                .onOpenURL { url in
+                    handleDeepLink(url)
+                }
         }
         .modelContainer(modelContainer)
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "trai" else { return }
+
+        switch url.host {
+        case "logfood":
+            deepLinkDestination = .logFood
+        case "logweight":
+            deepLinkDestination = .logWeight
+        case "workout":
+            deepLinkDestination = .workout
+        case "chat":
+            deepLinkDestination = .chat
+        default:
+            break
+        }
     }
 
     private func setupNotificationDelegate() {

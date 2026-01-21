@@ -445,3 +445,130 @@ struct QuickActionsCard: View {
     }
 }
 
+// MARK: - Workout Trend Card
+
+/// A compact card showing weekly workout summary with tap to expand
+struct WorkoutTrendCard: View {
+    let workouts: [LiveWorkout]
+    var onTap: (() -> Void)?
+
+    private var completedWorkouts: [LiveWorkout] {
+        workouts.filter { $0.completedAt != nil }
+    }
+
+    private var last7DaysData: [TrendsService.DailyWorkout] {
+        TrendsService.aggregateWorkoutsByDay(workouts: completedWorkouts, days: 7)
+    }
+
+    private var weeklyWorkoutCount: Int {
+        last7DaysData.reduce(0) { $0 + $1.workoutCount }
+    }
+
+    private var weeklyVolume: Double {
+        last7DaysData.reduce(0.0) { $0 + $1.totalVolume }
+    }
+
+    private var weeklyMinutes: Int {
+        last7DaysData.reduce(0) { $0 + $1.totalDurationMinutes }
+    }
+
+    var body: some View {
+        Button {
+            onTap?()
+            HapticManager.selectionChanged()
+        } label: {
+            VStack(spacing: 12) {
+                // Header
+                HStack {
+                    Text("Workout Trends")
+                        .font(.headline)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Text("7 days")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if onTap != nil {
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                // Mini bar chart showing workout days
+                HStack(spacing: 4) {
+                    ForEach(last7DaysData) { day in
+                        VStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(day.workoutCount > 0 ? Color.orange : Color.secondary.opacity(0.2))
+                                .frame(height: day.workoutCount > 0 ? 24 : 8)
+
+                            Text(day.date, format: .dateTime.weekday(.narrow))
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(height: 40)
+
+                // Stats row
+                HStack(spacing: 0) {
+                    TrendStatItem(
+                        value: "\(weeklyWorkoutCount)",
+                        label: "Workouts",
+                        color: .orange
+                    )
+
+                    Divider().frame(height: 30)
+
+                    TrendStatItem(
+                        value: formatVolume(weeklyVolume),
+                        label: "Volume",
+                        color: .purple
+                    )
+
+                    Divider().frame(height: 30)
+
+                    TrendStatItem(
+                        value: "\(weeklyMinutes)",
+                        label: "Minutes",
+                        color: .green
+                    )
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .clipShape(.rect(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func formatVolume(_ volume: Double) -> String {
+        if volume >= 1000 {
+            return String(format: "%.1fk", volume / 1000)
+        }
+        return "\(Int(volume))"
+    }
+}
+
+private struct TrendStatItem: View {
+    let value: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.headline)
+                .foregroundStyle(color)
+                .monospacedDigit()
+
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
