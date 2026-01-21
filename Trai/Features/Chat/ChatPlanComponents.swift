@@ -340,7 +340,7 @@ struct PlanUpdateDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
                 }
@@ -463,13 +463,13 @@ struct EditPlanSuggestionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply") {
+                    Button("Apply", systemImage: "checkmark") {
                         let updated = PlanUpdateSuggestionEntry(
                             calories: Int(caloriesText),
                             proteinGrams: Int(proteinText),

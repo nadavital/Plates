@@ -47,13 +47,25 @@ final class LiveWorkoutViewModel {
     // Cache of personal records (all-time max weight) for exercises
     var personalRecords: [String: ExerciseHistory] = [:]
 
+    // PRs achieved during this workout (exercise name -> type of PR)
+    var achievedPRs: [String: PRType] = [:]
+
+    enum PRType: String {
+        case weight = "Weight PR"
+        case volume = "Volume PR"
+        case reps = "Rep PR"
+    }
+
     // User preferences cache (exercise usage frequency)
     var exerciseUsageFrequency: [String: Int] = [:]
 
-    // Heart rate from Apple Watch (via HealthKit)
+    // Apple Watch data (via HealthKit)
     var currentHeartRate: Double?
     var lastHeartRateUpdate: Date?
+    var workoutCalories: Double = 0
+    var lastCalorieUpdate: Date?
     var isHeartRateAvailable: Bool { currentHeartRate != nil }
+    var isWatchConnected: Bool { healthKitService?.isWatchConnected ?? false }
 
     private var modelContext: ModelContext?
     private var templateService = WorkoutTemplateService()
@@ -99,8 +111,11 @@ final class LiveWorkoutViewModel {
         entries.reduce(0) { $0 + $1.sets.count }
     }
 
+    /// Count of sets with data entered (reps > 0) - shows workout progress during active workout
     var completedSets: Int {
-        entries.reduce(0) { $0 + ($1.completedSets?.count ?? 0) }
+        entries.reduce(0) { total, entry in
+            total + entry.sets.filter { !$0.isWarmup && $0.reps > 0 }.count
+        }
     }
 
     var totalVolume: Double {
@@ -135,19 +150,32 @@ final class LiveWorkoutViewModel {
         // Prefer exercises user has actually used before
         let preferredPool = usedExercises.isEmpty ? available : usedExercises
 
-        // Find last muscle group worked - prefer different muscle group for rotation
-        if let lastEntry = entries.last,
-           let lastSuggestion = exerciseSuggestions.first(where: { $0.exerciseName == lastEntry.exerciseName }) {
-            let lastMuscle = lastSuggestion.muscleGroup
+        // Get last 2 muscle groups worked - avoid immediate repeats
+        let recentMuscleGroups: Set<String> = {
+            var muscles = Set<String>()
+            let recentEntries = entries.suffix(2)
+            for entry in recentEntries {
+                if let muscle = getMuscleGroup(for: entry) {
+                    muscles.insert(muscle)
+                }
+            }
+            return muscles
+        }()
 
-            // Prefer a different muscle group than the last one (from preferred pool first)
-            if let differentMuscle = preferredPool.first(where: { $0.muscleGroup != lastMuscle }) {
-                return differentMuscle
+        if !recentMuscleGroups.isEmpty {
+            // Filter out exercises from the same muscle groups as the last 2 exercises
+            let differentMusclePool = preferredPool.filter { !recentMuscleGroups.contains($0.muscleGroup) }
+            let differentMuscleUnused = unusedExercises.filter { !recentMuscleGroups.contains($0.muscleGroup) }
+
+            // Prefer exercises from a different muscle group (from preferred pool first)
+            if let suggestion = differentMusclePool.first {
+                return suggestion
             }
             // Fall back to unused exercises with different muscle
-            if let differentMuscle = unusedExercises.first(where: { $0.muscleGroup != lastMuscle }) {
-                return differentMuscle
+            if let suggestion = differentMuscleUnused.first {
+                return suggestion
             }
+            // If no different muscle available, fall through to any available
         }
 
         // Sort by user preference (most used first)
@@ -156,6 +184,27 @@ final class LiveWorkoutViewModel {
         }
 
         return sortedByPreference.first ?? unusedExercises.first
+    }
+
+    /// Get the muscle group for a workout entry (checks suggestions first, then database)
+    private func getMuscleGroup(for entry: LiveWorkoutEntry) -> String? {
+        // First check if it's from our suggestions
+        if let suggestion = exerciseSuggestions.first(where: { $0.exerciseName == entry.exerciseName }) {
+            return suggestion.muscleGroup
+        }
+
+        // Look up the exercise in the database by name
+        guard let modelContext else { return nil }
+        let exerciseName = entry.exerciseName
+        var descriptor = FetchDescriptor<Exercise>(
+            predicate: #Predicate { $0.name == exerciseName }
+        )
+        descriptor.fetchLimit = 1
+        if let exercise = try? modelContext.fetch(descriptor).first {
+            return exercise.muscleGroup
+        }
+
+        return nil
     }
 
     /// Group available suggestions by muscle group
@@ -221,24 +270,33 @@ final class LiveWorkoutViewModel {
         startLiveActivity()
     }
 
-    // MARK: - Heart Rate Monitoring
+    // MARK: - Apple Watch Monitoring
 
     func startHeartRateMonitoring() {
         healthKitService?.startHeartRateStreaming()
-        updateHeartRateFromService()
+        healthKitService?.startCalorieStreaming(from: workout.startedAt)
+        updateWatchDataFromService()
     }
 
     func stopHeartRateMonitoring() {
         healthKitService?.stopHeartRateStreaming()
+        healthKitService?.stopCalorieStreaming()
         currentHeartRate = nil
         lastHeartRateUpdate = nil
     }
 
-    /// Updates heart rate from the HealthKit service - called by the view
-    func updateHeartRateFromService() {
+    /// Updates heart rate and calories from the HealthKit service - called by the view
+    func updateWatchDataFromService() {
         guard let service = healthKitService else { return }
         currentHeartRate = service.currentHeartRate
         lastHeartRateUpdate = service.lastHeartRateUpdate
+        workoutCalories = service.workoutCalories
+        lastCalorieUpdate = service.lastCalorieUpdate
+    }
+
+    /// Legacy method for backwards compatibility
+    func updateHeartRateFromService() {
+        updateWatchDataFromService()
     }
 
     /// Load exercise suggestions based on workout's target muscle groups
@@ -382,6 +440,41 @@ final class LiveWorkoutViewModel {
             personalRecords[exerciseName] = pr
         }
         return pr
+    }
+
+    /// Check if current workout entry exceeds the cached PR (live checking while editing)
+    func isNewPR(for entry: LiveWorkoutEntry) -> PRType? {
+        guard let cachedPR = personalRecords[entry.exerciseName] else {
+            // First time doing this exercise - consider it a PR if there's weight
+            let bestSet = entry.sets.filter { !$0.isWarmup && $0.reps > 0 }.max { $0.volume < $1.volume }
+            if let best = bestSet, best.weightKg > 0 {
+                return .weight
+            }
+            return nil
+        }
+
+        // Get best set from current entry
+        let completedSets = entry.sets.filter { !$0.isWarmup && $0.reps > 0 }
+        guard !completedSets.isEmpty else { return nil }
+
+        let currentBestWeight = completedSets.map(\.weightKg).max() ?? 0
+        let currentTotalVolume = completedSets.reduce(0) { $0 + $1.volume }
+        let currentBestReps = completedSets.map(\.reps).max() ?? 0
+
+        // Check for weight PR
+        if currentBestWeight > cachedPR.bestSetWeightKg {
+            return .weight
+        }
+        // Check for volume PR
+        if currentTotalVolume > cachedPR.totalVolume {
+            return .volume
+        }
+        // Check for rep PR (at same or higher weight)
+        if currentBestReps > cachedPR.bestSetReps && currentBestWeight >= cachedPR.bestSetWeightKg {
+            return .reps
+        }
+
+        return nil
     }
 
     // MARK: - Timer
@@ -565,8 +658,8 @@ final class LiveWorkoutViewModel {
             suggestedReps = repPattern[currentSetIndex]
             suggestedWeight = currentSetIndex < weightPattern.count ? weightPattern[currentSetIndex] : (lastSet?.weightKg ?? 0)
         } else {
-            // No pattern or past pattern length - copy last set
-            suggestedReps = lastSet?.reps ?? 10
+            // No pattern or past pattern length - copy last set or use user's default
+            suggestedReps = lastSet?.reps ?? getUserDefaultRepCount()
             suggestedWeight = lastSet?.weightKg ?? 0
         }
 
@@ -677,10 +770,29 @@ final class LiveWorkoutViewModel {
             await mergeWithAppleWatchWorkout()
         }
 
+        // Note: Workout saving to HealthKit removed - Apple Watch automatically saves workouts
+
         // End Live Activity with summary
         liveActivityManager.endActivity(showSummary: true)
 
+        // Notify dashboard to refresh muscle recovery
+        NotificationCenter.default.post(
+            name: .workoutCompleted,
+            object: nil,
+            userInfo: ["workoutId": workout.id]
+        )
+
         save()
+    }
+
+    /// Get user's preferred default rep count from their profile
+    private func getUserDefaultRepCount() -> Int {
+        guard let modelContext else { return 10 }
+        let descriptor = FetchDescriptor<UserProfile>()
+        if let profile = try? modelContext.fetch(descriptor).first {
+            return profile.defaultRepCount
+        }
+        return 10 // Fallback default
     }
 
     func cancelWorkout() {
@@ -699,6 +811,27 @@ final class LiveWorkoutViewModel {
 
             let history = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? Date())
             modelContext?.insert(history)
+
+            // Check for PRs
+            if let previousPR = personalRecords[entry.exerciseName] {
+                // Weight PR
+                if history.bestSetWeightKg > previousPR.bestSetWeightKg {
+                    achievedPRs[entry.exerciseName] = .weight
+                }
+                // Volume PR (only if no weight PR already detected)
+                else if history.totalVolume > previousPR.totalVolume,
+                        achievedPRs[entry.exerciseName] == nil {
+                    achievedPRs[entry.exerciseName] = .volume
+                }
+                // Rep PR (only if nothing else detected)
+                else if history.bestSetReps > previousPR.bestSetReps,
+                        achievedPRs[entry.exerciseName] == nil {
+                    achievedPRs[entry.exerciseName] = .reps
+                }
+            } else if history.bestSetWeightKg > 0 {
+                // First time doing this exercise - it's a PR by default
+                achievedPRs[entry.exerciseName] = .weight
+            }
         }
     }
 
@@ -737,9 +870,20 @@ final class LiveWorkoutViewModel {
 
     private func updateLiveActivity() {
         // Get current exercise (first incomplete or last one)
-        let currentExercise = entries.first { entry in
+        let currentEntry = entries.first { entry in
             entry.sets.isEmpty || entry.sets.contains { !$0.completed }
-        }?.exerciseName ?? entries.last?.exerciseName
+        } ?? entries.last
+
+        let currentExercise = currentEntry?.exerciseName
+
+        // Get current set data (last set with data from current entry)
+        let currentSet = currentEntry?.sets.last { $0.reps > 0 }
+        let currentWeight = currentSet?.weightKg
+        let currentReps = currentSet?.reps
+
+        // Find next exercise (first after current that isn't started yet)
+        let currentIndex = entries.firstIndex { $0.id == currentEntry?.id } ?? -1
+        let nextExercise = entries.dropFirst(currentIndex + 1).first?.exerciseName
 
         liveActivityManager.updateActivity(
             elapsedSeconds: Int(elapsedTime),
@@ -747,7 +891,11 @@ final class LiveWorkoutViewModel {
             completedSets: completedSets,
             totalSets: totalSets,
             heartRate: currentHeartRate.map { Int($0) },
-            isPaused: !isTimerRunning
+            isPaused: !isTimerRunning,
+            currentWeight: currentWeight,
+            currentReps: currentReps,
+            totalVolumeKg: totalVolume,
+            nextExercise: nextExercise
         )
     }
 }

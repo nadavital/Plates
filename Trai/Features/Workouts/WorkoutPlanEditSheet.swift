@@ -47,8 +47,8 @@ struct WorkoutPlanEditSheet: View {
             .navigationTitle("Edit Plan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
                 }

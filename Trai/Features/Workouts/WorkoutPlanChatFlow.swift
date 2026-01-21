@@ -76,7 +76,7 @@ struct WorkoutPlanChatFlow: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             if !isOnboarding && !isGenerating {
-                                Button("Cancel") {
+                                Button("Cancel", systemImage: "xmark") {
                                     dismiss()
                                 }
                             }

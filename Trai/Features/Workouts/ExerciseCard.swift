@@ -13,6 +13,7 @@ struct ExerciseCard: View {
     let entry: LiveWorkoutEntry
     let lastPerformance: ExerciseHistory?
     let personalRecord: ExerciseHistory?
+    let livePRType: LiveWorkoutViewModel.PRType?  // Live PR detection during workout
     let usesMetricWeight: Bool
     let onAddSet: () -> Void
     let onRemoveSet: (Int) -> Void
@@ -80,7 +81,20 @@ struct ExerciseCard: View {
                                         .foregroundStyle(.blue)
                                 }
 
-                                if let pr = prDisplay {
+                                // Show live PR indicator or historical PR
+                                if let liveType = livePRType {
+                                    Text("•")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "trophy.fill")
+                                            .font(.caption2)
+                                        Text("NEW \(liveType.rawValue.uppercased())!")
+                                    }
+                                    .font(.caption)
+                                    .bold()
+                                    .foregroundStyle(Color.accentColor)
+                                } else if let pr = prDisplay {
                                     Text("•")
                                         .font(.caption)
                                         .foregroundStyle(.tertiary)
@@ -90,7 +104,7 @@ struct ExerciseCard: View {
                                         Text(pr)
                                     }
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(Color.accentColor)
                                 }
                             }
                         }
@@ -198,6 +212,7 @@ struct SetRow: View {
     @State private var repsText: String = ""
     @State private var notesText: String = ""
     @State private var showNotesField = false
+    @State private var isUpdatingFromUnitChange = false
     @FocusState private var isWeightFocused: Bool
     @FocusState private var isRepsFocused: Bool
     @FocusState private var isNotesFocused: Bool
@@ -215,8 +230,8 @@ struct SetRow: View {
                         .font(.subheadline)
                         .bold()
                         .frame(width: 32, height: 32)
-                        .background(set.isWarmup ? Color.orange.opacity(0.2) : Color(.tertiarySystemFill))
-                        .foregroundStyle(set.isWarmup ? .orange : .primary)
+                        .background(set.isWarmup ? Color.accentColor.opacity(0.2) : Color(.tertiarySystemFill))
+                        .foregroundStyle(set.isWarmup ? Color.accentColor : .primary)
                         .clipShape(.circle)
                 }
                 .buttonStyle(.plain)
@@ -231,6 +246,8 @@ struct SetRow: View {
                     .clipShape(.rect(cornerRadius: 8))
                     .focused($isWeightFocused)
                     .onChange(of: weightText) { _, newValue in
+                        // Skip save if this change is from unit conversion (not user input)
+                        guard !isUpdatingFromUnitChange else { return }
                         if let weight = Double(newValue) {
                             // Convert to kg if user entered lbs
                             let weightKg = usesMetricWeight ? weight : weight / 2.20462
@@ -317,9 +334,15 @@ struct SetRow: View {
         }
         .onChange(of: usesMetricWeight) { _, newUsesMetric in
             // When unit preference changes, re-display the weight in new unit
+            // Set flag to prevent onChange(weightText) from re-saving with wrong conversion
             if set.weightKg > 0 {
+                isUpdatingFromUnitChange = true
                 let displayWeight = newUsesMetric ? set.weightKg : set.weightKg * 2.20462
                 weightText = formatWeight(displayWeight)
+                // Reset flag after the update propagates
+                Task { @MainActor in
+                    isUpdatingFromUnitChange = false
+                }
             }
         }
     }
@@ -346,6 +369,7 @@ struct SetRow: View {
         }(),
         lastPerformance: nil,
         personalRecord: nil,
+        livePRType: nil,
         usesMetricWeight: true,
         onAddSet: {},
         onRemoveSet: { _ in },

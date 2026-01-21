@@ -53,18 +53,17 @@ struct AddCustomExerciseSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button("Add", systemImage: "checkmark") {
                         onSave(exerciseName, selectedMuscleGroup, selectedCategory)
                         HapticManager.success()
                         dismiss()
                     }
-                    .fontWeight(.semibold)
                     .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

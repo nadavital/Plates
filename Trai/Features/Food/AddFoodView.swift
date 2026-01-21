@@ -12,6 +12,7 @@ import PhotosUI
 struct AddFoodView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
 
     @State private var geminiService = GeminiService()
 
@@ -174,7 +175,7 @@ struct AddFoodView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
@@ -217,6 +218,7 @@ struct AddFoodView: View {
         entry.aiAnalysis = result.notes
 
         modelContext.insert(entry)
+        saveMacrosToHealthKit(entry)
         dismiss()
     }
 
@@ -236,7 +238,27 @@ struct AddFoodView: View {
         entry.imageData = selectedImageData
 
         modelContext.insert(entry)
+        saveMacrosToHealthKit(entry)
         dismiss()
+    }
+
+    private func saveMacrosToHealthKit(_ entry: FoodEntry) {
+        guard let healthKitService else { return }
+        Task {
+            do {
+                try await healthKitService.saveFoodMacros(
+                    calories: entry.calories,
+                    proteinGrams: entry.proteinGrams,
+                    carbsGrams: entry.carbsGrams,
+                    fatGrams: entry.fatGrams,
+                    fiberGrams: entry.fiberGrams,
+                    sugarGrams: entry.sugarGrams,
+                    date: entry.loggedAt
+                )
+            } catch {
+                print("Failed to save macros to HealthKit: \(error)")
+            }
+        }
     }
 }
 

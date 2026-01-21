@@ -100,14 +100,6 @@ struct WeightTrackingView: View {
                         showingAddWeight = true
                     }
                 }
-
-                ToolbarItem(placement: .secondaryAction) {
-                    Button("Sync HealthKit", systemImage: "arrow.triangle.2.circlepath") {
-                        Task {
-                            await syncHealthKit()
-                        }
-                    }
-                }
             }
             .sheet(isPresented: $showingAddWeight) {
                 AddWeightView()

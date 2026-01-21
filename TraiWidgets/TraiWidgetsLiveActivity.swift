@@ -26,6 +26,35 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         let totalSets: Int
         let heartRate: Int?
         let isPaused: Bool
+        // New: richer data
+        let currentWeight: Double?
+        let currentReps: Int?
+        let totalVolumeKg: Double?
+        let nextExercise: String?
+
+        init(
+            elapsedSeconds: Int,
+            currentExercise: String? = nil,
+            completedSets: Int,
+            totalSets: Int,
+            heartRate: Int? = nil,
+            isPaused: Bool,
+            currentWeight: Double? = nil,
+            currentReps: Int? = nil,
+            totalVolumeKg: Double? = nil,
+            nextExercise: String? = nil
+        ) {
+            self.elapsedSeconds = elapsedSeconds
+            self.currentExercise = currentExercise
+            self.completedSets = completedSets
+            self.totalSets = totalSets
+            self.heartRate = heartRate
+            self.isPaused = isPaused
+            self.currentWeight = currentWeight
+            self.currentReps = currentReps
+            self.totalVolumeKg = totalVolumeKg
+            self.nextExercise = nextExercise
+        }
 
         /// Formatted elapsed time string (MM:SS or H:MM:SS)
         var formattedTime: String {
@@ -48,6 +77,21 @@ struct TraiWorkoutAttributes: ActivityAttributes {
         /// Sets display string (e.g., "8/12 sets")
         var setsDisplay: String {
             "\(completedSets)/\(totalSets) sets"
+        }
+
+        /// Volume display string (e.g., "2.5k kg")
+        var volumeDisplay: String? {
+            guard let volume = totalVolumeKg, volume > 0 else { return nil }
+            if volume >= 1000 {
+                return String(format: "%.1fk kg", volume / 1000)
+            }
+            return "\(Int(volume)) kg"
+        }
+
+        /// Current set display (e.g., "80kg × 8")
+        var currentSetDisplay: String? {
+            guard let weight = currentWeight, let reps = currentReps, weight > 0 else { return nil }
+            return "\(Int(weight))kg × \(reps)"
         }
     }
 }
@@ -113,17 +157,42 @@ private struct LockScreenWorkoutView: View {
                     .foregroundStyle(context.state.isPaused ? .orange : .primary)
 
                 if let exercise = context.state.currentExercise {
-                    Text(exercise)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(exercise)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        // Show current weight × reps if available
+                        if let setDisplay = context.state.currentSetDisplay {
+                            Text("•")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(setDisplay)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+
+                // Show next exercise if available
+                if let nextExercise = context.state.nextExercise {
+                    HStack(spacing: 4) {
+                        Text("Next:")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Text(nextExercise)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
 
             Spacer()
 
             // Progress and sets
-            VStack(alignment: .trailing, spacing: 8) {
+            VStack(alignment: .trailing, spacing: 6) {
                 // Circular progress
                 ZStack {
                     Circle()
@@ -143,6 +212,13 @@ private struct LockScreenWorkoutView: View {
                 Text(context.state.setsDisplay)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+
+                // Volume if available
+                if let volume = context.state.volumeDisplay {
+                    Text(volume)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
 
                 // Heart rate if available
                 if let hr = context.state.heartRate {
@@ -220,16 +296,39 @@ private struct ExpandedBottomView: View {
             }
             .frame(height: 6)
 
-            // Current exercise
-            if let exercise = context.state.currentExercise {
-                HStack {
-                    Text("Now:")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(exercise)
-                        .font(.caption)
-                        .lineLimit(1)
-                    Spacer()
+            HStack {
+                // Current exercise with set info
+                if let exercise = context.state.currentExercise {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text("Now:")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(exercise)
+                                .font(.caption)
+                                .lineLimit(1)
+                        }
+
+                        if let setDisplay = context.state.currentSetDisplay {
+                            Text(setDisplay)
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                // Volume display
+                if let volume = context.state.volumeDisplay {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Volume")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(volume)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
         }
@@ -282,7 +381,11 @@ extension TraiWorkoutAttributes.ContentState {
             completedSets: 8,
             totalSets: 15,
             heartRate: 142,
-            isPaused: false
+            isPaused: false,
+            currentWeight: 80,
+            currentReps: 8,
+            totalVolumeKg: 2450,
+            nextExercise: "Incline Dumbbell Press"
         )
     }
 
@@ -293,7 +396,11 @@ extension TraiWorkoutAttributes.ContentState {
             completedSets: 10,
             totalSets: 15,
             heartRate: 98,
-            isPaused: true
+            isPaused: true,
+            currentWeight: 50,
+            currentReps: 10,
+            totalVolumeKg: 3200,
+            nextExercise: "Lateral Raises"
         )
     }
 }

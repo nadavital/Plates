@@ -110,8 +110,26 @@ extension GeminiService {
     }
 
     /// Identify gym equipment/machine from a photo and suggest exercises
-    func analyzeExercisePhoto(imageData: Data) async throws -> ExercisePhotoAnalysis {
+    /// - Parameters:
+    ///   - imageData: JPEG image data of the equipment
+    ///   - existingExerciseNames: Names of exercises already in the user's library (for matching)
+    func analyzeExercisePhoto(imageData: Data, existingExerciseNames: [String] = []) async throws -> ExercisePhotoAnalysis {
         log("Analyzing exercise equipment photo", type: .info)
+
+        // Build the existing exercises context if available
+        let existingExercisesContext: String
+        if !existingExerciseNames.isEmpty {
+            let exerciseList = existingExerciseNames.joined(separator: ", ")
+            existingExercisesContext = """
+
+            IMPORTANT: The user already has these exercises in their library:
+            \(exerciseList)
+
+            When suggesting exercises, use the EXACT name from this list if the exercise matches (even if you'd name it slightly differently). Only suggest a new name if none of the existing exercises match.
+            """
+        } else {
+            existingExercisesContext = ""
+        }
 
         let prompt = """
         Look at this image of gym equipment or exercise machine.
@@ -121,7 +139,7 @@ extension GeminiService {
         2. What exercises can be done with it (list 2-4 main exercises)
         3. A brief description of what the equipment is for
         4. Any setup tips or key things to know
-
+        \(existingExercisesContext)
         If this isn't gym equipment, still try to identify what it is and suggest any exercises that could be done with it.
         """
 

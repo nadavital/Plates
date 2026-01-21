@@ -70,8 +70,8 @@ struct PlanChatView: View {
             .navigationTitle("Adjust Your Plan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
                 }

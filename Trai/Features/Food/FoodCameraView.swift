@@ -15,6 +15,7 @@ struct FoodCameraView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Query private var profiles: [UserProfile]
 
     @State private var cameraService = CameraService()
@@ -78,7 +79,7 @@ struct FoodCameraView: View {
                             }
                         }
                     } else {
-                        Button("Cancel") {
+                        Button("Cancel", systemImage: "xmark") {
                             dismiss()
                         }
                         .foregroundStyle(.white)
@@ -176,6 +177,10 @@ struct FoodCameraView: View {
 
         assignSession(to: entry)
         modelContext.insert(entry)
+
+        // Save macros to HealthKit
+        saveMacrosToHealthKit(entry)
+
         HapticManager.success()
         dismiss()
     }
@@ -198,6 +203,10 @@ struct FoodCameraView: View {
 
         assignSession(to: entry)
         modelContext.insert(entry)
+
+        // Save macros to HealthKit
+        saveMacrosToHealthKit(entry)
+
         HapticManager.success()
         dismiss()
     }
@@ -209,6 +218,25 @@ struct FoodCameraView: View {
             FetchDescriptor<FoodEntry>(predicate: #Predicate { $0.sessionId == sessionId })
         )
         entry.sessionOrder = existingCount ?? 0
+    }
+
+    private func saveMacrosToHealthKit(_ entry: FoodEntry) {
+        guard let healthKitService else { return }
+        Task {
+            do {
+                try await healthKitService.saveFoodMacros(
+                    calories: entry.calories,
+                    proteinGrams: entry.proteinGrams,
+                    carbsGrams: entry.carbsGrams,
+                    fatGrams: entry.fatGrams,
+                    fiberGrams: entry.fiberGrams,
+                    sugarGrams: entry.sugarGrams,
+                    date: entry.loggedAt
+                )
+            } catch {
+                print("Failed to save macros to HealthKit: \(error)")
+            }
+        }
     }
 }
 

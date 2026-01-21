@@ -41,145 +41,43 @@ struct LiveWorkoutView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
-                // Main content
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        // Timer header (uses TimelineView for scroll performance)
-                        WorkoutTimerHeader(
-                            workoutName: viewModel.workoutName,
-                            workoutStartedAt: viewModel.workout.startedAt,
-                            isTimerRunning: viewModel.isTimerRunning,
-                            totalPauseDuration: viewModel.totalPauseDuration,
-                            totalSets: viewModel.totalSets,
-                            completedSets: viewModel.completedSets,
-                            totalVolume: viewModel.totalVolume
-                        )
-
-                        // Apple Watch heart rate (if available)
-                        if viewModel.isHeartRateAvailable || viewModel.currentHeartRate != nil {
-                            WatchHeartRateCard(
-                                heartRate: viewModel.currentHeartRate,
-                                lastUpdate: viewModel.lastHeartRateUpdate
-                            )
-                        }
-
-                        // Target muscles selector (editable for custom workouts)
-                        MuscleGroupSelector(
-                            selectedMuscles: Binding(
-                                get: { Set(viewModel.workout.muscleGroups) },
-                                set: { viewModel.updateMuscleGroups(Array($0)) }
-                            ),
-                            isCustomWorkout: viewModel.exerciseSuggestions.isEmpty
-                        )
-
-                        // Exercise cards - different UI for strength vs cardio
-                        ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
-                            if entry.isCardio {
-                                CardioExerciseCard(
-                                    entry: entry,
-                                    onUpdateDuration: { seconds in
-                                        viewModel.updateCardioDuration(for: entry, seconds: seconds)
-                                    },
-                                    onUpdateDistance: { meters in
-                                        viewModel.updateCardioDistance(for: entry, meters: meters)
-                                    },
-                                    onComplete: {
-                                        viewModel.toggleCardioCompletion(for: entry)
-                                    },
-                                    onDeleteExercise: { viewModel.removeExercise(at: index) }
-                                )
-                            } else {
-                                ExerciseCard(
-                                    entry: entry,
-                                    lastPerformance: viewModel.getLastPerformance(for: entry.exerciseName),
-                                    personalRecord: viewModel.getPersonalRecord(for: entry.exerciseName),
-                                    usesMetricWeight: usesMetricExerciseWeight,
-                                    onAddSet: { viewModel.addSet(to: entry) },
-                                    onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
-                                    onUpdateSet: { setIndex, reps, weight, notes in
-                                        viewModel.updateSet(at: setIndex, in: entry, reps: reps, weight: weight, notes: notes)
-                                    },
-                                    onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
-                                    onDeleteExercise: { viewModel.removeExercise(at: index) }
-                                )
-                            }
-                        }
-
-                        // Up Next suggestion (smart rotation)
-                        if let upNext = viewModel.upNextSuggestion {
-                            UpNextSuggestionCard(
-                                suggestion: upNext,
-                                lastPerformance: viewModel.getLastPerformance(for: upNext.exerciseName),
-                                usesMetricWeight: usesMetricExerciseWeight
-                            ) {
-                                viewModel.addUpNextExercise()
-                            }
-                        }
-
-                        // More suggestions by muscle group
-                        if !viewModel.availableSuggestions.isEmpty {
-                            // Filter out the up next suggestion from the grouped view
-                            let filteredSuggestions = viewModel.suggestionsByMuscle.mapValues { suggestions in
-                                suggestions.filter { $0.id != viewModel.upNextSuggestion?.id }
-                            }.filter { !$0.value.isEmpty }
-
-                            if !filteredSuggestions.isEmpty {
-                                SuggestionsByMuscleSection(
-                                    suggestionsByMuscle: filteredSuggestions,
-                                    lastPerformances: viewModel.lastPerformances
-                                ) { suggestion in
-                                    viewModel.addExerciseFromSuggestion(suggestion)
-                                }
-                            }
-                        }
-
-                        // Add exercise button
-                        AddExerciseButton {
-                            showingExerciseList = true
-                        }
-
-                        // Bottom padding for the bar
-                        Color.clear.frame(height: 80)
-                    }
-                    .padding()
+            Group {
+                if showingSummary {
+                    // Show summary inline instead of nested sheet
+                    WorkoutSummaryContent(
+                        workout: viewModel.workout,
+                        achievedPRs: viewModel.achievedPRs,
+                        onDismiss: { dismiss() }
+                    )
+                } else {
+                    workoutContent
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .onTapGesture {
-                    dismissKeyboard()
-                }
-
-                // Bottom bar
-                WorkoutBottomBar(
-                    onEndWorkout: { showingEndConfirmation = true },
-                    onAskTrai: { showingChat = true }
-                )
             }
-            .navigationTitle(viewModel.workout.type.displayName)
+            .navigationTitle(showingSummary ? "Summary" : viewModel.workoutName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        showingCancelConfirmation = true
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        if viewModel.isTimerRunning {
-                            viewModel.pauseTimer()
-                        } else {
-                            viewModel.resumeTimer()
+                if showingSummary {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", systemImage: "checkmark") {
+                            dismiss()
                         }
-                    } label: {
-                        Image(systemName: viewModel.isTimerRunning ? "pause.circle.fill" : "play.circle.fill")
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.accent)
-                            .font(.title2)
+                    }
+                } else {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            showingCancelConfirmation = true
+                        } label: {
+                            Image(systemName: "xmark")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("End", systemImage: "checkmark") {
+                            showingEndConfirmation = true
+                        }
+                        .tint(.accentColor)
                     }
                 }
             }
@@ -199,18 +97,12 @@ struct LiveWorkoutView: View {
                     showingExerciseList = false
                 }
             }
-            .sheet(isPresented: $showingSummary) {
-                WorkoutSummarySheet(workout: viewModel.workout) {
-                    showingSummary = false
-                    dismiss()
-                }
-            }
             .sheet(isPresented: $showingChat) {
                 NavigationStack {
                     ChatView(workoutContext: buildWorkoutContext())
                         .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done", systemImage: "checkmark") {
                                     showingChat = false
                                 }
                             }
@@ -237,12 +129,126 @@ struct LiveWorkoutView: View {
             ) {
                 Button("End Workout") {
                     viewModel.finishWorkout()
-                    showingSummary = true
+                    withAnimation {
+                        showingSummary = true
+                    }
                 }
                 Button("Continue", role: .cancel) {}
             } message: {
                 Text("Are you ready to finish this workout?")
             }
+        }
+    }
+
+    // MARK: - Workout Content
+
+    private var workoutContent: some View {
+        ZStack(alignment: .bottom) {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 16) {
+                    // Timer header with optional watch data
+                    WorkoutTimerHeader(
+                        workoutStartedAt: viewModel.workout.startedAt,
+                        isTimerRunning: viewModel.isTimerRunning,
+                        totalPauseDuration: viewModel.totalPauseDuration,
+                        totalVolume: viewModel.totalVolume,
+                        onTogglePause: {
+                            if viewModel.isTimerRunning {
+                                viewModel.pauseTimer()
+                            } else {
+                                viewModel.resumeTimer()
+                            }
+                        },
+                        heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
+                        calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
+                    )
+
+                    // Target muscles selector (editable for custom workouts)
+                    MuscleGroupSelector(
+                        selectedMuscles: Binding(
+                            get: { Set(viewModel.workout.muscleGroups) },
+                            set: { viewModel.updateMuscleGroups(Array($0)) }
+                        ),
+                        isCustomWorkout: viewModel.exerciseSuggestions.isEmpty
+                    )
+
+                    // Exercise cards - different UI for strength vs cardio
+                    ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
+                        if entry.isCardio {
+                            CardioExerciseCard(
+                                entry: entry,
+                                onUpdateDuration: { seconds in
+                                    viewModel.updateCardioDuration(for: entry, seconds: seconds)
+                                },
+                                onUpdateDistance: { meters in
+                                    viewModel.updateCardioDistance(for: entry, meters: meters)
+                                },
+                                onComplete: {
+                                    viewModel.toggleCardioCompletion(for: entry)
+                                },
+                                onDeleteExercise: { viewModel.removeExercise(at: index) }
+                            )
+                        } else {
+                            ExerciseCard(
+                                entry: entry,
+                                lastPerformance: viewModel.getLastPerformance(for: entry.exerciseName),
+                                personalRecord: viewModel.getPersonalRecord(for: entry.exerciseName),
+                                livePRType: viewModel.isNewPR(for: entry),
+                                usesMetricWeight: usesMetricExerciseWeight,
+                                onAddSet: { viewModel.addSet(to: entry) },
+                                onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
+                                onUpdateSet: { setIndex, reps, weight, notes in
+                                    viewModel.updateSet(at: setIndex, in: entry, reps: reps, weight: weight, notes: notes)
+                                },
+                                onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
+                                onDeleteExercise: { viewModel.removeExercise(at: index) }
+                            )
+                        }
+                    }
+
+                    // Up Next suggestion (smart rotation)
+                    if let upNext = viewModel.upNextSuggestion {
+                        UpNextSuggestionCard(
+                            suggestion: upNext,
+                            lastPerformance: viewModel.getLastPerformance(for: upNext.exerciseName),
+                            usesMetricWeight: usesMetricExerciseWeight
+                        ) {
+                            viewModel.addUpNextExercise()
+                        }
+                    }
+
+                    // More suggestions by muscle group
+                    if !viewModel.availableSuggestions.isEmpty {
+                        // Filter out the up next suggestion from the grouped view
+                        let filteredSuggestions = viewModel.suggestionsByMuscle.mapValues { suggestions in
+                            suggestions.filter { $0.id != viewModel.upNextSuggestion?.id }
+                        }.filter { !$0.value.isEmpty }
+
+                        if !filteredSuggestions.isEmpty {
+                            SuggestionsByMuscleSection(
+                                suggestionsByMuscle: filteredSuggestions,
+                                lastPerformances: viewModel.lastPerformances
+                            ) { suggestion in
+                                viewModel.addExerciseFromSuggestion(suggestion)
+                            }
+                        }
+                    }
+
+                    // Bottom padding for the bar
+                    Color.clear.frame(height: 100)
+                }
+                .padding()
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                dismissKeyboard()
+            }
+
+            // Bottom bar
+            WorkoutBottomBar(
+                onAddExercise: { showingExerciseList = true },
+                onAskTrai: { showingChat = true }
+            )
         }
     }
 

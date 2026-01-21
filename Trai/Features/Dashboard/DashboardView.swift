@@ -126,35 +126,37 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Date Navigation
-                    DateNavigationBar(
-                        selectedDate: $selectedDate,
-                        isToday: isViewingToday
-                    )
-
-                    if isViewingToday, let profile {
-                        GreetingCard(name: profile.name, goal: profile.goal)
-
-                        // Quick action buttons (only on today)
-                        QuickActionsCard(
-                            onLogFood: { showingLogFood = true },
-                            onAddWorkout: { startWorkout() },
-                            onLogWeight: { showingLogWeight = true },
-                            workoutName: quickAddWorkoutName
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Date Navigation
+                        DateNavigationBar(
+                            selectedDate: $selectedDate,
+                            isToday: isViewingToday
                         )
 
-                        // Today's reminders
-                        if !todaysReminderItems.isEmpty {
-                            TodaysRemindersCard(
-                                reminders: todaysReminderItems,
-                                onReminderTap: { _ in showRemindersBinding = true },
-                                onComplete: completeReminder,
-                                onViewAll: { showRemindersBinding = true }
+                        if isViewingToday, let profile {
+                            GreetingCard(name: profile.name, goal: profile.goal)
+
+                            // Quick action buttons (only on today)
+                            QuickActionsCard(
+                                onLogFood: { showingLogFood = true },
+                                onAddWorkout: { startWorkout() },
+                                onLogWeight: { showingLogWeight = true },
+                                workoutName: quickAddWorkoutName
                             )
+
+                            // Today's reminders
+                            if !todaysReminderItems.isEmpty {
+                                TodaysRemindersCard(
+                                    reminders: todaysReminderItems,
+                                    onReminderTap: { _ in /* Tap to expand/interact */ },
+                                    onComplete: completeReminder,
+                                    onViewAll: { /* Already viewing on dashboard */ }
+                                )
+                                .id("reminders-section")
+                            }
                         }
-                    }
 
                     CalorieProgressCard(
                         consumed: totalCalories,
@@ -209,8 +211,19 @@ struct DashboardView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    }
+                    .padding()
                 }
-                .padding()
+                .onChange(of: showRemindersBinding) { _, isShowing in
+                    // Scroll to reminders section when triggered by notification
+                    if isShowing {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            scrollProxy.scrollTo("reminders-section", anchor: .top)
+                        }
+                        // Reset the binding after scrolling
+                        showRemindersBinding = false
+                    }
+                }
             }
             .navigationTitle("Dashboard")
             .task {
@@ -221,6 +234,10 @@ struct DashboardView: View {
                 if Calendar.current.isDateInToday(newDate) {
                     Task { await loadActivityData() }
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .workoutCompleted)) { _ in
+                // Refresh after workout completed to update muscle recovery
+                Task { await loadActivityData() }
             }
             .refreshable {
                 await refreshHealthData()
@@ -296,16 +313,6 @@ struct DashboardView: View {
             }
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
-            }
-            .sheet(isPresented: $showRemindersBinding) {
-                if let profile {
-                    NavigationStack {
-                        ReminderSettingsView(profile: profile)
-                    }
-                }
-            }
-            .onChange(of: showRemindersBinding) { _, isShowing in
-                if !isShowing { fetchCustomReminders() }
             }
         }
     }

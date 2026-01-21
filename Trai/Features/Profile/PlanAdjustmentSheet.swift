@@ -58,17 +58,16 @@ struct PlanAdjustmentSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("Save", systemImage: "checkmark") {
                         saveChanges()
                         dismiss()
                     }
-                    .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showAICoach) {
@@ -77,8 +76,8 @@ struct PlanAdjustmentSheet: View {
                         .navigationTitle("Trai")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done", systemImage: "checkmark") {
                                     showAICoach = false
                                 }
                             }

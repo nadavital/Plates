@@ -74,10 +74,10 @@ struct CustomReminderSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel", systemImage: "xmark") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("Save", systemImage: "checkmark") {
                         save()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)

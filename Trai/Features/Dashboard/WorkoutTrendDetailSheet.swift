@@ -101,8 +101,8 @@ struct WorkoutTrendDetailSheet: View {
             .navigationTitle("Workout Trends")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
                 }

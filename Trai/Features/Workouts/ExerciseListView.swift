@@ -78,9 +78,12 @@ struct ExerciseListView: View {
     private var filteredExercises: [Exercise] {
         var result = exercises
 
-        // Apply search filter
+        // Apply search filter - include equipment name
         if !searchText.isEmpty {
-            result = result.filter { $0.name.localizedStandardContains(searchText) }
+            result = result.filter { exercise in
+                exercise.name.localizedStandardContains(searchText) ||
+                (exercise.equipmentName?.localizedStandardContains(searchText) ?? false)
+            }
         }
 
         // Apply category filter
@@ -91,6 +94,27 @@ struct ExerciseListView: View {
         // Apply muscle group filter
         if let muscleGroup = selectedMuscleGroup {
             result = result.filter { $0.targetMuscleGroup == muscleGroup }
+        }
+
+        // Sort: target muscle groups first, then by usage frequency
+        let usageFrequency = Dictionary(grouping: exerciseHistory) { $0.exerciseName }
+            .mapValues { $0.count }
+
+        result.sort { a, b in
+            let aIsTarget = targetMuscleGroups.contains(where: { $0 == a.targetMuscleGroup })
+            let bIsTarget = targetMuscleGroups.contains(where: { $0 == b.targetMuscleGroup })
+
+            // Target muscles first
+            if aIsTarget && !bIsTarget { return true }
+            if !aIsTarget && bIsTarget { return false }
+
+            // Then by usage frequency
+            let aFreq = usageFrequency[a.name] ?? 0
+            let bFreq = usageFrequency[b.name] ?? 0
+            if aFreq != bFreq { return aFreq > bFreq }
+
+            // Finally alphabetically
+            return a.name < b.name
         }
 
         return result
@@ -251,7 +275,7 @@ struct ExerciseListView: View {
             .searchable(text: $searchText, prompt: "Search exercises")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
@@ -295,8 +319,15 @@ struct ExerciseListView: View {
         defer { isAnalyzingPhoto = false }
 
         let geminiService = GeminiService()
+
+        // Pass existing exercise names so Gemini can match to them
+        let existingNames = exercises.map(\.name)
+
         do {
-            let analysis = try await geminiService.analyzeExercisePhoto(imageData: imageData)
+            let analysis = try await geminiService.analyzeExercisePhoto(
+                imageData: imageData,
+                existingExerciseNames: existingNames
+            )
             equipmentAnalysis = analysis
             showingEquipmentResult = true
             HapticManager.success()
@@ -309,59 +340,61 @@ struct ExerciseListView: View {
     // MARK: - Filter Section
 
     private var filterSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                // Category filters
-                FilterChip(
-                    label: "All",
-                    isSelected: selectedCategory == nil && selectedMuscleGroup == nil
-                ) {
-                    selectedCategory = nil
-                    selectedMuscleGroup = nil
-                }
-
-                Divider()
-                    .frame(height: 20)
-
-                // Category filters
-                ForEach(Exercise.Category.allCases) { category in
+        VStack(spacing: 0) {
+            // Row 1: Category filters
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
                     FilterChip(
-                        label: category.displayName,
-                        icon: category.iconName,
-                        isSelected: selectedCategory == category
+                        label: "All",
+                        isSelected: selectedCategory == nil && selectedMuscleGroup == nil
                     ) {
-                        if selectedCategory == category {
-                            selectedCategory = nil
-                        } else {
-                            selectedCategory = category
-                            selectedMuscleGroup = nil
-                        }
+                        selectedCategory = nil
+                        selectedMuscleGroup = nil
                     }
-                }
 
-                // Muscle group filters (only show for strength)
-                if selectedCategory == .strength || selectedCategory == nil {
-                    Divider()
-                        .frame(height: 20)
-
-                    ForEach(Exercise.MuscleGroup.allCases) { muscleGroup in
+                    ForEach(Exercise.Category.allCases) { category in
                         FilterChip(
-                            label: muscleGroup.displayName,
-                            icon: muscleGroup.iconName,
-                            isSelected: selectedMuscleGroup == muscleGroup
+                            label: category.displayName,
+                            icon: category.iconName,
+                            isSelected: selectedCategory == category
                         ) {
-                            if selectedMuscleGroup == muscleGroup {
-                                selectedMuscleGroup = nil
+                            if selectedCategory == category {
+                                selectedCategory = nil
                             } else {
-                                selectedMuscleGroup = muscleGroup
-                                selectedCategory = .strength
+                                selectedCategory = category
+                                selectedMuscleGroup = nil
                             }
                         }
                     }
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+
+            // Row 2: Muscle group filters (only for strength or all)
+            if selectedCategory == .strength || selectedCategory == nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(sortedMuscleGroups) { muscleGroup in
+                            FilterChip(
+                                label: muscleGroup.displayName,
+                                icon: muscleGroup.iconName,
+                                isSelected: selectedMuscleGroup == muscleGroup,
+                                isHighlighted: targetMuscleGroups.contains(muscleGroup)
+                            ) {
+                                if selectedMuscleGroup == muscleGroup {
+                                    selectedMuscleGroup = nil
+                                } else {
+                                    selectedMuscleGroup = muscleGroup
+                                    selectedCategory = .strength
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+            }
         }
         .background(Color(.secondarySystemBackground))
     }
@@ -377,10 +410,22 @@ struct ExerciseListView: View {
                     Text(exercise.name)
                         .font(.body)
 
-                    if let muscleGroup = exercise.targetMuscleGroup {
-                        Text(muscleGroup.displayName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        if let muscleGroup = exercise.targetMuscleGroup {
+                            Text(muscleGroup.displayName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        // Show equipment name for custom exercises with machine info
+                        if let equipment = exercise.equipmentName, !equipment.isEmpty {
+                            Text("•")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(equipment)
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                        }
                     }
                 }
 
@@ -450,6 +495,7 @@ struct FilterChip: View {
     let label: String
     var icon: String?
     let isSelected: Bool
+    var isHighlighted: Bool = false  // For target muscles
     let action: () -> Void
 
     var body: some View {
@@ -467,6 +513,13 @@ struct FilterChip: View {
             .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
             .foregroundStyle(isSelected ? .white : .primary)
             .clipShape(.capsule)
+            .overlay {
+                // Subtle border for target muscles
+                if isHighlighted && !isSelected {
+                    Capsule()
+                        .strokeBorder(Color.accentColor, lineWidth: 1.5)
+                }
+            }
         }
         .buttonStyle(.plain)
     }

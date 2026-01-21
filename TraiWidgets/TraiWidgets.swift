@@ -78,7 +78,7 @@ struct QuickActionsWidgetView: View {
                 )
                 QuickActionCell(
                     title: "Trai",
-                    icon: "bubble.left.fill",
+                    icon: "circle.hexagongrid.circle",
                     color: .purple,
                     url: "trai://chat"
                 )
@@ -111,7 +111,7 @@ struct QuickActionsWidgetView: View {
             )
             QuickActionButton(
                 title: "Ask Trai",
-                icon: "bubble.left.fill",
+                icon: "circle.hexagongrid.circle",
                 color: .purple,
                 url: "trai://chat"
             )

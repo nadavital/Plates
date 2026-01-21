@@ -58,7 +58,7 @@ struct LiveWorkoutDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button("Done", systemImage: "checkmark") {
                         if isEditing {
                             try? modelContext.save()
                         }
@@ -66,7 +66,7 @@ struct LiveWorkoutDetailSheet: View {
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button(isEditing ? "Save" : "Edit") {
+                    Button(isEditing ? "Save" : "Edit", systemImage: isEditing ? "checkmark" : "pencil") {
                         if isEditing {
                             try? modelContext.save()
                             HapticManager.success()

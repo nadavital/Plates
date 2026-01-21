@@ -381,13 +381,13 @@ struct EditMealSuggestionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Log") {
+                    Button("Log", systemImage: "checkmark") {
                         let updated = SuggestedFoodEntry(
                             name: name.trimmingCharacters(in: .whitespaces),
                             calories: Int(caloriesText) ?? meal.calories,

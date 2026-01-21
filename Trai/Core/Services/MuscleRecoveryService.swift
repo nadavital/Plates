@@ -78,7 +78,8 @@ final class MuscleRecoveryService {
     func getRecoveryStatus(modelContext: ModelContext) -> [MuscleRecoveryInfo] {
         let lastTrainedDates = getLastTrainedDates(modelContext: modelContext)
 
-        return LiveWorkout.MuscleGroup.allCases.map { muscleGroup in
+        // Exclude fullBody - it's not a real muscle group for recovery tracking
+        return LiveWorkout.MuscleGroup.allCases.filter { $0 != .fullBody }.map { muscleGroup in
             let lastTrained = lastTrainedDates[muscleGroup]
             let hoursSince = lastTrained.map { Date().timeIntervalSince($0) / 3600 }
             let status = calculateStatus(hoursSinceTraining: hoursSince)

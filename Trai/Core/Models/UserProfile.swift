@@ -123,6 +123,9 @@ final class UserProfile {
     /// Default action when tapping "Add Workout" on Dashboard: "customWorkout" or "recommendedWorkout"
     var defaultWorkoutAction: String = "customWorkout"
 
+    /// Default rep count when adding new exercises (typically 8-12 for hypertrophy)
+    var defaultRepCount: Int = 10
+
     var createdAt: Date = Date()
     var hasCompletedOnboarding: Bool = false
 

@@ -119,13 +119,25 @@ struct SettingsView: View {
                 } label: {
                     Label("Quick Add Default", systemImage: "plus.circle.fill")
                 }
+
+                // Default rep count for new exercises
+                Stepper(value: $profile.defaultRepCount, in: 1...30, step: 1) {
+                    HStack {
+                        Image(systemName: "repeat")
+                            .foregroundStyle(.accent)
+                        Text("Default Reps")
+                        Spacer()
+                        Text("\(profile.defaultRepCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             } header: {
                 Text("Workouts")
             } footer: {
                 if profile.defaultWorkoutActionValue == .recommendedWorkout && !profile.hasWorkoutPlan {
                     Text("Create a workout plan to use the recommended workout option.")
                 } else {
-                    Text(profile.defaultWorkoutActionValue.description)
+                    Text("Default reps when adding new exercises. \(profile.defaultWorkoutActionValue.description)")
                 }
             }
 
@@ -205,7 +217,7 @@ struct SettingsView: View {
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") {
+                Button("Done", systemImage: "checkmark") {
                     dismiss()
                 }
             }

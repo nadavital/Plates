@@ -51,7 +51,7 @@ struct TraiShortcuts: AppShortcutsProvider {
                 "Hey \(.applicationName)"
             ],
             shortTitle: "Ask Trai",
-            systemImageName: "bubble.left.fill"
+            systemImageName: "circle.hexagongrid.circle"
         )
 
         AppShortcut(

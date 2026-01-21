@@ -120,16 +120,15 @@ struct EditFoodEntrySheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("Save", systemImage: "checkmark") {
                         saveChanges()
                     }
-                    .bold()
                     .disabled(name.isEmpty)
                 }
             }

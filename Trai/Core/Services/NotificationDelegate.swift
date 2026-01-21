@@ -85,7 +85,7 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
             await completeReminder(id: reminderId, hour: hour, minute: minute, context: context)
         } else if let mealId = userInfo["mealId"] as? String {
             // Meal reminder - use stable UUID matching TodaysRemindersCard
-            let reminderId = Self.stableUUID(for: "MEAL-\(mealId)")
+            let reminderId = StableUUID.forMeal(mealId)
             let hour = userInfo["reminderHour"] as? Int ?? 0
             let minute = userInfo["reminderMinute"] as? Int ?? 0
             await completeReminder(id: reminderId, hour: hour, minute: minute, context: context)
@@ -126,22 +126,4 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
-    // MARK: - Helpers
-
-    /// Generate a stable UUID from a string identifier (must match TodaysRemindersCard)
-    private static func stableUUID(for identifier: String) -> UUID {
-        var hasher = Hasher()
-        hasher.combine(identifier)
-        let hash = hasher.finalize()
-
-        let bytes = withUnsafeBytes(of: hash) { Array($0) }
-        let uuidString = String(format: "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
-            bytes[0 % bytes.count], bytes[1 % bytes.count], bytes[2 % bytes.count], bytes[3 % bytes.count],
-            bytes[4 % bytes.count], bytes[5 % bytes.count],
-            bytes[6 % bytes.count], bytes[7 % bytes.count],
-            bytes[0 % bytes.count], bytes[1 % bytes.count],
-            bytes[2 % bytes.count], bytes[3 % bytes.count], bytes[4 % bytes.count], bytes[5 % bytes.count], bytes[6 % bytes.count], bytes[7 % bytes.count])
-
-        return UUID(uuidString: uuidString) ?? UUID()
-    }
 }

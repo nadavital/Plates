@@ -99,17 +99,7 @@ struct WorkoutsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    // 1. Active workout banner (highest priority)
-                    // Note: Active workout is now shown as tab bar accessory in MainTabView
-                    // This banner is just a backup/indicator
-                    if let active = activeWorkout {
-                        ActiveWorkoutBanner(workout: active) {
-                            pendingWorkout = active
-                            showingWorkoutSheet = true
-                        }
-                    }
-
-                    // 2. Workout templates section (shows create CTA if no plan)
+                    // Workout templates section (shows create CTA if no plan)
                     WorkoutTemplatesSection(
                         templates: workoutPlan?.templates ?? [],
                         recoveryScores: templateScores,

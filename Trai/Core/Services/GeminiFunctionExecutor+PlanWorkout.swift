@@ -60,7 +60,8 @@ extension GeminiFunctionExecutor {
         // Check if date range is specified
         let hasDateRange = args["date"] != nil || args["days_back"] != nil || args["range_days"] != nil
 
-        var workouts: [WorkoutSession] = []
+        var workoutSessions: [WorkoutSession] = []
+        var liveWorkouts: [LiveWorkout] = []
         var dateDescription = "recent"
 
         if hasDateRange {
@@ -71,24 +72,41 @@ extension GeminiFunctionExecutor {
             )
             dateDescription = description
 
-            let descriptor = FetchDescriptor<WorkoutSession>(
+            // Fetch WorkoutSession entries
+            let sessionDescriptor = FetchDescriptor<WorkoutSession>(
                 predicate: #Predicate { $0.loggedAt >= startDate && $0.loggedAt < endDate },
                 sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
             )
-            workouts = (try? modelContext.fetch(descriptor)) ?? []
+            workoutSessions = (try? modelContext.fetch(sessionDescriptor)) ?? []
+
+            // Fetch completed LiveWorkout entries (tracked in-app)
+            let liveDescriptor = FetchDescriptor<LiveWorkout>(
+                predicate: #Predicate { $0.completedAt != nil && $0.startedAt >= startDate && $0.startedAt < endDate },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            liveWorkouts = (try? modelContext.fetch(liveDescriptor)) ?? []
         } else {
             // Default: get recent workouts with limit
-            let descriptor = FetchDescriptor<WorkoutSession>(
+            let sessionDescriptor = FetchDescriptor<WorkoutSession>(
                 sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
             )
-            workouts = (try? modelContext.fetch(descriptor)) ?? []
-            workouts = Array(workouts.prefix(limit))
+            workoutSessions = (try? modelContext.fetch(sessionDescriptor)) ?? []
+            workoutSessions = Array(workoutSessions.prefix(limit))
+
+            // Fetch completed LiveWorkouts
+            let liveDescriptor = FetchDescriptor<LiveWorkout>(
+                predicate: #Predicate { $0.completedAt != nil },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            liveWorkouts = (try? modelContext.fetch(liveDescriptor)) ?? []
+            liveWorkouts = Array(liveWorkouts.prefix(limit))
         }
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "MMM d, h:mm a"
 
-        let formattedWorkouts = workouts.map { workout -> [String: Any] in
+        // Format WorkoutSession entries
+        var formattedWorkouts: [[String: Any]] = workoutSessions.map { workout -> [String: Any] in
             return [
                 "id": workout.id.uuidString,
                 "name": workout.displayName,
@@ -101,12 +119,72 @@ extension GeminiFunctionExecutor {
             ]
         }
 
+        // Format LiveWorkout entries with full exercise details
+        for liveWorkout in liveWorkouts {
+            let entries = liveWorkout.entries ?? []
+            let sortedEntries = entries.sorted { $0.orderIndex < $1.orderIndex }
+
+            // Build detailed exercise list
+            var exercises: [[String: Any]] = []
+            for entry in sortedEntries {
+                let sets = entry.sets
+                guard !sets.isEmpty else { continue }
+
+                var exerciseData: [String: Any] = [
+                    "name": entry.exerciseName,
+                    "sets_count": sets.count,
+                    "total_reps": entry.totalReps,
+                    "best_weight_kg": sets.map(\.weightKg).max() ?? 0,
+                    "total_volume_kg": entry.totalVolume
+                ]
+
+                // Include set-by-set breakdown
+                exerciseData["sets_detail"] = sets.map { set -> [String: Any] in
+                    [
+                        "reps": set.reps,
+                        "weight_kg": set.weightKg,
+                        "is_warmup": set.isWarmup
+                    ]
+                }
+
+                exercises.append(exerciseData)
+            }
+
+            var workoutData: [String: Any] = [
+                "id": liveWorkout.id.uuidString,
+                "name": liveWorkout.name,
+                "type": liveWorkout.type.rawValue,
+                "date": dateFormatter.string(from: liveWorkout.startedAt),
+                "duration_minutes": Int(liveWorkout.duration / 60),
+                "total_sets": liveWorkout.totalSets,
+                "total_volume_kg": liveWorkout.totalVolume,
+                "muscle_groups": liveWorkout.muscleGroups.map(\.displayName),
+                "tracked_in_app": true
+            ]
+
+            if !exercises.isEmpty {
+                workoutData["exercises"] = exercises
+            }
+
+            formattedWorkouts.append(workoutData)
+        }
+
+        // Sort all workouts by date descending
+        formattedWorkouts.sort { lhs, rhs in
+            guard let lhsDate = lhs["date"] as? String,
+                  let rhsDate = rhs["date"] as? String else { return false }
+            return lhsDate > rhsDate
+        }
+
+        // Apply limit
+        formattedWorkouts = Array(formattedWorkouts.prefix(limit))
+
         return .dataResponse(FunctionResult(
             name: "get_recent_workouts",
             response: [
                 "date_range": dateDescription,
                 "workouts": formattedWorkouts,
-                "count": workouts.count
+                "count": formattedWorkouts.count
             ]
         ))
     }

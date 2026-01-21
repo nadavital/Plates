@@ -22,6 +22,13 @@ final class HealthKitService {
     private var heartRateQuery: HKAnchoredObjectQuery?
     private var heartRateAnchor: HKQueryAnchor?
 
+    // Active calories streaming (during workout)
+    var workoutCalories: Double = 0
+    var lastCalorieUpdate: Date?
+    private var calorieQuery: HKAnchoredObjectQuery?
+    private var calorieAnchor: HKQueryAnchor?
+    private var workoutStartTime: Date?
+
     var isHealthKitAvailable: Bool {
         HKHealthStore.isHealthDataAvailable()
     }
@@ -46,7 +53,14 @@ final class HealthKitService {
 
         let writeTypes: Set<HKSampleType> = [
             HKObjectType.quantityType(forIdentifier: .bodyMass)!,
-            HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed)!
+            HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed)!,
+            HKObjectType.quantityType(forIdentifier: .dietaryProtein)!,
+            HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates)!,
+            HKObjectType.quantityType(forIdentifier: .dietaryFatTotal)!,
+            HKObjectType.quantityType(forIdentifier: .dietaryFiber)!,
+            HKObjectType.quantityType(forIdentifier: .dietarySugar)!,
+            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
+            HKObjectType.workoutType()
         ]
 
         try await healthStore.requestAuthorization(toShare: writeTypes, read: readTypes)
@@ -141,6 +155,84 @@ final class HealthKitService {
         return try await fetchWorkouts(from: startDate, to: endDate)
     }
 
+    /// Save a completed workout to HealthKit
+    func saveWorkout(
+        type: HKWorkoutActivityType,
+        startDate: Date,
+        endDate: Date,
+        duration: TimeInterval,
+        totalEnergyBurned: Double? = nil,
+        metadata: [String: Any]? = nil
+    ) async throws -> HKWorkout {
+        // Create workout configuration
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = type
+        configuration.locationType = .indoor
+
+        // Build the workout
+        let builder = HKWorkoutBuilder(healthStore: healthStore, configuration: configuration, device: .local())
+
+        try await builder.beginCollection(at: startDate)
+
+        // Add energy burned sample if provided
+        if let calories = totalEnergyBurned, calories > 0 {
+            let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
+            let energyQuantity = HKQuantity(unit: .kilocalorie(), doubleValue: calories)
+            let energySample = HKQuantitySample(
+                type: energyType,
+                quantity: energyQuantity,
+                start: startDate,
+                end: endDate
+            )
+            try await builder.addSamples([energySample])
+        }
+
+        try await builder.endCollection(at: endDate)
+
+        // Finalize with metadata
+        let finalMetadata = metadata ?? [:]
+        let workout = try await builder.finishWorkout()
+
+        return workout!
+    }
+
+    /// Save a LiveWorkout to HealthKit
+    func saveLiveWorkout(_ workout: LiveWorkout) async throws {
+        guard let completedAt = workout.completedAt else { return }
+
+        // Map workout type to HealthKit activity type
+        let activityType: HKWorkoutActivityType
+        switch workout.type {
+        case .strength:
+            activityType = .traditionalStrengthTraining
+        case .cardio:
+            activityType = .mixedCardio
+        case .mixed:
+            activityType = .functionalStrengthTraining
+        }
+
+        // Calculate estimated calories (rough estimate based on duration and intensity)
+        let durationMinutes = workout.duration / 60
+        let estimatedCalories = durationMinutes * 5.0 // ~5 cal/min for strength training
+
+        let metadata: [String: Any] = [
+            HKMetadataKeyWorkoutBrandName: "Trai",
+            "workout_name": workout.name,
+            "muscle_groups": workout.muscleGroups.map(\.rawValue).joined(separator: ","),
+            "total_volume_kg": workout.totalVolume,
+            "total_sets": workout.totalSets
+        ]
+
+        _ = try await saveWorkout(
+            type: activityType,
+            startDate: workout.startedAt,
+            endDate: completedAt,
+            duration: workout.duration,
+            totalEnergyBurned: estimatedCalories,
+            metadata: metadata
+        )
+    }
+
     // MARK: - Nutrition
 
     func saveDietaryEnergy(_ calories: Double, date: Date) async throws {
@@ -148,6 +240,66 @@ final class HealthKitService {
         let energyQuantity = HKQuantity(unit: .kilocalorie(), doubleValue: calories)
         let sample = HKQuantitySample(type: energyType, quantity: energyQuantity, start: date, end: date)
         try await healthStore.save(sample)
+    }
+
+    /// Save all macros from a food entry to HealthKit
+    func saveFoodMacros(
+        calories: Int,
+        proteinGrams: Double,
+        carbsGrams: Double,
+        fatGrams: Double,
+        fiberGrams: Double?,
+        sugarGrams: Double?,
+        date: Date
+    ) async throws {
+        var samples: [HKQuantitySample] = []
+
+        // Calories
+        if calories > 0 {
+            let energyType = HKQuantityType.quantityType(forIdentifier: .dietaryEnergyConsumed)!
+            let energyQuantity = HKQuantity(unit: .kilocalorie(), doubleValue: Double(calories))
+            samples.append(HKQuantitySample(type: energyType, quantity: energyQuantity, start: date, end: date))
+        }
+
+        // Protein
+        if proteinGrams > 0 {
+            let proteinType = HKQuantityType.quantityType(forIdentifier: .dietaryProtein)!
+            let proteinQuantity = HKQuantity(unit: .gram(), doubleValue: proteinGrams)
+            samples.append(HKQuantitySample(type: proteinType, quantity: proteinQuantity, start: date, end: date))
+        }
+
+        // Carbs
+        if carbsGrams > 0 {
+            let carbsType = HKQuantityType.quantityType(forIdentifier: .dietaryCarbohydrates)!
+            let carbsQuantity = HKQuantity(unit: .gram(), doubleValue: carbsGrams)
+            samples.append(HKQuantitySample(type: carbsType, quantity: carbsQuantity, start: date, end: date))
+        }
+
+        // Fat
+        if fatGrams > 0 {
+            let fatType = HKQuantityType.quantityType(forIdentifier: .dietaryFatTotal)!
+            let fatQuantity = HKQuantity(unit: .gram(), doubleValue: fatGrams)
+            samples.append(HKQuantitySample(type: fatType, quantity: fatQuantity, start: date, end: date))
+        }
+
+        // Fiber (optional)
+        if let fiber = fiberGrams, fiber > 0 {
+            let fiberType = HKQuantityType.quantityType(forIdentifier: .dietaryFiber)!
+            let fiberQuantity = HKQuantity(unit: .gram(), doubleValue: fiber)
+            samples.append(HKQuantitySample(type: fiberType, quantity: fiberQuantity, start: date, end: date))
+        }
+
+        // Sugar (optional)
+        if let sugar = sugarGrams, sugar > 0 {
+            let sugarType = HKQuantityType.quantityType(forIdentifier: .dietarySugar)!
+            let sugarQuantity = HKQuantity(unit: .gram(), doubleValue: sugar)
+            samples.append(HKQuantitySample(type: sugarType, quantity: sugarQuantity, start: date, end: date))
+        }
+
+        // Save all samples at once
+        if !samples.isEmpty {
+            try await healthStore.save(samples)
+        }
     }
 
     // MARK: - Activity
@@ -254,6 +406,91 @@ final class HealthKitService {
         let bpm = mostRecent.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
         currentHeartRate = bpm
         lastHeartRateUpdate = mostRecent.startDate
+    }
+
+    // MARK: - Calorie Streaming
+
+    /// Start streaming active energy (calories) from Apple Watch during workout
+    /// Tracks cumulative calories since workout start time
+    func startCalorieStreaming(from startTime: Date) {
+        guard isHealthKitAvailable else { return }
+
+        // Stop any existing query
+        stopCalorieStreaming()
+
+        workoutStartTime = startTime
+        workoutCalories = 0
+
+        let calorieType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
+
+        // Only look at calories since workout started
+        let predicate = HKQuery.predicateForSamples(withStart: startTime, end: nil, options: .strictStartDate)
+
+        let query = HKAnchoredObjectQuery(
+            type: calorieType,
+            predicate: predicate,
+            anchor: calorieAnchor,
+            limit: HKObjectQueryNoLimit
+        ) { [weak self] _, samples, _, newAnchor, error in
+            Task { @MainActor in
+                self?.calorieAnchor = newAnchor
+                self?.processCalorieSamples(samples)
+            }
+        }
+
+        // Update handler for continuous monitoring
+        query.updateHandler = { [weak self] _, samples, _, newAnchor, error in
+            Task { @MainActor in
+                self?.calorieAnchor = newAnchor
+                self?.processCalorieSamples(samples)
+            }
+        }
+
+        calorieQuery = query
+        healthStore.execute(query)
+    }
+
+    /// Stop streaming calorie updates
+    func stopCalorieStreaming() {
+        if let query = calorieQuery {
+            healthStore.stop(query)
+            calorieQuery = nil
+        }
+        calorieAnchor = nil
+        workoutStartTime = nil
+        // Don't reset workoutCalories - keep final value for summary
+    }
+
+    private func processCalorieSamples(_ samples: [HKSample]?) {
+        guard let calorieSamples = samples as? [HKQuantitySample], !calorieSamples.isEmpty else {
+            return
+        }
+
+        // Sum all new calorie samples
+        let newCalories = calorieSamples.reduce(0.0) { total, sample in
+            total + sample.quantity.doubleValue(for: .kilocalorie())
+        }
+
+        workoutCalories += newCalories
+
+        if let mostRecent = calorieSamples.max(by: { $0.endDate < $1.endDate }) {
+            lastCalorieUpdate = mostRecent.endDate
+        }
+    }
+
+    /// Check if we're receiving data from Apple Watch (either heart rate or calories)
+    var isWatchConnected: Bool {
+        // Consider connected if we've received any data in the last 30 seconds
+        let threshold: TimeInterval = 30
+        let now = Date()
+
+        if let hrUpdate = lastHeartRateUpdate, now.timeIntervalSince(hrUpdate) < threshold {
+            return true
+        }
+        if let calUpdate = lastCalorieUpdate, now.timeIntervalSince(calUpdate) < threshold {
+            return true
+        }
+        return false
     }
 
     // MARK: - Private Helpers

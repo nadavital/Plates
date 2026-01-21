@@ -208,7 +208,7 @@ extension TodaysRemindersCard {
             for meal in MealReminderTime.allMeals where enabledMeals.contains(meal.id) {
                 if isUpcoming(hour: meal.hour, minute: meal.minute) {
                     items.append(ReminderItem(
-                        id: stableUUID(for: "MEAL-\(meal.id)"),
+                        id: StableUUID.forMeal(meal.id),
                         title: meal.displayName,
                         time: formatTime(hour: meal.hour, minute: meal.minute),
                         hour: meal.hour,
@@ -223,7 +223,7 @@ extension TodaysRemindersCard {
         if workoutRemindersEnabled && workoutDays.contains(currentWeekday) {
             if isUpcoming(hour: workoutHour, minute: workoutMinute) {
                 items.append(ReminderItem(
-                    id: stableUUID(for: "WORKOUT-REMINDER"),
+                    id: StableUUID.forWorkoutReminder(),
                     title: "Workout",
                     time: formatTime(hour: workoutHour, minute: workoutMinute),
                     hour: workoutHour,
@@ -241,25 +241,6 @@ extension TodaysRemindersCard {
         let period = hour >= 12 ? "PM" : "AM"
         let displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
         return String(format: "%d:%02d %@", displayHour, minute, period)
-    }
-
-    /// Generate a stable UUID from a string identifier (for meal/workout reminders)
-    private static func stableUUID(for identifier: String) -> UUID {
-        // Create a deterministic UUID by hashing the identifier
-        var hasher = Hasher()
-        hasher.combine(identifier)
-        let hash = hasher.finalize()
-
-        // Format as UUID string (use hash to fill bytes)
-        let bytes = withUnsafeBytes(of: hash) { Array($0) }
-        let uuidString = String(format: "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
-            bytes[0 % bytes.count], bytes[1 % bytes.count], bytes[2 % bytes.count], bytes[3 % bytes.count],
-            bytes[4 % bytes.count], bytes[5 % bytes.count],
-            bytes[6 % bytes.count], bytes[7 % bytes.count],
-            bytes[0 % bytes.count], bytes[1 % bytes.count],
-            bytes[2 % bytes.count], bytes[3 % bytes.count], bytes[4 % bytes.count], bytes[5 % bytes.count], bytes[6 % bytes.count], bytes[7 % bytes.count])
-
-        return UUID(uuidString: uuidString) ?? UUID()
     }
 }
 

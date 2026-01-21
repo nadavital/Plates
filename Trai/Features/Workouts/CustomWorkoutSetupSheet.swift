@@ -119,13 +119,13 @@ struct CustomWorkoutSetupSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel", systemImage: "xmark") {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Start") {
+                    Button("Start", systemImage: "checkmark") {
                         let name = workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
                         let finalName = name.isEmpty ? defaultName : name
                         onStart(finalName, selectedType, Array(selectedMuscles))
