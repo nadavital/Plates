@@ -76,6 +76,10 @@ struct TraiApp: App {
                 .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
                 .onAppear {
                     setupNotificationDelegate()
+                    // Clean up any stale Live Activities from previous sessions
+                    Task { @MainActor in
+                        LiveActivityManager.shared.cancelAllActivities()
+                    }
                 }
                 .onOpenURL { url in
                     handleDeepLink(url)

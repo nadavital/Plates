@@ -55,7 +55,8 @@ final class ExerciseHistory {
         self.performedAt = performedAt
 
         if let best = entry.bestSet {
-            self.bestSetWeightKg = best.weightKg
+            // Round weight to nearest 0.5 to avoid floating point issues
+            self.bestSetWeightKg = (best.weightKg * 2).rounded() / 2
             self.bestSetReps = best.reps
         }
 
@@ -66,9 +67,13 @@ final class ExerciseHistory {
         self.sourceWorkoutEntryId = entry.id
 
         // Store rep and weight patterns from completed sets
+        // Round weights to nearest 0.5 to avoid floating point issues
         if let completedSets = entry.completedSets, !completedSets.isEmpty {
             self.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
-            self.weightPattern = completedSets.map { String(format: "%.1f", $0.weightKg) }.joined(separator: ",")
+            self.weightPattern = completedSets.map { weight -> String in
+                let rounded = (weight.weightKg * 2).rounded() / 2
+                return String(format: "%.1f", rounded)
+            }.joined(separator: ",")
         }
     }
 

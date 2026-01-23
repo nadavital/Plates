@@ -104,6 +104,7 @@ struct EquipmentAnalysisSheet: View {
                         Text(analysis.description)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
 
                         if let tips = analysis.tips {
                             HStack(alignment: .top, spacing: 8) {
@@ -114,6 +115,7 @@ struct EquipmentAnalysisSheet: View {
                                 Text(tips)
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
                             }
                             .padding()
                             .background(Color.yellow.opacity(0.1))

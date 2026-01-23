@@ -256,7 +256,9 @@ struct SetRow: View {
                         if let weight = Double(newValue) {
                             // Convert to kg if user entered lbs
                             let weightKg = usesMetricWeight ? weight : weight / 2.20462
-                            onUpdateWeight(weightKg)
+                            // Round to nearest 0.5 to avoid floating point issues (90 showing as 89.9)
+                            let roundedWeight = (weightKg * 2).rounded() / 2
+                            onUpdateWeight(roundedWeight)
                         }
                     }
 

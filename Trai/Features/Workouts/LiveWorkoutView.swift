@@ -275,8 +275,8 @@ struct LiveWorkoutView: View {
     }
 
     private func startHeartRateUpdates() {
-        // Update heart rate from HealthKit service every 2 seconds
-        heartRateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        // Update heart rate from HealthKit service every 5 seconds (reduces re-renders for better typing performance)
+        heartRateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
             Task { @MainActor in
                 viewModel.updateHeartRateFromService()
             }

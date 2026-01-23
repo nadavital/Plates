@@ -13,6 +13,7 @@ struct LiveWorkoutDetailSheet: View {
     var useLbs: Bool = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query private var allExerciseHistory: [ExerciseHistory]
     @State private var isEditing = false
 
     private var exerciseCount: Int {
@@ -68,6 +69,7 @@ struct LiveWorkoutDetailSheet: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save", systemImage: "checkmark") {
+                            syncExerciseHistory()
                             try? modelContext.save()
                             HapticManager.success()
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -177,6 +179,35 @@ struct LiveWorkoutDetailSheet: View {
             return "\(hours)h \(mins)m"
         }
         return "\(totalMinutes)m"
+    }
+
+    /// Sync ExerciseHistory entries when workout is edited
+    private func syncExerciseHistory() {
+        guard let entries = workout.entries else { return }
+
+        for entry in entries {
+            // Find existing history entry for this workout entry
+            if let history = allExerciseHistory.first(where: { $0.sourceWorkoutEntryId == entry.id }) {
+                // Update history with current entry data
+                if let best = entry.bestSet {
+                    history.bestSetWeightKg = (best.weightKg * 2).rounded() / 2
+                    history.bestSetReps = best.reps
+                }
+                history.totalVolume = entry.totalVolume
+                history.totalSets = entry.completedSets?.count ?? 0
+                history.totalReps = entry.totalReps
+                history.estimatedOneRepMax = entry.estimatedOneRepMax
+
+                // Update rep and weight patterns
+                if let completedSets = entry.completedSets, !completedSets.isEmpty {
+                    history.repPattern = completedSets.map { "\($0.reps)" }.joined(separator: ",")
+                    history.weightPattern = completedSets.map { set -> String in
+                        let rounded = (set.weightKg * 2).rounded() / 2
+                        return String(format: "%.1f", rounded)
+                    }.joined(separator: ",")
+                }
+            }
+        }
     }
 }
 

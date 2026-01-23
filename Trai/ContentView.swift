@@ -244,6 +244,13 @@ struct MainTabView: View {
     }
 
     private func startWorkoutFromIntent(name: String) {
+        // Guard: Don't start a new workout if one is already active
+        guard activeWorkout == nil else {
+            // Show the existing workout instead
+            presentedWorkout = activeWorkout
+            return
+        }
+
         // Create workout - if "custom", create empty; otherwise try to match template
         let workout: LiveWorkout
 

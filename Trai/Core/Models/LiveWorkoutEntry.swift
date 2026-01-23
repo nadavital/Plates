@@ -64,7 +64,7 @@ final class LiveWorkoutEntry {
         self.exerciseId = exercise.id
         self.exerciseName = exercise.name
         self.exerciseType = exercise.category
-        self.equipmentName = exercise.equipmentName
+        self.equipmentName = exercise.displayEquipment  // Use inferred equipment if not stored
         self.orderIndex = orderIndex
     }
 

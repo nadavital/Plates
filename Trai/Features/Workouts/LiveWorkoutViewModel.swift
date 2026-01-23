@@ -17,8 +17,8 @@ final class LiveWorkoutViewModel {
     var workout: LiveWorkout
     var isTimerRunning = true
 
-    // Live Activity manager
-    private let liveActivityManager = LiveActivityManager()
+    // Live Activity manager (shared singleton to prevent duplicates)
+    private var liveActivityManager: LiveActivityManager { LiveActivityManager.shared }
     private var liveActivityUpdateTimer: Timer?
 
     // Timer state - use date calculation for accuracy
@@ -166,16 +166,24 @@ final class LiveWorkoutViewModel {
     }
 
     /// Smart "Up Next" suggestion - rotates through muscle groups, prioritizes user's exercises
+    /// Filters out exercises already in the current workout
     var upNextSuggestion: ExerciseSuggestion? {
         let available = availableSuggestions
         guard !available.isEmpty else { return nil }
 
+        // Get all exercise names currently in this workout
+        let currentExerciseNames = Set(entries.map { $0.exerciseName })
+
+        // Filter out exercises already in the workout
+        let notInWorkout = available.filter { !currentExerciseNames.contains($0.exerciseName) }
+        guard !notInWorkout.isEmpty else { return nil }
+
         // Split into exercises user has used before vs never used
-        let usedExercises = available.filter { exerciseUsageFrequency[$0.exerciseName, default: 0] > 0 }
-        let unusedExercises = available.filter { exerciseUsageFrequency[$0.exerciseName, default: 0] == 0 }
+        let usedExercises = notInWorkout.filter { exerciseUsageFrequency[$0.exerciseName, default: 0] > 0 }
+        let unusedExercises = notInWorkout.filter { exerciseUsageFrequency[$0.exerciseName, default: 0] == 0 }
 
         // Prefer exercises user has actually used before
-        let preferredPool = usedExercises.isEmpty ? available : usedExercises
+        let preferredPool = usedExercises.isEmpty ? notInWorkout : usedExercises
 
         // Get last 2 muscle groups worked - avoid immediate repeats
         let recentMuscleGroups: Set<String> = {
@@ -715,14 +723,34 @@ final class LiveWorkoutViewModel {
         let suggestedReps: Int
         let suggestedWeight: Double
 
-        if currentSetIndex < repPattern.count {
-            // Use the next value from user's historical pattern
-            suggestedReps = repPattern[currentSetIndex]
-            suggestedWeight = currentSetIndex < weightPattern.count ? weightPattern[currentSetIndex] : (lastSet?.weightKg ?? 0)
+        // For weight: prioritize current workout's last set if user modified it
+        // This ensures that if user changes weight mid-workout, subsequent sets follow that weight
+        if let lastSet, currentSetIndex > 0 {
+            // Check if user changed weight from what the pattern suggested
+            let patternWeight = currentSetIndex <= weightPattern.count ? weightPattern[currentSetIndex - 1] : 0
+            let userModifiedWeight = abs(lastSet.weightKg - patternWeight) > 0.1
+
+            if userModifiedWeight {
+                // User overrode the pattern, follow their lead
+                suggestedWeight = lastSet.weightKg
+            } else if currentSetIndex < weightPattern.count {
+                // Use pattern weight for this set
+                suggestedWeight = weightPattern[currentSetIndex]
+            } else {
+                // Past pattern length, copy last set
+                suggestedWeight = lastSet.weightKg
+            }
+        } else if currentSetIndex < weightPattern.count {
+            suggestedWeight = weightPattern[currentSetIndex]
         } else {
-            // No pattern or past pattern length - copy last set or use user's default
-            suggestedReps = lastSet?.reps ?? getUserDefaultRepCount()
             suggestedWeight = lastSet?.weightKg ?? 0
+        }
+
+        // For reps: use pattern or copy last set
+        if currentSetIndex < repPattern.count {
+            suggestedReps = repPattern[currentSetIndex]
+        } else {
+            suggestedReps = lastSet?.reps ?? getUserDefaultRepCount()
         }
 
         entry.addSet(LiveWorkoutEntry.SetData(
@@ -941,8 +969,9 @@ final class LiveWorkoutViewModel {
     }
 
     private func startLiveActivityUpdates() {
-        // Update every 1 second for timer accuracy
-        liveActivityUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // Update every 5 seconds to avoid constant re-renders (improves typing performance)
+        // The Live Activity timer display is not critical for real-time accuracy
+        liveActivityUpdateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.updateLiveActivity()
             }

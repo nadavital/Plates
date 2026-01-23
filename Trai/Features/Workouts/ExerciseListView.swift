@@ -199,14 +199,9 @@ struct ExerciseListView: View {
                                         .foregroundStyle(.accent)
                                     Text("Identify Machine from Photo")
                                     Spacer()
-                                    if isAnalyzingPhoto {
-                                        ProgressView()
-                                            .scaleEffect(0.7)
-                                    } else {
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundStyle(.tertiary)
-                                    }
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
                                 }
                             }
                             .foregroundStyle(.primary)
@@ -307,6 +302,28 @@ struct ExerciseListView: View {
                             )
                         }
                     )
+                }
+            }
+            .overlay {
+                // Photo analysis loading overlay
+                if isAnalyzingPhoto {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+                            Text("Analyzing equipment...")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                            Text("Identifying exercises for this machine")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .padding(32)
+                        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+                    }
                 }
             }
         }
@@ -417,8 +434,8 @@ struct ExerciseListView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        // Show equipment name for custom exercises with machine info
-                        if let equipment = exercise.equipmentName, !equipment.isEmpty {
+                        // Show equipment name (stored or inferred)
+                        if let equipment = exercise.displayEquipment {
                             Text("•")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
@@ -452,8 +469,9 @@ struct ExerciseListView: View {
     }
 
     private func loadDefaultExercises() {
-        for (name, category, muscleGroup) in Exercise.defaultExercises {
+        for (name, category, muscleGroup, equipment) in Exercise.defaultExercises {
             let exercise = Exercise(name: name, category: category, muscleGroup: muscleGroup)
+            exercise.equipmentName = equipment
             modelContext.insert(exercise)
         }
         try? modelContext.save()

@@ -95,10 +95,16 @@ struct TraiWorkoutAttributes: ActivityAttributes {
 
 // MARK: - Live Activity Manager
 
-/// Manages the Live Activity lifecycle for workouts
+/// Manages the Live Activity lifecycle for workouts (Singleton to prevent duplicates)
 @MainActor @Observable
 final class LiveActivityManager {
+    /// Shared singleton instance
+    static let shared = LiveActivityManager()
+
     private var currentActivity: Activity<TraiWorkoutAttributes>?
+
+    /// Private init to enforce singleton usage
+    private init() {}
 
     /// Whether a Live Activity is currently running
     var isActivityActive: Bool {
@@ -111,6 +117,12 @@ final class LiveActivityManager {
         targetMuscles: [String],
         startedAt: Date
     ) {
+        // Guard: Don't start if already have an active activity
+        guard currentActivity == nil else {
+            print("Live Activity already active - skipping duplicate")
+            return
+        }
+
         // Check if Live Activities are supported and enabled
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             print("Live Activities not enabled")

@@ -133,6 +133,7 @@ struct AddCustomExerciseSheet: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(analysis.description)
                         .font(.subheadline)
+                        .multilineTextAlignment(.leading)
 
                     if let tips = analysis.tips {
                         HStack(alignment: .top, spacing: 8) {

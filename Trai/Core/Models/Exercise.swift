@@ -152,54 +152,101 @@ extension Exercise {
 // MARK: - Default Exercises
 
 extension Exercise {
-    static let defaultExercises: [(name: String, category: String, muscleGroup: String?)] = [
+    /// Default exercises with equipment info: (name, category, muscleGroup, equipmentName)
+    static let defaultExercises: [(name: String, category: String, muscleGroup: String?, equipment: String?)] = [
         // Chest
-        ("Bench Press", "strength", "chest"),
-        ("Incline Bench Press", "strength", "chest"),
-        ("Dumbbell Flyes", "strength", "chest"),
-        ("Push-Ups", "strength", "chest"),
+        ("Bench Press", "strength", "chest", "Barbell / Flat Bench"),
+        ("Incline Bench Press", "strength", "chest", "Barbell / Incline Bench"),
+        ("Dumbbell Flyes", "strength", "chest", "Dumbbells / Flat Bench"),
+        ("Push-Ups", "strength", "chest", "Bodyweight"),
 
         // Back
-        ("Deadlift", "strength", "back"),
-        ("Bent Over Row", "strength", "back"),
-        ("Lat Pulldown", "strength", "back"),
-        ("Pull-Ups", "strength", "back"),
-        ("Rowing Machine", "strength", "back"),
+        ("Deadlift", "strength", "back", "Barbell"),
+        ("Bent Over Row", "strength", "back", "Barbell"),
+        ("Lat Pulldown", "strength", "back", "Lat Pulldown Machine"),
+        ("Pull-Ups", "strength", "back", "Pull-Up Bar"),
+        ("Rowing Machine", "strength", "back", "Cable Row Machine"),
 
         // Shoulders
-        ("Overhead Press", "strength", "shoulders"),
-        ("Lateral Raises", "strength", "shoulders"),
-        ("Front Raises", "strength", "shoulders"),
+        ("Overhead Press", "strength", "shoulders", "Barbell / Dumbbells"),
+        ("Lateral Raises", "strength", "shoulders", "Dumbbells"),
+        ("Front Raises", "strength", "shoulders", "Dumbbells"),
 
         // Arms
-        ("Bicep Curls", "strength", "biceps"),
-        ("Hammer Curls", "strength", "biceps"),
-        ("Tricep Pushdown", "strength", "triceps"),
-        ("Skull Crushers", "strength", "triceps"),
+        ("Bicep Curls", "strength", "biceps", "Dumbbells / Barbell"),
+        ("Hammer Curls", "strength", "biceps", "Dumbbells"),
+        ("Tricep Pushdown", "strength", "triceps", "Cable Machine"),
+        ("Skull Crushers", "strength", "triceps", "EZ Bar / Flat Bench"),
 
         // Legs
-        ("Squat", "strength", "legs"),
-        ("Leg Press", "strength", "legs"),
-        ("Lunges", "strength", "legs"),
-        ("Leg Curl", "strength", "legs"),
-        ("Calf Raises", "strength", "legs"),
+        ("Squat", "strength", "legs", "Barbell / Squat Rack"),
+        ("Leg Press", "strength", "legs", "Leg Press Machine"),
+        ("Lunges", "strength", "legs", "Dumbbells / Bodyweight"),
+        ("Leg Curl", "strength", "legs", "Leg Curl Machine"),
+        ("Calf Raises", "strength", "legs", "Smith Machine / Dumbbells"),
 
         // Core
-        ("Plank", "strength", "core"),
-        ("Crunches", "strength", "core"),
-        ("Russian Twists", "strength", "core"),
+        ("Plank", "strength", "core", "Bodyweight"),
+        ("Crunches", "strength", "core", "Bodyweight"),
+        ("Russian Twists", "strength", "core", "Bodyweight / Medicine Ball"),
 
         // Cardio
-        ("Running", "cardio", nil),
-        ("Cycling", "cardio", nil),
-        ("Swimming", "cardio", nil),
-        ("Rowing", "cardio", nil),
-        ("Jump Rope", "cardio", nil),
-        ("HIIT", "cardio", nil),
+        ("Running", "cardio", nil, "Treadmill / Outdoor"),
+        ("Cycling", "cardio", nil, "Stationary Bike / Outdoor"),
+        ("Swimming", "cardio", nil, "Pool"),
+        ("Rowing", "cardio", nil, "Rowing Machine"),
+        ("Jump Rope", "cardio", nil, "Jump Rope"),
+        ("HIIT", "cardio", nil, "Various"),
 
         // Flexibility
-        ("Yoga", "flexibility", nil),
-        ("Stretching", "flexibility", nil),
-        ("Foam Rolling", "flexibility", nil),
+        ("Yoga", "flexibility", nil, "Yoga Mat"),
+        ("Stretching", "flexibility", nil, "Mat / Bodyweight"),
+        ("Foam Rolling", "flexibility", nil, "Foam Roller"),
     ]
+
+    /// Infers equipment name from exercise name keywords
+    static func inferEquipment(from exerciseName: String) -> String? {
+        let lowercased = exerciseName.lowercased()
+
+        // Check for explicit machine keywords
+        if lowercased.contains("cable") { return "Cable Machine" }
+        if lowercased.contains("machine") { return "Machine" }
+        if lowercased.contains("smith") { return "Smith Machine" }
+        if lowercased.contains("pulldown") || lowercased.contains("pull-down") { return "Lat Pulldown Machine" }
+        if lowercased.contains("leg press") { return "Leg Press Machine" }
+        if lowercased.contains("leg curl") { return "Leg Curl Machine" }
+        if lowercased.contains("leg extension") { return "Leg Extension Machine" }
+        if lowercased.contains("chest press") && !lowercased.contains("dumbbell") { return "Chest Press Machine" }
+        if lowercased.contains("pec deck") || lowercased.contains("pec fly") { return "Pec Deck Machine" }
+        if lowercased.contains("hack squat") { return "Hack Squat Machine" }
+        if lowercased.contains("seated row") { return "Seated Row Machine" }
+
+        // Equipment types
+        if lowercased.contains("dumbbell") { return "Dumbbells" }
+        if lowercased.contains("barbell") { return "Barbell" }
+        if lowercased.contains("kettlebell") { return "Kettlebell" }
+        if lowercased.contains("band") { return "Resistance Bands" }
+        if lowercased.contains("ez bar") || lowercased.contains("ez-bar") { return "EZ Bar" }
+
+        // Bodyweight exercises
+        if lowercased.contains("push-up") || lowercased.contains("pushup") { return "Bodyweight" }
+        if lowercased.contains("pull-up") || lowercased.contains("pullup") { return "Pull-Up Bar" }
+        if lowercased.contains("chin-up") || lowercased.contains("chinup") { return "Pull-Up Bar" }
+        if lowercased.contains("dip") { return "Dip Station / Parallel Bars" }
+        if lowercased.contains("plank") || lowercased.contains("crunch") { return "Bodyweight" }
+        if lowercased.contains("lunge") { return "Bodyweight / Dumbbells" }
+        if lowercased.contains("squat") && !lowercased.contains("machine") && !lowercased.contains("hack") {
+            return "Barbell / Squat Rack"
+        }
+
+        return nil
+    }
+
+    /// Gets the equipment name, either stored or inferred
+    var displayEquipment: String? {
+        if let equipment = equipmentName, !equipment.isEmpty {
+            return equipment
+        }
+        return Exercise.inferEquipment(from: name)
+    }
 }

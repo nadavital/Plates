@@ -20,6 +20,8 @@ struct WorkoutsView: View {
     @Query(sort: \LiveWorkout.startedAt, order: .reverse)
     private var allLiveWorkouts: [LiveWorkout]
 
+    @Query private var allExerciseHistory: [ExerciseHistory]
+
     /// Completed in-app workouts (LiveWorkout with completedAt set)
     private var completedLiveWorkouts: [LiveWorkout] {
         allLiveWorkouts.filter { $0.completedAt != nil }
@@ -48,6 +50,7 @@ struct WorkoutsView: View {
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
     @State private var showingWorkoutSheet = false
+    @State private var showingPersonalRecords = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
 
@@ -136,6 +139,13 @@ struct WorkoutsView: View {
                 .padding()
             }
             .navigationTitle("Workouts")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Personal Records", systemImage: "trophy.fill") {
+                        showingPersonalRecords = true
+                    }
+                }
+            }
             .refreshable {
                 await syncHealthKit()
                 loadRecoveryAndScores()
@@ -149,6 +159,9 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingPlanSetup) {
                 WorkoutPlanChatFlow()
+            }
+            .sheet(isPresented: $showingPersonalRecords) {
+                PersonalRecordsView()
             }
             .sheet(isPresented: $showingMuscleRecoveryDetail) {
                 MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)
@@ -232,6 +245,18 @@ struct WorkoutsView: View {
     }
 
     private func deleteLiveWorkout(_ workout: LiveWorkout) {
+        // Delete associated ExerciseHistory entries
+        if let entries = workout.entries {
+            for entry in entries {
+                let historyToDelete = allExerciseHistory.filter {
+                    $0.sourceWorkoutEntryId == entry.id
+                }
+                for history in historyToDelete {
+                    modelContext.delete(history)
+                }
+            }
+        }
+
         modelContext.delete(workout)
         try? modelContext.save()
     }

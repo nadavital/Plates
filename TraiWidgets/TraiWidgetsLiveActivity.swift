@@ -140,7 +140,7 @@ private struct LockScreenWorkoutView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Timer and status
+            // Status (no timer per user feedback)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
@@ -151,10 +151,6 @@ private struct LockScreenWorkoutView: View {
                         .font(.headline)
                         .lineLimit(1)
                 }
-
-                Text(context.state.formattedTime)
-                    .font(.system(.title, design: .monospaced, weight: .bold))
-                    .foregroundStyle(context.state.isPaused ? .orange : .primary)
 
                 if let exercise = context.state.currentExercise {
                     HStack(spacing: 4) {
@@ -220,15 +216,19 @@ private struct LockScreenWorkoutView: View {
                         .foregroundStyle(.orange)
                 }
 
-                // Heart rate if available
-                if let hr = context.state.heartRate {
-                    HStack(spacing: 2) {
-                        Image(systemName: "heart.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.red)
+                // Heart rate display (shows "--" when unavailable)
+                HStack(spacing: 2) {
+                    Image(systemName: "heart.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                    if let hr = context.state.heartRate {
                         Text("\(hr)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                    } else {
+                        Text("--")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                     }
                 }
             }
@@ -249,13 +249,18 @@ private struct ExpandedLeadingView: View {
                 .font(.title2)
                 .foregroundStyle(context.state.isPaused ? .orange : .green)
 
-            if let hr = context.state.heartRate {
-                HStack(spacing: 2) {
-                    Image(systemName: "heart.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.red)
+            // Heart rate display (shows "--" when unavailable)
+            HStack(spacing: 2) {
+                Image(systemName: "heart.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                if let hr = context.state.heartRate {
                     Text("\(hr)")
                         .font(.caption2)
+                } else {
+                    Text("--")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
         }
@@ -267,9 +272,12 @@ private struct ExpandedTrailingView: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            Text(context.state.formattedTime)
-                .font(.system(.title3, design: .monospaced, weight: .bold))
-                .foregroundStyle(context.state.isPaused ? .orange : .primary)
+            // Volume display (no timer per user feedback)
+            if let volume = context.state.volumeDisplay {
+                Text(volume)
+                    .font(.system(.title3, design: .rounded, weight: .bold))
+                    .foregroundStyle(.orange)
+            }
 
             Text(context.state.setsDisplay)
                 .font(.caption)
@@ -344,9 +352,12 @@ private struct CompactLeadingView: View {
                 .font(.caption)
                 .foregroundStyle(context.state.isPaused ? .orange : .green)
 
-            Text(context.state.formattedTime)
-                .font(.system(.caption, design: .monospaced, weight: .semibold))
-                .monospacedDigit()
+            // Show current exercise instead of timer
+            if let exercise = context.state.currentExercise {
+                Text(exercise)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
         }
     }
 }
