@@ -11,7 +11,7 @@ import SwiftData
 // MARK: - Reminder Suggestion Card
 
 struct ReminderSuggestionCard: View {
-    let suggestion: GeminiFunctionExecutor.SuggestedReminder
+    let suggestion: SuggestedReminder
     let onConfirm: () -> Void
     let onEdit: () -> Void
     let onDismiss: () -> Void
@@ -136,7 +136,7 @@ struct ReminderSuggestionCard: View {
 // MARK: - Created Reminder Chip
 
 struct CreatedReminderChip: View {
-    let suggestion: GeminiFunctionExecutor.SuggestedReminder
+    let suggestion: SuggestedReminder
 
     var body: some View {
         HStack(spacing: 8) {
@@ -162,7 +162,7 @@ struct CreatedReminderChip: View {
 #Preview {
     VStack {
         ReminderSuggestionCard(
-            suggestion: GeminiFunctionExecutor.SuggestedReminder(
+            suggestion: SuggestedReminder(
                 title: "Drink water",
                 body: "Stay hydrated throughout the day",
                 hour: 14,
@@ -175,7 +175,7 @@ struct CreatedReminderChip: View {
         )
 
         CreatedReminderChip(
-            suggestion: GeminiFunctionExecutor.SuggestedReminder(
+            suggestion: SuggestedReminder(
                 title: "Take vitamins",
                 body: "",
                 hour: 9,

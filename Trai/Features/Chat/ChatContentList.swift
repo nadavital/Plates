@@ -35,8 +35,8 @@ struct ChatContentList: View {
     let onDismissWorkout: (ChatMessage) -> Void
     let onAcceptWorkoutLog: (SuggestedWorkoutLog, ChatMessage) -> Void
     let onDismissWorkoutLog: (ChatMessage) -> Void
-    let onAcceptReminder: (GeminiFunctionExecutor.SuggestedReminder, ChatMessage) -> Void
-    let onEditReminder: (GeminiFunctionExecutor.SuggestedReminder, ChatMessage) -> Void
+    let onAcceptReminder: (SuggestedReminder, ChatMessage) -> Void
+    let onEditReminder: (SuggestedReminder, ChatMessage) -> Void
     let onDismissReminder: (ChatMessage) -> Void
     var useExerciseWeightLbs: Bool = false
     let onRetry: (ChatMessage) -> Void

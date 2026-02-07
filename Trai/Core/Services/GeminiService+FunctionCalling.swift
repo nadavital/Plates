@@ -123,11 +123,11 @@ extension GeminiService {
         var functionsCalled: [String] = []
         var textResponse = ""
         var suggestedFoods: [SuggestedFoodEntry] = []
-        var planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
+        var planUpdate: PlanUpdateSuggestion?
         var suggestedFoodEdit: SuggestedFoodEdit?
         var suggestedWorkout: SuggestedWorkoutEntry?
         var suggestedWorkoutLog: SuggestedWorkoutLog?
-        var suggestedReminder: GeminiFunctionExecutor.SuggestedReminder?
+        var suggestedReminder: SuggestedReminder?
         var savedMemories: [String] = []
         var accumulatedParts: [[String: Any]] = []
 

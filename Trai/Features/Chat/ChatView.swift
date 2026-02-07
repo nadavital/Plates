@@ -67,7 +67,7 @@ struct ChatView: View {
     @State var planRecommendationMessage: String?
 
     // Reminder editing
-    @State var pendingReminderEdit: GeminiFunctionExecutor.SuggestedReminder?
+    @State var pendingReminderEdit: SuggestedReminder?
     @State var showReminderEditSheet = false
 
     // Task tracking for cancellation
@@ -507,8 +507,8 @@ private struct ChatContentSection: View {
     let onDismissWorkout: (ChatMessage) -> Void
     let onAcceptWorkoutLog: (SuggestedWorkoutLog, ChatMessage) -> Void
     let onDismissWorkoutLog: (ChatMessage) -> Void
-    let onAcceptReminder: (GeminiFunctionExecutor.SuggestedReminder, ChatMessage) -> Void
-    let onEditReminder: (GeminiFunctionExecutor.SuggestedReminder, ChatMessage) -> Void
+    let onAcceptReminder: (SuggestedReminder, ChatMessage) -> Void
+    let onEditReminder: (SuggestedReminder, ChatMessage) -> Void
     let onDismissReminder: (ChatMessage) -> Void
     let useExerciseWeightLbs: Bool
     let onRetry: (ChatMessage) -> Void

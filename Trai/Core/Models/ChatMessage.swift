@@ -343,13 +343,13 @@ final class ChatMessage {
     }
 
     /// Decode the suggested reminder data
-    var suggestedReminder: GeminiFunctionExecutor.SuggestedReminder? {
+    var suggestedReminder: SuggestedReminder? {
         guard let data = suggestedReminderData else { return nil }
-        return try? JSONDecoder().decode(GeminiFunctionExecutor.SuggestedReminder.self, from: data)
+        return try? JSONDecoder().decode(SuggestedReminder.self, from: data)
     }
 
     /// Set the suggested reminder data
-    func setSuggestedReminder(_ reminder: GeminiFunctionExecutor.SuggestedReminder?) {
+    func setSuggestedReminder(_ reminder: SuggestedReminder?) {
         if let reminder {
             suggestedReminderData = try? JSONEncoder().encode(reminder)
         } else {

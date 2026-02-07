@@ -622,8 +622,8 @@ struct ChatBubble: View {
     var onDismissWorkout: (() -> Void)?
     var onAcceptWorkoutLog: ((SuggestedWorkoutLog) -> Void)?
     var onDismissWorkoutLog: (() -> Void)?
-    var onAcceptReminder: ((GeminiFunctionExecutor.SuggestedReminder) -> Void)?
-    var onEditReminder: ((GeminiFunctionExecutor.SuggestedReminder) -> Void)?
+    var onAcceptReminder: ((SuggestedReminder) -> Void)?
+    var onEditReminder: ((SuggestedReminder) -> Void)?
     var onDismissReminder: (() -> Void)?
     var useExerciseWeightLbs: Bool = false
     var onRetry: (() -> Void)?

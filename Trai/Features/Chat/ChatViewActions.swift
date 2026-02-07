@@ -441,7 +441,7 @@ extension ChatView {
 // MARK: - Reminder Suggestion Actions
 
 extension ChatView {
-    func acceptReminderSuggestion(_ suggestion: GeminiFunctionExecutor.SuggestedReminder, for message: ChatMessage) {
+    func acceptReminderSuggestion(_ suggestion: SuggestedReminder, for message: ChatMessage) {
         // Create the custom reminder
         let reminder = CustomReminder(
             title: suggestion.title,
@@ -469,7 +469,7 @@ extension ChatView {
         HapticManager.success()
     }
 
-    func editReminderSuggestion(_ suggestion: GeminiFunctionExecutor.SuggestedReminder, for message: ChatMessage) {
+    func editReminderSuggestion(_ suggestion: SuggestedReminder, for message: ChatMessage) {
         // Show the edit sheet with the suggestion prefilled
         pendingReminderEdit = suggestion
         showReminderEditSheet = true

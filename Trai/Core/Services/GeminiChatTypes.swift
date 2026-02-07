@@ -97,11 +97,11 @@ extension GeminiService {
     struct ChatFunctionResult: Sendable {
         let message: String
         let suggestedFoods: [SuggestedFoodEntry]
-        let planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
+        let planUpdate: PlanUpdateSuggestion?
         let suggestedFoodEdit: SuggestedFoodEdit?
         let suggestedWorkout: SuggestedWorkoutEntry?
         let suggestedWorkoutLog: SuggestedWorkoutLog?
-        let suggestedReminder: GeminiFunctionExecutor.SuggestedReminder?
+        let suggestedReminder: SuggestedReminder?
         let functionsCalled: [String]
         let savedMemories: [String]
     }
@@ -112,11 +112,11 @@ extension GeminiService {
     struct FunctionFollowUpResult {
         var text: String = ""
         var suggestedFoods: [SuggestedFoodEntry] = []
-        var planUpdate: GeminiFunctionExecutor.PlanUpdateSuggestion?
+        var planUpdate: PlanUpdateSuggestion?
         var suggestedFoodEdit: SuggestedFoodEdit?
         var suggestedWorkout: SuggestedWorkoutEntry?
         var suggestedWorkoutLog: SuggestedWorkoutLog?
-        var suggestedReminder: GeminiFunctionExecutor.SuggestedReminder?
+        var suggestedReminder: SuggestedReminder?
         var savedMemories: [String] = []
         var accumulatedParts: [[String: Any]] = []
     }
