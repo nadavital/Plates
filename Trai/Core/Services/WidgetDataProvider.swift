@@ -9,51 +9,13 @@ import Foundation
 import SwiftData
 import WidgetKit
 
-/// Data structure shared between main app and widgets
-struct WidgetData: Codable {
-    // Calories
-    var caloriesConsumed: Int
-    var calorieGoal: Int
-    // Protein
-    var proteinConsumed: Int
-    var proteinGoal: Int
-    // Carbs
-    var carbsConsumed: Int
-    var carbsGoal: Int
-    // Fat
-    var fatConsumed: Int
-    var fatGoal: Int
-    // Workout & Recovery
-    var readyMuscleCount: Int
-    var recommendedWorkout: String?
-    var workoutStreak: Int
-    var todayWorkoutCompleted: Bool
-    var lastUpdated: Date
-
-    static let empty = WidgetData(
-        caloriesConsumed: 0,
-        calorieGoal: 2000,
-        proteinConsumed: 0,
-        proteinGoal: 150,
-        carbsConsumed: 0,
-        carbsGoal: 200,
-        fatConsumed: 0,
-        fatGoal: 65,
-        readyMuscleCount: 0,
-        recommendedWorkout: nil,
-        workoutStreak: 0,
-        todayWorkoutCompleted: false,
-        lastUpdated: Date()
-    )
-}
-
 /// Service to sync fitness data to widgets via App Groups
 @MainActor @Observable
 final class WidgetDataProvider {
     static let shared = WidgetDataProvider()
 
-    private let suiteName = "group.com.nadav.trai"
-    private let dataKey = "widgetData"
+    private let suiteName = SharedStorageKeys.AppGroup.suiteName
+    private let dataKey = SharedStorageKeys.AppGroup.widgetData
 
     private init() {}
 
@@ -204,30 +166,5 @@ final class WidgetDataProvider {
             return
         }
         defaults.set(jsonData, forKey: dataKey)
-    }
-}
-
-// MARK: - Widget Data Reader (for widget extension)
-
-/// Static methods for reading widget data from the widget extension
-enum WidgetDataReader {
-    private static let suiteName = "group.com.nadav.trai"
-    private static let dataKey = "widgetData"
-
-    /// Load widget data from App Groups
-    static func loadData() -> WidgetData {
-        guard let defaults = UserDefaults(suiteName: suiteName),
-              let jsonData = defaults.data(forKey: dataKey),
-              let data = try? JSONDecoder().decode(WidgetData.self, from: jsonData) else {
-            return .empty
-        }
-        return data
-    }
-
-    /// Check if data is fresh (updated within last hour)
-    static func isDataFresh() -> Bool {
-        let data = loadData()
-        let hourAgo = Date().addingTimeInterval(-3600)
-        return data.lastUpdated > hourAgo
     }
 }

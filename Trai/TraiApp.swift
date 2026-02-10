@@ -145,8 +145,8 @@ extension TraiApp {
     /// Process any pending food logs from widget quick actions
     @MainActor
     func processPendingWidgetFoodLogs() {
-        guard let defaults = UserDefaults(suiteName: "group.com.nadav.trai"),
-              let pendingData = defaults.data(forKey: "pendingFoodLogs"),
+        guard let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName),
+              let pendingData = defaults.data(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs),
               let pendingLogs = try? JSONDecoder().decode([PendingFoodLog].self, from: pendingData),
               !pendingLogs.isEmpty else {
             return
@@ -167,20 +167,11 @@ extension TraiApp {
         try? context.save()
 
         // Clear pending logs
-        defaults.removeObject(forKey: "pendingFoodLogs")
+        defaults.removeObject(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
 
         // Refresh widgets with new data
         WidgetDataProvider.shared.updateWidgetData(modelContext: context)
     }
-}
-
-/// Pending food log from widget
-struct PendingFoodLog: Codable {
-    let name: String
-    let calories: Int
-    let protein: Int
-    let loggedAt: Date
-    let mealType: String
 }
 
 // MARK: - Data Migrations

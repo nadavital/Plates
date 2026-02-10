@@ -228,15 +228,15 @@ struct MainTabView: View {
 
     private func checkForAppIntentTriggers() {
         // Check for food camera intent
-        if UserDefaults.standard.bool(forKey: "openFoodCameraFromIntent") {
-            UserDefaults.standard.removeObject(forKey: "openFoodCameraFromIntent")
+        if UserDefaults.standard.bool(forKey: SharedStorageKeys.LaunchIntents.openFoodCamera) {
+            UserDefaults.standard.removeObject(forKey: SharedStorageKeys.LaunchIntents.openFoodCamera)
             showingFoodCamera = true
             return
         }
 
         // Check for start workout intent
-        if let workoutName = UserDefaults.standard.string(forKey: "startWorkoutFromIntent") {
-            UserDefaults.standard.removeObject(forKey: "startWorkoutFromIntent")
+        if let workoutName = UserDefaults.standard.string(forKey: SharedStorageKeys.LaunchIntents.startWorkout) {
+            UserDefaults.standard.removeObject(forKey: SharedStorageKeys.LaunchIntents.startWorkout)
             startWorkoutFromIntent(name: workoutName)
         }
     }

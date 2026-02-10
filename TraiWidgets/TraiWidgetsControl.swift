@@ -36,7 +36,7 @@ struct StartWorkoutControlIntent: ControlConfigurationIntent {
     @MainActor
     func perform() async throws -> some IntentResult & OpensIntent {
         // Set flag to open workout on app launch
-        UserDefaults.standard.set("custom", forKey: "startWorkoutFromIntent")
+        UserDefaults.standard.set("custom", forKey: SharedStorageKeys.LaunchIntents.startWorkout)
         return .result(opensIntent: OpenURLIntent(URL(string: "trai://workout")!))
     }
 }

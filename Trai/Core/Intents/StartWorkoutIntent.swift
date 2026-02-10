@@ -27,9 +27,9 @@ struct StartWorkoutIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         // Store the workout name to start when app opens
         if let name = workoutName, !name.isEmpty {
-            UserDefaults.standard.set(name, forKey: "startWorkoutFromIntent")
+            UserDefaults.standard.set(name, forKey: SharedStorageKeys.LaunchIntents.startWorkout)
         } else {
-            UserDefaults.standard.set("custom", forKey: "startWorkoutFromIntent")
+            UserDefaults.standard.set("custom", forKey: SharedStorageKeys.LaunchIntents.startWorkout)
         }
 
         return .result()

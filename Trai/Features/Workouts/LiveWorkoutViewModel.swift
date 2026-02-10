@@ -335,17 +335,17 @@ final class LiveWorkoutViewModel {
     }
     
     private func checkLiveActivityIntents() {
-        guard let defaults = UserDefaults(suiteName: "group.com.nadav.trai") else { return }
+        guard let defaults = UserDefaults(suiteName: LiveActivityIntentKeys.suiteName) else { return }
         
         // Check for "Add Set" action
-        let addSetTimestamp = defaults.double(forKey: "liveActivityAddSetTimestamp")
+        let addSetTimestamp = defaults.double(forKey: LiveActivityIntentKeys.addSetTimestamp)
         if addSetTimestamp > lastAddSetTimestamp {
             lastAddSetTimestamp = addSetTimestamp
             handleAddSetFromLiveActivity()
         }
         
         // Check for "Toggle Pause" action
-        let togglePauseTimestamp = defaults.double(forKey: "liveActivityTogglePauseTimestamp")
+        let togglePauseTimestamp = defaults.double(forKey: LiveActivityIntentKeys.togglePauseTimestamp)
         if togglePauseTimestamp > lastTogglePauseTimestamp {
             lastTogglePauseTimestamp = togglePauseTimestamp
             handleTogglePauseFromLiveActivity()

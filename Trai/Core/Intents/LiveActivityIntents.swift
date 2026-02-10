@@ -13,7 +13,7 @@ import Foundation
 
 /// Constants for Live Activity intent communication via App Groups
 enum LiveActivityIntentKeys {
-    static let suiteName = "group.com.nadav.trai"
-    static let addSetTimestamp = "liveActivityAddSetTimestamp"
-    static let togglePauseTimestamp = "liveActivityTogglePauseTimestamp"
+    static let suiteName = SharedStorageKeys.AppGroup.suiteName
+    static let addSetTimestamp = SharedStorageKeys.AppGroup.liveActivityAddSetTimestamp
+    static let togglePauseTimestamp = SharedStorageKeys.AppGroup.liveActivityTogglePauseTimestamp
 }

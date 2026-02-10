@@ -9,13 +9,6 @@ import AppIntents
 import Foundation
 import WidgetKit
 
-// MARK: - Constants
-
-private enum AppGroupConstants {
-    static let suiteName = "group.com.nadav.trai"
-    static let pendingFoodLogsKey = "pendingFoodLogs"
-}
-
 // MARK: - Open URL Intent
 
 /// Intent to open a specific URL in the app
@@ -52,8 +45,8 @@ struct AddSetIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         // Use App Groups UserDefaults to signal the action
-        let defaults = UserDefaults(suiteName: AppGroupConstants.suiteName)
-        defaults?.set(Date().timeIntervalSince1970, forKey: "liveActivityAddSetTimestamp")
+        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
+        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityAddSetTimestamp)
         return .result()
     }
 }
@@ -65,8 +58,8 @@ struct TogglePauseIntent: LiveActivityIntent {
 
     func perform() async throws -> some IntentResult {
         // Use App Groups UserDefaults to signal the action
-        let defaults = UserDefaults(suiteName: AppGroupConstants.suiteName)
-        defaults?.set(Date().timeIntervalSince1970, forKey: "liveActivityTogglePauseTimestamp")
+        let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName)
+        defaults?.set(Date().timeIntervalSince1970, forKey: SharedStorageKeys.AppGroup.liveActivityTogglePauseTimestamp)
         return .result()
     }
 }
@@ -118,16 +111,6 @@ enum QuickFoodType: String, AppEnum, CaseIterable {
     }
 }
 
-// MARK: - Pending Food Log (shared with main app)
-
-struct PendingFoodLog: Codable {
-    let name: String
-    let calories: Int
-    let protein: Int
-    let loggedAt: Date
-    let mealType: String
-}
-
 // MARK: - Quick Food Logging Intent
 
 /// Intent for logging quick food items directly from widgets
@@ -157,13 +140,13 @@ struct LogQuickFoodIntent: AppIntent {
         )
 
         // Save to App Groups for main app to process
-        guard let defaults = UserDefaults(suiteName: AppGroupConstants.suiteName) else {
+        guard let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName) else {
             return .result()
         }
 
         // Load existing pending logs
         var pendingLogs: [PendingFoodLog] = []
-        if let data = defaults.data(forKey: AppGroupConstants.pendingFoodLogsKey),
+        if let data = defaults.data(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs),
            let existing = try? JSONDecoder().decode([PendingFoodLog].self, from: data) {
             pendingLogs = existing
         }
@@ -173,7 +156,7 @@ struct LogQuickFoodIntent: AppIntent {
 
         // Save back
         if let encoded = try? JSONEncoder().encode(pendingLogs) {
-            defaults.set(encoded, forKey: AppGroupConstants.pendingFoodLogsKey)
+            defaults.set(encoded, forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
         }
 
         // Reload widgets to show updated data
