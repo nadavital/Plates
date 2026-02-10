@@ -11,6 +11,7 @@ import SwiftData
 struct LogWeightSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
 
     @Query private var profiles: [UserProfile]
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
@@ -22,7 +23,6 @@ struct LogWeightSheet: View {
     @State private var notes = ""
     @State private var logDate = Date()
     @State private var hasInitialized = false
-    @State private var healthKitService = HealthKitService()
     @FocusState private var isWeightFocused: Bool
 
     private var profile: UserProfile? { profiles.first }
@@ -185,8 +185,8 @@ struct LogWeightSheet: View {
             // Sync to Apple Health if enabled
             if profile.syncWeightToHealthKit {
                 Task {
-                    try? await healthKitService.requestAuthorization()
-                    try? await healthKitService.saveWeight(weightKg, date: logDate)
+                    guard let healthKitService else { return }
+                    try? await healthKitService.saveWeightAuthorized(weightKg, date: logDate)
                 }
             }
         }

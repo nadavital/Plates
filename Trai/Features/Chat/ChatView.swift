@@ -40,8 +40,8 @@ struct ChatView: View {
     @Query var suggestionUsage: [SuggestionUsage]
 
     @Environment(\.modelContext) var modelContext
+    @Environment(HealthKitService.self) var healthKitService: HealthKitService?
     @State var geminiService = GeminiService()
-    @State var healthKitService = HealthKitService()
     @State var isLoading = false
     @State var currentActivity: String?
     @State var selectedImage: UIImage?

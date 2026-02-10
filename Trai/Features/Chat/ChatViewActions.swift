@@ -68,8 +68,8 @@ extension ChatView {
         if profile?.syncFoodToHealthKit == true {
             Task {
                 do {
-                    try await healthKitService.requestAuthorization()
-                    try await healthKitService.saveDietaryEnergy(Double(meal.calories), date: logDate)
+                    guard let healthKitService else { return }
+                    try await healthKitService.saveDietaryEnergyAuthorized(Double(meal.calories), date: logDate)
                     print("HealthKit: Saved \(meal.calories) calories for \(meal.name)")
                 } catch {
                     print("HealthKit: Failed to save dietary energy - \(error.localizedDescription)")

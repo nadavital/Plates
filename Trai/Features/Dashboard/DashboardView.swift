@@ -26,7 +26,7 @@ struct DashboardView: View {
     private var weightEntries: [WeightEntry]
 
     @Environment(\.modelContext) private var modelContext
-    @State private var healthKitService = HealthKitService()
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @State private var recoveryService = MuscleRecoveryService()
 
     // Custom reminders (fetched manually to avoid @Query freeze)
@@ -425,22 +425,18 @@ struct DashboardView: View {
     private func loadActivityData() async {
         guard isViewingToday else { return }
         isLoadingActivity = true
+        defer { isLoadingActivity = false }
+        guard let healthKitService else { return }
 
         do {
-            async let steps = healthKitService.fetchTodayStepCount()
-            async let calories = healthKitService.fetchTodayActiveEnergy()
-            async let exercise = healthKitService.fetchTodayExerciseMinutes()
-
-            let (fetchedSteps, fetchedCalories, fetchedExercise) = try await (steps, calories, exercise)
-            todaySteps = fetchedSteps
-            todayActiveCalories = fetchedCalories
-            todayExerciseMinutes = fetchedExercise
+            let summary = try await healthKitService.fetchTodayActivitySummaryAuthorized()
+            todaySteps = summary.steps
+            todayActiveCalories = summary.activeCalories
+            todayExerciseMinutes = summary.exerciseMinutes
         } catch {
             // Silently fail - user may not have granted HealthKit permissions
             print("Failed to load activity data: \(error)")
         }
-
-        isLoadingActivity = false
     }
 
     private func refreshHealthData() async {

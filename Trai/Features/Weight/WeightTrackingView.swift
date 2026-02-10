@@ -16,8 +16,8 @@ struct WeightTrackingView: View {
     @Query private var profiles: [UserProfile]
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @State private var showingAddWeight = false
-    @State private var healthKitService = HealthKitService()
     @State private var selectedTimeRange: TimeRange = .month
 
     enum TimeRange: String, CaseIterable, Identifiable {
@@ -111,11 +111,11 @@ struct WeightTrackingView: View {
     }
 
     private func syncHealthKit() async {
-        do {
-            try await healthKitService.requestAuthorization()
+        guard let healthKitService else { return }
 
+        do {
             let threeMonthsAgo = Calendar.current.date(byAdding: .month, value: -3, to: Date()) ?? Date()
-            let healthKitEntries = try await healthKitService.fetchWeightEntries(from: threeMonthsAgo, to: Date())
+            let healthKitEntries = try await healthKitService.fetchWeightEntriesAuthorized(from: threeMonthsAgo, to: Date())
 
             let existingIDs = Set(weightEntries.compactMap { $0.healthKitSampleID })
             let newEntries = healthKitEntries.filter { !existingIDs.contains($0.healthKitSampleID ?? "") }

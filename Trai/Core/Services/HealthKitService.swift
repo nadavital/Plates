@@ -13,6 +13,12 @@ import HealthKit
 final class HealthKitService {
     private let healthStore = HKHealthStore()
 
+    struct ActivitySummary: Sendable {
+        let steps: Int
+        let activeCalories: Int
+        let exerciseMinutes: Int
+    }
+
     var isAuthorized = false
     var authorizationError: String?
 
@@ -66,8 +72,89 @@ final class HealthKitService {
             HKObjectType.workoutType()
         ]
 
-        try await healthStore.requestAuthorization(toShare: writeTypes, read: readTypes)
-        isAuthorized = true
+        do {
+            try await healthStore.requestAuthorization(toShare: writeTypes, read: readTypes)
+            isAuthorized = true
+            authorizationError = nil
+        } catch {
+            isAuthorized = false
+            authorizationError = error.localizedDescription
+            throw error
+        }
+    }
+
+    func ensureAuthorization() async throws {
+        guard !isAuthorized else { return }
+        try await requestAuthorization()
+    }
+
+    func runAuthorized<T>(_ operation: () async throws -> T) async throws -> T {
+        try await ensureAuthorization()
+        return try await operation()
+    }
+
+    // MARK: - App Policy Helpers
+
+    func fetchTodayActivitySummaryAuthorized() async throws -> ActivitySummary {
+        try await runAuthorized {
+            async let steps = fetchTodayStepCount()
+            async let calories = fetchTodayActiveEnergy()
+            async let exercise = fetchTodayExerciseMinutes()
+
+            let (fetchedSteps, fetchedCalories, fetchedExercise) = try await (steps, calories, exercise)
+            return ActivitySummary(
+                steps: fetchedSteps,
+                activeCalories: fetchedCalories,
+                exerciseMinutes: fetchedExercise
+            )
+        }
+    }
+
+    func fetchWeightEntriesAuthorized(from startDate: Date, to endDate: Date) async throws -> [WeightEntry] {
+        try await runAuthorized {
+            try await fetchWeightEntries(from: startDate, to: endDate)
+        }
+    }
+
+    func saveWeightAuthorized(_ weightKg: Double, date: Date) async throws {
+        try await runAuthorized {
+            try await saveWeight(weightKg, date: date)
+        }
+    }
+
+    func fetchWorkoutsAuthorized(from startDate: Date, to endDate: Date) async throws -> [WorkoutSession] {
+        try await runAuthorized {
+            try await fetchWorkouts(from: startDate, to: endDate)
+        }
+    }
+
+    func saveDietaryEnergyAuthorized(_ calories: Double, date: Date) async throws {
+        try await runAuthorized {
+            try await saveDietaryEnergy(calories, date: date)
+        }
+    }
+
+    func bestOverlappingWorkout(
+        for workout: LiveWorkout,
+        from healthKitWorkouts: [WorkoutSession],
+        searchBufferMinutes: Int = 0
+    ) -> WorkoutSession? {
+        let buffer = Double(searchBufferMinutes) * 60
+        let ourStart = workout.startedAt.addingTimeInterval(-buffer)
+        let ourEnd = (workout.completedAt ?? Date()).addingTimeInterval(buffer)
+
+        let overlapping = healthKitWorkouts.filter { hkWorkout in
+            let hkStart = hkWorkout.loggedAt
+            let hkEnd = healthKitEndDate(for: hkWorkout)
+            return hkStart <= ourEnd && hkEnd >= ourStart
+        }
+
+        let strengthWorkouts = overlapping.filter {
+            $0.healthKitWorkoutType?.lowercased().contains("strength") == true ||
+            $0.healthKitWorkoutType?.lowercased().contains("weight") == true
+        }
+
+        return strengthWorkouts.first ?? overlapping.first
     }
 
     // MARK: - Weight
@@ -601,5 +688,12 @@ final class HealthKitService {
             return true
         }
         return false
+    }
+
+    private func healthKitEndDate(for workout: WorkoutSession) -> Date {
+        guard let duration = workout.durationMinutes, duration > 0 else {
+            return workout.loggedAt.addingTimeInterval(60 * 60)
+        }
+        return workout.loggedAt.addingTimeInterval(duration * 60)
     }
 }

@@ -122,7 +122,7 @@ final class LiveWorkoutViewModel {
 
     private var modelContext: ModelContext?
     private var templateService = WorkoutTemplateService()
-    private var healthKitService: HealthKitService?
+    private(set) var healthKitService: HealthKitService?
     private var usesMetricWeightPreference = true
 
     // MARK: - Exercise Suggestion Model
@@ -389,9 +389,7 @@ final class LiveWorkoutViewModel {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                if !service.isAuthorized {
-                    try await service.requestAuthorization()
-                }
+                try await service.ensureAuthorization()
 
                 watchSetupErrorMessage = nil
                 service.startHeartRateStreaming(from: workout.startedAt)

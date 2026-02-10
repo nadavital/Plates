@@ -30,12 +30,12 @@ struct WorkoutsView: View {
     // MARK: - Environment
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
 
     // MARK: - Services
 
     @State private var recoveryService = MuscleRecoveryService()
     @State private var templateService = WorkoutTemplateService()
-    @State private var healthKitService = HealthKitService()
 
     // MARK: - Computed State
 
@@ -269,11 +269,11 @@ struct WorkoutsView: View {
     }
 
     private func syncHealthKit() async {
-        do {
-            try await healthKitService.requestAuthorization()
+        guard let healthKitService else { return }
 
+        do {
             let oneMonthAgo = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
-            let healthKitWorkouts = try await healthKitService.fetchWorkouts(from: oneMonthAgo, to: Date())
+            let healthKitWorkouts = try await healthKitService.fetchWorkoutsAuthorized(from: oneMonthAgo, to: Date())
 
             // Filter out already imported workouts
             let existingIDs = Set(allWorkouts.compactMap { $0.healthKitWorkoutID })
@@ -288,14 +288,17 @@ struct WorkoutsView: View {
             }
 
             // Retroactively merge past workouts that weren't merged at completion time
-            await mergeUnmergedWorkouts(healthKitWorkouts: healthKitWorkouts)
+            await mergeUnmergedWorkouts(healthKitWorkouts: healthKitWorkouts, healthKitService: healthKitService)
         } catch {
             // Handle error silently
         }
     }
 
     /// Retroactively merge completed in-app workouts with HealthKit data
-    private func mergeUnmergedWorkouts(healthKitWorkouts: [WorkoutSession]) async {
+    private func mergeUnmergedWorkouts(
+        healthKitWorkouts: [WorkoutSession],
+        healthKitService: HealthKitService
+    ) async {
         // Find completed workouts without HealthKit merge
         let unmergedWorkouts = completedLiveWorkouts.filter { $0.mergedHealthKitWorkoutID == nil }
 
@@ -303,8 +306,11 @@ struct WorkoutsView: View {
 
         var merged = false
         for workout in unmergedWorkouts {
-            // Find overlapping HealthKit workout using same logic as LiveWorkoutViewModel
-            if let match = findBestOverlappingWorkout(for: workout, from: healthKitWorkouts) {
+            if let match = healthKitService.bestOverlappingWorkout(
+                for: workout,
+                from: healthKitWorkouts,
+                searchBufferMinutes: 15
+            ) {
                 workout.mergedHealthKitWorkoutID = match.healthKitWorkoutID
                 if let calories = match.caloriesBurned {
                     workout.healthKitCalories = Double(calories)
@@ -319,41 +325,6 @@ struct WorkoutsView: View {
         if merged {
             try? modelContext.save()
         }
-    }
-
-    /// Find the best overlapping workout from HealthKit results for a given LiveWorkout
-    private func findBestOverlappingWorkout(for workout: LiveWorkout, from healthKitWorkouts: [WorkoutSession]) -> WorkoutSession? {
-        guard let completedAt = workout.completedAt else { return nil }
-
-        let ourStart = workout.startedAt
-        let ourEnd = completedAt
-
-        // Filter to only overlapping workouts (with 15 min buffer)
-        let searchStart = ourStart.addingTimeInterval(-15 * 60)
-        let searchEnd = ourEnd.addingTimeInterval(15 * 60)
-
-        let overlapping = healthKitWorkouts.filter { hkWorkout in
-            let hkStart = hkWorkout.loggedAt
-            let hkEnd = calculateEndDate(for: hkWorkout) ?? hkStart
-
-            // Check for any overlap within search window
-            return hkStart <= searchEnd && hkEnd >= searchStart
-        }
-
-        // Prefer strength training workouts
-        let strengthWorkouts = overlapping.filter {
-            $0.healthKitWorkoutType?.lowercased().contains("strength") == true ||
-            $0.healthKitWorkoutType?.lowercased().contains("weight") == true
-        }
-
-        return strengthWorkouts.first ?? overlapping.first
-    }
-
-    private func calculateEndDate(for workout: WorkoutSession) -> Date? {
-        guard let duration = workout.durationMinutes, duration > 0 else {
-            return workout.loggedAt.addingTimeInterval(60 * 60)
-        }
-        return workout.loggedAt.addingTimeInterval(duration * 60)
     }
 }
 
