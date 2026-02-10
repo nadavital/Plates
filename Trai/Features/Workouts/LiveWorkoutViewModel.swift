@@ -55,6 +55,7 @@ final class LiveWorkoutViewModel {
 
     // Cache of personal records (all-time max weight) for exercises
     var personalRecords: [String: ExerciseHistory] = [:]
+    var performanceSnapshots: [String: ExercisePerformanceSnapshot] = [:]
 
     // PRs achieved during this workout (exercise name -> PR details)
     var achievedPRs: [String: PRValue] = [:]
@@ -121,7 +122,7 @@ final class LiveWorkoutViewModel {
     }
 
     private var modelContext: ModelContext?
-    private var templateService = WorkoutTemplateService()
+    private var performanceService = ExercisePerformanceService()
     private(set) var healthKitService: HealthKitService?
     private var usesMetricWeightPreference = true
 
@@ -502,13 +503,8 @@ final class LiveWorkoutViewModel {
 
     /// Load last performances for suggested exercises
     private func loadSuggestionPerformances() {
-        guard let modelContext else { return }
-
         for suggestion in exerciseSuggestions {
-            if let lastPerformance = templateService.getLastPerformance(
-                exerciseName: suggestion.exerciseName,
-                modelContext: modelContext
-            ) {
+            if let lastPerformance = getLastPerformance(for: suggestion.exerciseName) {
                 lastPerformances[suggestion.exerciseName] = lastPerformance
             }
         }
@@ -518,74 +514,56 @@ final class LiveWorkoutViewModel {
 
     /// Load last performances for all exercises in the workout
     func loadLastPerformances() {
-        guard let modelContext else { return }
-
         for entry in entries {
-            if let lastPerformance = templateService.getLastPerformance(
-                exerciseName: entry.exerciseName,
-                modelContext: modelContext
-            ) {
-                lastPerformances[entry.exerciseName] = lastPerformance
-            }
-            // Also load PR
-            if let pr = templateService.getPersonalRecord(
-                exerciseName: entry.exerciseName,
-                modelContext: modelContext
-            ) {
-                personalRecords[entry.exerciseName] = pr
-            }
+            _ = getPerformanceSnapshot(for: entry.exerciseName)
         }
     }
 
     /// Get last performance for a specific exercise
     func getLastPerformance(for exerciseName: String) -> ExerciseHistory? {
-        // Check cache first
-        if let cached = lastPerformances[exerciseName] {
-            return cached
-        }
-
-        // Fetch if not cached
-        guard let modelContext else { return nil }
-        let performance = templateService.getLastPerformance(
-            exerciseName: exerciseName,
-            modelContext: modelContext
-        )
-        if let performance {
-            lastPerformances[exerciseName] = performance
-        }
-        return performance
+        getPerformanceSnapshot(for: exerciseName)?.lastSession
     }
 
     /// Get personal record (all-time max weight) for a specific exercise
     func getPersonalRecord(for exerciseName: String) -> ExerciseHistory? {
-        // Check cache first
-        if let cached = personalRecords[exerciseName] {
+        getPerformanceSnapshot(for: exerciseName)?.weightPR
+    }
+
+    private func cachePerformanceSnapshot(_ snapshot: ExercisePerformanceSnapshot, for exerciseName: String) {
+        performanceSnapshots[exerciseName] = snapshot
+        if let lastSession = snapshot.lastSession {
+            lastPerformances[exerciseName] = lastSession
+        } else {
+            lastPerformances.removeValue(forKey: exerciseName)
+        }
+        if let weightPR = snapshot.weightPR {
+            personalRecords[exerciseName] = weightPR
+        } else {
+            personalRecords.removeValue(forKey: exerciseName)
+        }
+    }
+
+    private func clearPerformanceCache(for exerciseName: String) {
+        performanceSnapshots.removeValue(forKey: exerciseName)
+        lastPerformances.removeValue(forKey: exerciseName)
+        personalRecords.removeValue(forKey: exerciseName)
+    }
+
+    private func getPerformanceSnapshot(for exerciseName: String) -> ExercisePerformanceSnapshot? {
+        if let cached = performanceSnapshots[exerciseName] {
             return cached
         }
-
-        // Fetch if not cached
         guard let modelContext else { return nil }
-        let pr = templateService.getPersonalRecord(
-            exerciseName: exerciseName,
-            modelContext: modelContext
-        )
-        if let pr {
-            personalRecords[exerciseName] = pr
+        guard let snapshot = performanceService.snapshot(for: exerciseName, modelContext: modelContext) else {
+            clearPerformanceCache(for: exerciseName)
+            return nil
         }
-        return pr
+        cachePerformanceSnapshot(snapshot, for: exerciseName)
+        return snapshot
     }
 
     /// Check if current workout entry exceeds the cached PR (live checking while editing)
     func isNewPR(for entry: LiveWorkoutEntry) -> PRType? {
-        guard let cachedPR = personalRecords[entry.exerciseName] else {
-            // First time doing this exercise - consider it a PR if there's weight
-            let bestSet = entry.sets.filter { !$0.isWarmup && $0.reps > 0 }.max { $0.volume < $1.volume }
-            if let best = bestSet, best.weightKg > 0 {
-                return .weight
-            }
-            return nil
-        }
-
         // Get best set from current entry
         let completedSets = entry.sets.filter { !$0.isWarmup && $0.reps > 0 }
         guard !completedSets.isEmpty else { return nil }
@@ -593,17 +571,26 @@ final class LiveWorkoutViewModel {
         let currentBestWeight = completedSets.map(\.weightKg).max() ?? 0
         let currentTotalVolume = completedSets.reduce(0) { $0 + $1.volume }
         let currentBestReps = completedSets.map(\.reps).max() ?? 0
+        let snapshot = getPerformanceSnapshot(for: entry.exerciseName)
+        let previousWeightPR = snapshot?.weightPR?.bestSetWeightKg ?? 0
+        let previousVolumePR = snapshot?.volumePR?.totalVolume ?? 0
+        let previousRepsPR = snapshot?.repsPR?.bestSetReps ?? 0
+
+        // First time doing this exercise - consider it a PR if there's weight.
+        if snapshot == nil, currentBestWeight > 0 {
+            return .weight
+        }
 
         // Check for weight PR
-        if currentBestWeight > cachedPR.bestSetWeightKg {
+        if currentBestWeight > previousWeightPR {
             return .weight
         }
         // Check for volume PR
-        if currentTotalVolume > cachedPR.totalVolume {
+        if currentTotalVolume > previousVolumePR {
             return .volume
         }
         // Check for rep PR (at same or higher weight)
-        if currentBestReps > cachedPR.bestSetReps && currentBestWeight >= cachedPR.bestSetWeightKg {
+        if currentBestReps > previousRepsPR && currentBestWeight >= previousWeightPR {
             return .reps
         }
 
@@ -1037,48 +1024,42 @@ final class LiveWorkoutViewModel {
             let history = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? Date())
             modelContext?.insert(history)
 
-            // Check for PRs
-            if let previousPR = personalRecords[entry.exerciseName] {
-                // Weight PR
-                if history.bestSetWeightKg > previousPR.bestSetWeightKg {
-                    achievedPRs[entry.exerciseName] = PRValue(
-                        type: .weight,
-                        exerciseName: entry.exerciseName,
-                        newValue: history.bestSetWeightKg,
-                        previousValue: previousPR.bestSetWeightKg,
-                        isFirstTime: false
-                    )
-                }
-                // Volume PR (only if no weight PR already detected)
-                else if history.totalVolume > previousPR.totalVolume,
-                        achievedPRs[entry.exerciseName] == nil {
-                    achievedPRs[entry.exerciseName] = PRValue(
-                        type: .volume,
-                        exerciseName: entry.exerciseName,
-                        newValue: history.totalVolume,
-                        previousValue: previousPR.totalVolume,
-                        isFirstTime: false
-                    )
-                }
-                // Rep PR (only if nothing else detected)
-                else if history.bestSetReps > previousPR.bestSetReps,
-                        achievedPRs[entry.exerciseName] == nil {
-                    achievedPRs[entry.exerciseName] = PRValue(
-                        type: .reps,
-                        exerciseName: entry.exerciseName,
-                        newValue: Double(history.bestSetReps),
-                        previousValue: Double(previousPR.bestSetReps),
-                        isFirstTime: false
-                    )
-                }
-            } else if history.bestSetWeightKg > 0 {
-                // First time doing this exercise - it's a PR by default
+            // Check for PRs against canonical per-metric records.
+            let previousSnapshot = getPerformanceSnapshot(for: entry.exerciseName)
+            let previousWeight = previousSnapshot?.weightPR?.bestSetWeightKg ?? 0
+            let previousVolume = previousSnapshot?.volumePR?.totalVolume ?? 0
+            let previousReps = Double(previousSnapshot?.repsPR?.bestSetReps ?? 0)
+            let hasHistory = (previousSnapshot?.totalSessions ?? 0) > 0
+
+            if history.bestSetWeightKg > previousWeight {
                 achievedPRs[entry.exerciseName] = PRValue(
                     type: .weight,
                     exerciseName: entry.exerciseName,
                     newValue: history.bestSetWeightKg,
-                    previousValue: 0,
-                    isFirstTime: true
+                    previousValue: previousWeight,
+                    isFirstTime: !hasHistory || previousWeight <= 0
+                )
+            }
+            // Volume PR (only if no weight PR already detected)
+            else if history.totalVolume > previousVolume,
+                    achievedPRs[entry.exerciseName] == nil {
+                achievedPRs[entry.exerciseName] = PRValue(
+                    type: .volume,
+                    exerciseName: entry.exerciseName,
+                    newValue: history.totalVolume,
+                    previousValue: previousVolume,
+                    isFirstTime: false
+                )
+            }
+            // Rep PR (only if nothing else detected)
+            else if Double(history.bestSetReps) > previousReps,
+                    achievedPRs[entry.exerciseName] == nil {
+                achievedPRs[entry.exerciseName] = PRValue(
+                    type: .reps,
+                    exerciseName: entry.exerciseName,
+                    newValue: Double(history.bestSetReps),
+                    previousValue: previousReps,
+                    isFirstTime: false
                 )
             }
         }

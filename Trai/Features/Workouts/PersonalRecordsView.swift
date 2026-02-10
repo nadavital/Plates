@@ -51,26 +51,10 @@ struct PersonalRecordsView: View {
             let exercise = exercises.first { $0.name == name }
             let muscleGroup = exercise?.targetMuscleGroup
 
-            // Find best values across all history
-            let maxWeight = history.max(by: { $0.bestSetWeightKg < $1.bestSetWeightKg })
-            let maxReps = history.max(by: { $0.bestSetReps < $1.bestSetReps })
-            let maxVolume = history.max(by: { $0.totalVolume < $1.totalVolume })
-            let max1RM = history.compactMap { $0.estimatedOneRepMax }.max()
-
-            return ExercisePR(
+            return ExercisePR.from(
                 exerciseName: name,
-                muscleGroup: muscleGroup,
-                maxWeightKg: maxWeight?.bestSetWeightKg ?? 0,
-                maxWeightDate: maxWeight?.performedAt,
-                maxWeightReps: maxWeight?.bestSetReps ?? 0,
-                maxReps: maxReps?.bestSetReps ?? 0,
-                maxRepsDate: maxReps?.performedAt,
-                maxRepsWeight: maxReps?.bestSetWeightKg ?? 0,
-                maxVolume: maxVolume?.totalVolume ?? 0,
-                maxVolumeDate: maxVolume?.performedAt,
-                estimated1RM: max1RM,
-                totalSessions: history.count,
-                lastPerformed: history.first?.performedAt ?? Date()
+                history: history,
+                muscleGroup: muscleGroup
             )
         }
         .sorted { $0.exerciseName < $1.exerciseName }
@@ -312,27 +296,27 @@ struct ExercisePR: Identifiable {
 
     /// Create an ExercisePR from exercise history entries
     static func from(exerciseName: String, history: [ExerciseHistory], muscleGroup: Exercise.MuscleGroup? = nil) -> ExercisePR? {
-        guard !history.isEmpty else { return nil }
+        guard let snapshot = ExercisePerformanceService.snapshot(exerciseName: exerciseName, history: history) else {
+            return nil
+        }
+        return from(snapshot: snapshot, muscleGroup: muscleGroup)
+    }
 
-        let maxWeight = history.max(by: { $0.bestSetWeightKg < $1.bestSetWeightKg })
-        let maxReps = history.max(by: { $0.bestSetReps < $1.bestSetReps })
-        let maxVolume = history.max(by: { $0.totalVolume < $1.totalVolume })
-        let max1RM = history.compactMap { $0.estimatedOneRepMax }.max()
-
-        return ExercisePR(
-            exerciseName: exerciseName,
+    static func from(snapshot: ExercisePerformanceSnapshot, muscleGroup: Exercise.MuscleGroup? = nil) -> ExercisePR {
+        ExercisePR(
+            exerciseName: snapshot.exerciseName,
             muscleGroup: muscleGroup,
-            maxWeightKg: maxWeight?.bestSetWeightKg ?? 0,
-            maxWeightDate: maxWeight?.performedAt,
-            maxWeightReps: maxWeight?.bestSetReps ?? 0,
-            maxReps: maxReps?.bestSetReps ?? 0,
-            maxRepsDate: maxReps?.performedAt,
-            maxRepsWeight: maxReps?.bestSetWeightKg ?? 0,
-            maxVolume: maxVolume?.totalVolume ?? 0,
-            maxVolumeDate: maxVolume?.performedAt,
-            estimated1RM: max1RM,
-            totalSessions: history.count,
-            lastPerformed: history.first?.performedAt ?? Date()
+            maxWeightKg: snapshot.weightPR?.bestSetWeightKg ?? 0,
+            maxWeightDate: snapshot.weightPR?.performedAt,
+            maxWeightReps: snapshot.weightPR?.bestSetReps ?? 0,
+            maxReps: snapshot.repsPR?.bestSetReps ?? 0,
+            maxRepsDate: snapshot.repsPR?.performedAt,
+            maxRepsWeight: snapshot.repsPR?.bestSetWeightKg ?? 0,
+            maxVolume: snapshot.volumePR?.totalVolume ?? 0,
+            maxVolumeDate: snapshot.volumePR?.performedAt,
+            estimated1RM: snapshot.estimatedOneRepMax,
+            totalSessions: snapshot.totalSessions,
+            lastPerformed: snapshot.lastSession?.performedAt ?? Date()
         )
     }
 }
@@ -824,6 +808,10 @@ private struct EditHistorySheet: View {
     private func saveChanges() {
         // Round weight to nearest 0.5 kg
         history.bestSetWeightKg = (weightKg * 2).rounded() / 2
+        history.bestSetWeightLbs = WeightUtility.round(
+            history.bestSetWeightKg * WeightUtility.kgToLbs,
+            unit: .lbs
+        )
         history.bestSetReps = reps
         history.performedAt = date
 
@@ -832,6 +820,12 @@ private struct EditHistorySheet: View {
         let sets = max(history.totalSets, 1)
         history.totalVolume = history.bestSetWeightKg * Double(reps) * Double(sets)
         history.totalReps = reps * sets
+        history.repPattern = Array(repeating: "\(reps)", count: sets).joined(separator: ",")
+        let roundedWeightKg = WeightUtility.round(history.bestSetWeightKg, unit: .kg)
+        history.weightPattern = Array(
+            repeating: String(format: "%.1f", roundedWeightKg),
+            count: sets
+        ).joined(separator: ",")
 
         // Recalculate estimated 1RM
         if reps > 0 && reps <= 12 {

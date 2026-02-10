@@ -208,3 +208,145 @@ extension ExerciseHistory {
         }
     }
 }
+
+// MARK: - Performance Snapshot
+
+struct ExercisePerformanceSnapshot {
+    let exerciseName: String
+    let lastSession: ExerciseHistory?
+    let weightPR: ExerciseHistory?
+    let repsPR: ExerciseHistory?
+    let volumePR: ExerciseHistory?
+    let estimatedOneRepMax: Double?
+    let totalSessions: Int
+}
+
+final class ExercisePerformanceService {
+    /// Fetch exercise history sorted by most-recent session first.
+    func history(
+        for exerciseName: String,
+        limit: Int? = nil,
+        modelContext: ModelContext
+    ) -> [ExerciseHistory] {
+        var descriptor = FetchDescriptor<ExerciseHistory>(
+            predicate: #Predicate { $0.exerciseName == exerciseName },
+            sortBy: [SortDescriptor(\.performedAt, order: .reverse)]
+        )
+        if let limit {
+            descriptor.fetchLimit = limit
+        }
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    func snapshot(
+        for exerciseName: String,
+        modelContext: ModelContext
+    ) -> ExercisePerformanceSnapshot? {
+        let history = history(for: exerciseName, modelContext: modelContext)
+        return Self.snapshot(exerciseName: exerciseName, history: history)
+    }
+
+    static func snapshots(from history: [ExerciseHistory]) -> [String: ExercisePerformanceSnapshot] {
+        let grouped = Dictionary(grouping: history, by: { $0.exerciseName })
+        return grouped.reduce(into: [:]) { result, item in
+            let (exerciseName, exerciseHistory) = item
+            if let snapshot = snapshot(exerciseName: exerciseName, history: exerciseHistory) {
+                result[exerciseName] = snapshot
+            }
+        }
+    }
+
+    static func snapshot(
+        exerciseName: String,
+        history: [ExerciseHistory]
+    ) -> ExercisePerformanceSnapshot? {
+        guard !history.isEmpty else { return nil }
+
+        return ExercisePerformanceSnapshot(
+            exerciseName: exerciseName,
+            lastSession: mostRecentRecord(in: history),
+            weightPR: bestWeightRecord(in: history),
+            repsPR: bestRepsRecord(in: history),
+            volumePR: bestVolumeRecord(in: history),
+            estimatedOneRepMax: history.compactMap(\.estimatedOneRepMax).max(),
+            totalSessions: history.count
+        )
+    }
+
+    static func bestWeightRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.bestSetWeightKg > 0 }
+            .max(by: isWeightRecordWorse(_:_:))
+    }
+
+    static func bestRepsRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.bestSetReps > 0 }
+            .max(by: isRepsRecordWorse(_:_:))
+    }
+
+    static func bestVolumeRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history
+            .filter { $0.totalVolume > 0 }
+            .max(by: isVolumeRecordWorse(_:_:))
+    }
+
+    private static func mostRecentRecord(in history: [ExerciseHistory]) -> ExerciseHistory? {
+        history.max(by: isRecentRecordWorse(_:_:))
+    }
+
+    private static func isWeightRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.bestSetWeightKg != rhs.bestSetWeightKg {
+            return lhs.bestSetWeightKg < rhs.bestSetWeightKg
+        }
+        if lhs.bestSetReps != rhs.bestSetReps {
+            return lhs.bestSetReps < rhs.bestSetReps
+        }
+        if lhs.totalVolume != rhs.totalVolume {
+            return lhs.totalVolume < rhs.totalVolume
+        }
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func isRepsRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.bestSetReps != rhs.bestSetReps {
+            return lhs.bestSetReps < rhs.bestSetReps
+        }
+        if lhs.bestSetWeightKg != rhs.bestSetWeightKg {
+            return lhs.bestSetWeightKg < rhs.bestSetWeightKg
+        }
+        if lhs.totalVolume != rhs.totalVolume {
+            return lhs.totalVolume < rhs.totalVolume
+        }
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func isVolumeRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.totalVolume != rhs.totalVolume {
+            return lhs.totalVolume < rhs.totalVolume
+        }
+        if lhs.bestSetWeightKg != rhs.bestSetWeightKg {
+            return lhs.bestSetWeightKg < rhs.bestSetWeightKg
+        }
+        if lhs.bestSetReps != rhs.bestSetReps {
+            return lhs.bestSetReps < rhs.bestSetReps
+        }
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func isRecentRecordWorse(_ lhs: ExerciseHistory, _ rhs: ExerciseHistory) -> Bool {
+        if lhs.performedAt != rhs.performedAt {
+            return lhs.performedAt < rhs.performedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+}

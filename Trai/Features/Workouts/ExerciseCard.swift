@@ -32,12 +32,11 @@ struct ExerciseCard: View {
         guard let last = lastPerformance,
               last.bestSetWeightKg > 0 else { return nil }
 
-        let sets = last.totalSets
         let reps = last.bestSetReps
         let unit = WeightUnit(usesMetric: usesMetricWeight)
         let weight = WeightUtility.displayInt(last.bestSetWeightKg, displayUnit: unit)
 
-        return "Last: \(sets)×\(reps) @ \(weight) \(weightUnit)"
+        return "Last: \(weight) \(weightUnit) \u{00D7} \(reps)"
     }
 
     private var prDisplay: String? {

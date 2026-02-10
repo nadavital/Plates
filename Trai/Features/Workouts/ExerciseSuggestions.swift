@@ -45,7 +45,7 @@ struct UpNextSuggestionCard: View {
                             let displayWeight = WeightUtility.displayInt(last.bestSetWeightKg, displayUnit: WeightUnit(usesMetric: usesMetricWeight))
                             Text("•")
                                 .foregroundStyle(.tertiary)
-                            Text("Last: \(last.totalSets)×\(last.bestSetReps) @ \(displayWeight) \(weightUnit)")
+                            Text("Last: \(displayWeight) \(weightUnit) × \(last.bestSetReps)")
                                 .font(.caption)
                                 .foregroundStyle(.blue)
                         }

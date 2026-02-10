@@ -10,6 +10,7 @@ import SwiftData
 
 @MainActor @Observable
 final class WorkoutTemplateService {
+    private let performanceService = ExercisePerformanceService()
 
     // MARK: - Progression Suggestion
 
@@ -84,12 +85,11 @@ final class WorkoutTemplateService {
         exerciseName: String,
         modelContext: ModelContext
     ) -> ExerciseHistory? {
-        let descriptor = FetchDescriptor<ExerciseHistory>(
-            predicate: #Predicate { $0.exerciseName == exerciseName },
-            sortBy: [SortDescriptor(\.performedAt, order: .reverse)]
-        )
-
-        return try? modelContext.fetch(descriptor).first
+        performanceService.history(
+            for: exerciseName,
+            limit: 1,
+            modelContext: modelContext
+        ).first
     }
 
     /// Get multiple past performances for trend analysis
@@ -98,13 +98,11 @@ final class WorkoutTemplateService {
         limit: Int = 5,
         modelContext: ModelContext
     ) -> [ExerciseHistory] {
-        var descriptor = FetchDescriptor<ExerciseHistory>(
-            predicate: #Predicate { $0.exerciseName == exerciseName },
-            sortBy: [SortDescriptor(\.performedAt, order: .reverse)]
+        performanceService.history(
+            for: exerciseName,
+            limit: limit,
+            modelContext: modelContext
         )
-        descriptor.fetchLimit = limit
-
-        return (try? modelContext.fetch(descriptor)) ?? []
     }
 
     /// Get personal record (all-time max weight) for an exercise
@@ -112,12 +110,10 @@ final class WorkoutTemplateService {
         exerciseName: String,
         modelContext: ModelContext
     ) -> ExerciseHistory? {
-        let descriptor = FetchDescriptor<ExerciseHistory>(
-            predicate: #Predicate { $0.exerciseName == exerciseName },
-            sortBy: [SortDescriptor(\.bestSetWeightKg, order: .reverse)]
-        )
-
-        return try? modelContext.fetch(descriptor).first
+        performanceService.snapshot(
+            for: exerciseName,
+            modelContext: modelContext
+        )?.weightPR
     }
 
     // MARK: - Progressive Overload
