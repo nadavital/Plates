@@ -30,6 +30,8 @@ enum GeminiFunctionDeclarations {
             getActivitySummary,
             saveMemory,
             deleteMemory,
+            saveShortTermContext,
+            clearShortTermContext,
             createReminder
         ]
     }
@@ -519,6 +521,72 @@ enum GeminiFunctionDeclarations {
                     ]
                 ],
                 "required": ["memory_content"]
+            ]
+        ]
+    }
+
+    /// Save temporary short-term context that should expire automatically
+    static var saveShortTermContext: [String: Any] {
+        [
+            "name": "save_short_term_context",
+            "description": "Save temporary context that matters for the next day or two but should not become long-term memory. Use this for short-lived issues like pain during a workout, poor sleep last night, temporary schedule constraints, travel day constraints, or acute fatigue.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "content": [
+                        "type": "string",
+                        "description": "The temporary context to capture (e.g., 'Left shoulder hurt during overhead press')."
+                    ],
+                    "title": [
+                        "type": "string",
+                        "description": "Short title for this context signal."
+                    ],
+                    "domain": [
+                        "type": "string",
+                        "description": "Primary domain for this context.",
+                        "enum": ["recovery", "pain", "readiness", "schedule", "nutrition", "sleep", "stress", "general"]
+                    ],
+                    "severity": [
+                        "type": "number",
+                        "description": "Severity score from 0.0 to 1.0."
+                    ],
+                    "confidence": [
+                        "type": "number",
+                        "description": "Confidence score from 0.0 to 1.0."
+                    ],
+                    "hours_to_live": [
+                        "type": "number",
+                        "description": "How long this context should remain active before expiring automatically."
+                    ]
+                ],
+                "required": ["content"]
+            ]
+        ]
+    }
+
+    /// Clear temporary context when it is no longer relevant
+    static var clearShortTermContext: [String: Any] {
+        [
+            "name": "clear_short_term_context",
+            "description": "Resolve or clear temporary short-term context signals when they are no longer relevant (for example pain has resolved or schedule constraint ended).",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "domain": [
+                        "type": "string",
+                        "description": "Optional domain to clear",
+                        "enum": ["recovery", "pain", "readiness", "schedule", "nutrition", "sleep", "stress", "general"]
+                    ],
+                    "content_match": [
+                        "type": "string",
+                        "description": "Optional partial text to match when clearing specific temporary context."
+                    ],
+                    "reason": [
+                        "type": "string",
+                        "description": "Optional reason for clearing this context."
+                    ]
+                ],
+                "required": []
             ]
         ]
     }

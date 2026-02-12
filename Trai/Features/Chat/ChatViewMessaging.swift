@@ -32,6 +32,7 @@ extension ChatView {
         lastActivityTimestamp = Date().timeIntervalSince1970
         isTemporarySession = false
         temporaryMessages = []
+        pulseHandoffContext = ""
         if !silent {
             HapticManager.lightTap()
         }
@@ -45,12 +46,14 @@ extension ChatView {
             temporaryMessages = []
             isTemporarySession = true
         }
+        pulseHandoffContext = ""
     }
 
     func switchToSession(_ sessionId: UUID) {
         currentSessionIdString = sessionId.uuidString
         isTemporarySession = false
         temporaryMessages = []
+        pulseHandoffContext = ""
         HapticManager.lightTap()
     }
 
@@ -101,6 +104,10 @@ extension ChatView {
             return "Remembering..."
         case "delete_memory":
             return "Updating memory..."
+        case "save_short_term_context":
+            return "Saving context..."
+        case "clear_short_term_context":
+            return "Clearing context..."
         case "create_reminder":
             return "Creating reminder..."
         default:
@@ -171,6 +178,11 @@ extension ChatView {
         var lastStreamRenderAt = Date.distantPast
 
         do {
+            let handoffContext = pulseHandoffContext.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !handoffContext.isEmpty {
+                pulseHandoffContext = ""
+            }
+
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
             let currentDateTime = dateFormatter.string(from: Date())
@@ -182,6 +194,10 @@ extension ChatView {
             // Filter memories by relevance to current message (reduces prompt size, improves relevance)
             let relevantMemories = activeMemories.filterForRelevance(message: text, maxCount: 10)
             let memoriesContext = relevantMemories.formatForPrompt()
+            var pulseContext = buildCompactPulseContext(now: Date())
+            if !handoffContext.isEmpty {
+                pulseContext += "\n[Dashboard handoff context]: \(handoffContext)"
+            }
 
             // Fetch activity data from HealthKit
             let activityData = await fetchActivityData()
@@ -191,7 +207,9 @@ extension ChatView {
                 todaysFoodEntries: todaysFoodEntries,
                 currentDateTime: currentDateTime,
                 conversationHistory: historyString,
+                coachTone: coachTone,
                 memoriesContext: memoriesContext,
+                pulseContext: pulseContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
@@ -338,6 +356,82 @@ extension ChatView {
                 aiMessage: aiMessage
             )
         }
+    }
+
+    private func buildCompactPulseContext(now: Date) -> String {
+        let patternProfile = TraiPulsePatternService.buildProfile(
+            now: now,
+            foodEntries: allFoodEntries,
+            workouts: recentWorkouts,
+            liveWorkouts: liveWorkouts,
+            suggestionUsage: suggestionUsage,
+            profile: profile
+        )
+        let trend = TraiPulsePatternService.buildTrendSnapshot(
+            now: now,
+            foodEntries: allFoodEntries,
+            workouts: recentWorkouts,
+            liveWorkouts: liveWorkouts,
+            profile: profile
+        )
+
+        let activeSnapshots = activeSignals.activeSnapshots(now: now)
+        let hasWorkoutToday = hasWorkoutLoggedToday(now: now)
+        let hasActiveWorkout = workoutContext != nil || liveWorkouts.contains(where: { $0.completedAt == nil })
+
+        let calorieGoal = profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday || hasActiveWorkout)
+            ?? profile?.dailyCalorieGoal
+            ?? 2000
+        let proteinGoal = profile?.dailyProteinGoal ?? 150
+        let readyMuscleCount = MuscleRecoveryService()
+            .getRecoveryStatus(modelContext: modelContext)
+            .filter { $0.status == .ready }
+            .count
+
+        let preferredWindow = patternProfile.strongestWorkoutWindow(minScore: 0.38)?.hourRange ?? (9, 21)
+        let context = TraiPulseInputContext(
+            now: now,
+            hasWorkoutToday: hasWorkoutToday,
+            hasActiveWorkout: hasActiveWorkout,
+            caloriesConsumed: todaysFoodEntries.reduce(0) { $0 + $1.calories },
+            calorieGoal: calorieGoal,
+            proteinConsumed: Int(todaysFoodEntries.reduce(0.0) { $0 + $1.proteinGrams }.rounded()),
+            proteinGoal: proteinGoal,
+            readyMuscleCount: readyMuscleCount,
+            recommendedWorkoutName: nil,
+            workoutWindowStartHour: preferredWindow.0,
+            workoutWindowEndHour: preferredWindow.1,
+            activeSignals: activeSnapshots,
+            tomorrowWorkoutMinutes: 40,
+            trend: trend,
+            patternProfile: patternProfile,
+            contextPacket: nil
+        )
+
+        let packet = TraiPulseContextAssembler.assemble(
+            patternProfile: patternProfile,
+            activeSignals: activeSnapshots,
+            context: context,
+            tokenBudget: 650
+        )
+        return packet.promptSummary
+    }
+
+    private func hasWorkoutLoggedToday(now: Date) -> Bool {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            return false
+        }
+
+        let hasLoggedSession = recentWorkouts.contains { workout in
+            workout.loggedAt >= startOfDay && workout.loggedAt < endOfDay
+        }
+        let hasLiveWorkout = liveWorkouts.contains { workout in
+            workout.startedAt >= startOfDay && workout.startedAt < endOfDay
+        }
+
+        return hasLoggedSession || hasLiveWorkout
     }
 
     private func fetchActivityData() async -> GeminiService.ActivityData {

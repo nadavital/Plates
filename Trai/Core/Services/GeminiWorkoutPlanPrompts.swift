@@ -11,9 +11,13 @@ import Foundation
 
 extension GeminiPromptBuilder {
 
-    static func buildWorkoutPlanGenerationPrompt(request: WorkoutPlanGenerationRequest) -> String {
+    static func buildWorkoutPlanGenerationPrompt(
+        request: WorkoutPlanGenerationRequest,
+        tone: TraiCoachTone = .sharedPreference
+    ) -> String {
         var prompt = """
         You are Trai, a certified personal trainer creating a personalized workout plan. Never mention being an AI or assistant.
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         USER PROFILE:
         - Name: \(request.name)
@@ -216,10 +220,12 @@ extension GeminiPromptBuilder {
         currentPlan: WorkoutPlan,
         request: WorkoutPlanGenerationRequest,
         userMessage: String,
-        conversationHistory: [WorkoutPlanChatMessage]
+        conversationHistory: [WorkoutPlanChatMessage],
+        tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
         You are Trai, a friendly personal trainer chatting with the user about their workout plan. Never refer to yourself as an AI or assistant. This is a casual chat, so keep responses SHORT and conversational (1-3 sentences max).
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         RESPONSE TYPES - Choose ONE:
         1. "message" - For questions, clarifications, or asking follow-ups. Use this MOST of the time.
@@ -282,7 +288,7 @@ extension GeminiPromptBuilder {
         - Ask follow-up questions to understand what they want before making changes
         - If they ask to change exercises, ask which ones or for what muscle group
         - If they want more/fewer days, ask about their schedule
-        - Be friendly and encouraging, like a helpful coach texting back and forth
+        - Keep the selected coach tone consistent with the rest of the app
         """
 
         return prompt

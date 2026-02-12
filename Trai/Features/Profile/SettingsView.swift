@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var showPlanAdjustment = false
     @State private var showWorkoutPlanSetup = false
     @State private var showWorkoutPlanEdit = false
+    @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
 
     var body: some View {
         List {
@@ -64,6 +65,21 @@ struct SettingsView: View {
                 }
             } header: {
                 Text("Personal Info")
+            }
+
+            // MARK: - Trai Section
+            Section {
+                Picker(selection: coachToneBinding) {
+                    ForEach(TraiCoachTone.allCases) { tone in
+                        Text(tone.title).tag(tone)
+                    }
+                } label: {
+                    Label("Coach Tone", systemImage: "circle.hexagongrid.circle")
+                }
+            } header: {
+                Text("Trai")
+            } footer: {
+                Text("Pulse and Trai guidance will adapt to this tone while still learning from your behavior.")
             }
 
             // MARK: - Nutrition Plan Section
@@ -233,6 +249,13 @@ struct SettingsView: View {
                 WorkoutPlanEditSheet(currentPlan: plan)
             }
         }
+    }
+
+    private var coachToneBinding: Binding<TraiCoachTone> {
+        Binding(
+            get: { TraiCoachTone(rawValue: coachToneRaw) ?? .encouraging },
+            set: { coachToneRaw = $0.rawValue }
+        )
     }
 }
 

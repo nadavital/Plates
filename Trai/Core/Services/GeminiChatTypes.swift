@@ -62,7 +62,9 @@ extension GeminiService {
         let todaysFoodEntries: [FoodEntry]
         let currentDateTime: String
         let conversationHistory: String
+        let coachTone: TraiCoachTone
         let memoriesContext: String
+        let pulseContext: String
         let pendingSuggestion: SuggestedFoodEntry?
         let isIncognitoMode: Bool
         let activeWorkout: WorkoutContext?
@@ -73,7 +75,9 @@ extension GeminiService {
             todaysFoodEntries: [FoodEntry],
             currentDateTime: String,
             conversationHistory: String,
+            coachTone: TraiCoachTone = .encouraging,
             memoriesContext: String,
+            pulseContext: String = "",
             pendingSuggestion: SuggestedFoodEntry? = nil,
             isIncognitoMode: Bool = false,
             activeWorkout: WorkoutContext? = nil,
@@ -83,7 +87,9 @@ extension GeminiService {
             self.todaysFoodEntries = todaysFoodEntries
             self.currentDateTime = currentDateTime
             self.conversationHistory = conversationHistory
+            self.coachTone = coachTone
             self.memoriesContext = memoriesContext
+            self.pulseContext = pulseContext
             self.pendingSuggestion = pendingSuggestion
             self.isIncognitoMode = isIncognitoMode
             self.activeWorkout = activeWorkout

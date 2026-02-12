@@ -2,7 +2,7 @@
 //  MemoryViews.swift
 //  Trai
 //
-//  Memory management UI components for viewing and deleting coach memories
+//  Memory management UI components for viewing, editing, and deleting coach memories
 //
 
 import SwiftUI
@@ -13,6 +13,7 @@ import SwiftData
 struct MemoryRow: View {
     let memory: CoachMemory
     let onDelete: () -> Void
+    var onUpdate: () -> Void = {}
 
     @State private var showDeleteConfirmation = false
     @State private var showDetail = false
@@ -72,6 +73,8 @@ struct MemoryRow: View {
             MemoryDetailSheet(memory: memory, onDelete: {
                 showDetail = false
                 onDelete()
+            }, onUpdate: {
+                onUpdate()
             })
             .presentationDetents([.medium])
         }
@@ -104,6 +107,8 @@ struct AllMemoriesView: View {
                         ForEach(topicMemories) { memory in
                             MemoryListRow(memory: memory, onDelete: {
                                 deleteMemory(memory)
+                            }, onUpdate: {
+                                fetchMemories()
                             })
                         }
                     } header: {
@@ -149,6 +154,7 @@ struct AllMemoriesView: View {
 struct MemoryListRow: View {
     let memory: CoachMemory
     let onDelete: () -> Void
+    var onUpdate: () -> Void = {}
 
     @State private var showDeleteConfirmation = false
     @State private var showDetail = false
@@ -192,6 +198,8 @@ struct MemoryListRow: View {
             MemoryDetailSheet(memory: memory, onDelete: {
                 showDetail = false
                 onDelete()
+            }, onUpdate: {
+                onUpdate()
             })
             .presentationDetents([.medium])
         }
@@ -214,9 +222,11 @@ struct MemoryListRow: View {
 struct MemoryDetailSheet: View {
     let memory: CoachMemory
     let onDelete: () -> Void
+    var onUpdate: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
+    @State private var showEditSheet = false
 
     var body: some View {
         NavigationStack {
@@ -260,10 +270,17 @@ struct MemoryDetailSheet: View {
             .navigationTitle("Memory")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Edit", systemImage: "pencil") {
+                        showEditSheet = true
+                    }
+                }
+
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", systemImage: "checkmark") {
                         dismiss()
                     }
+                    .tint(.accentColor)
                 }
 
                 ToolbarItem(placement: .destructiveAction) {
@@ -280,6 +297,12 @@ struct MemoryDetailSheet: View {
             } message: {
                 Text("Are you sure you want to delete this memory?")
             }
+            .sheet(isPresented: $showEditSheet) {
+                MemoryEditSheet(memory: memory) {
+                    onUpdate()
+                }
+                .presentationDetents([.medium, .large])
+            }
         }
     }
 
@@ -292,5 +315,92 @@ struct MemoryDetailSheet: View {
         case .context: return .purple
         case .feedback: return .green
         }
+    }
+}
+
+// MARK: - Memory Edit Sheet
+
+struct MemoryEditSheet: View {
+    let memory: CoachMemory
+    let onSave: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var draftContent: String
+    @State private var draftCategory: MemoryCategory
+    @State private var draftTopic: MemoryTopic
+    @State private var draftImportance: Int
+
+    init(memory: CoachMemory, onSave: @escaping () -> Void) {
+        self.memory = memory
+        self.onSave = onSave
+        _draftContent = State(initialValue: memory.content)
+        _draftCategory = State(initialValue: memory.category)
+        _draftTopic = State(initialValue: memory.topic)
+        _draftImportance = State(initialValue: memory.importance)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Memory") {
+                    TextField("What should Trai remember?", text: $draftContent, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+
+                Section("Classification") {
+                    Picker("Category", selection: $draftCategory) {
+                        ForEach(MemoryCategory.allCases, id: \.rawValue) { category in
+                            Text(category.displayName).tag(category)
+                        }
+                    }
+
+                    Picker("Topic", selection: $draftTopic) {
+                        ForEach(MemoryTopic.allCases, id: \.rawValue) { topic in
+                            Text(topic.displayName).tag(topic)
+                        }
+                    }
+                }
+
+                Section("Priority") {
+                    Stepper(value: $draftImportance, in: 1...5) {
+                        Text("Importance \(draftImportance)")
+                    }
+                }
+            }
+            .navigationTitle("Edit Memory")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveChanges()
+                    }
+                    .tint(.accentColor)
+                    .disabled(draftContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func saveChanges() {
+        let trimmedContent = draftContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else { return }
+
+        memory.content = trimmedContent
+        memory.category = draftCategory
+        memory.topic = draftTopic
+        memory.importance = draftImportance
+
+        try? modelContext.save()
+        onSave()
+        HapticManager.lightTap()
+        dismiss()
     }
 }

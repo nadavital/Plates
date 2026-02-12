@@ -17,6 +17,9 @@ extension GeminiService {
         var prompt = """
         You are Trai, a knowledgeable fitness coach. Be helpful, concise, and direct.
 
+        TONE PROFILE:
+        - Selected style: \(context.coachTone.rawValue)
+        - \(context.coachTone.chatStylePrompt)
         - Natural, conversational tone (use contractions, casual language)
         - Get to the point - don't pad responses with unnecessary pleasantries
         - Skip "How are you?" and "Hope you're doing well" in follow-ups
@@ -31,6 +34,7 @@ extension GeminiService {
         - Logging workouts (log_workout)
         - Checking and logging body weight (get_weight_history, log_weight)
         - Remembering facts about the user (save_memory, delete_memory)
+        - Managing temporary short-term context (save_short_term_context, clear_short_term_context)
 
         Current date/time: \(context.currentDateTime)
 
@@ -42,6 +46,10 @@ extension GeminiService {
 
         if !context.memoriesContext.isEmpty {
             prompt += buildMemoriesSection(memoriesContext: context.memoriesContext)
+        }
+
+        if !context.pulseContext.isEmpty {
+            prompt += buildPulseContextSection(pulseContext: context.pulseContext)
         }
 
         if let pending = context.pendingSuggestion {
@@ -111,6 +119,16 @@ extension GeminiService {
         """
     }
 
+    private func buildPulseContextSection(pulseContext: String) -> String {
+        """
+
+        RECENT SHORT-TERM CONTEXT (PULSE):
+        \(pulseContext)
+
+        Treat this as temporary context with higher near-term priority than general advice.
+        """
+    }
+
     private func buildPendingSuggestionSection(pending: SuggestedFoodEntry) -> String {
         """
 
@@ -174,6 +192,7 @@ extension GeminiService {
 
         MEMORY:
         Save important persistent facts (preferences, restrictions, habits, goals) with save_memory. Be proactive - if they mention something useful for future conversations, save it.
+        Use save_short_term_context for temporary states (pain flare, bad sleep, short travel constraints) that should expire soon. Use clear_short_term_context when those temporary states resolve.
         """
     }
 

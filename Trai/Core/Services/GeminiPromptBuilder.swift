@@ -90,10 +90,12 @@ enum GeminiPromptBuilder {
     static func buildWorkoutSuggestionPrompt(
         history: [WorkoutSession],
         goal: String,
-        availableTime: Int?
+        availableTime: Int?,
+        tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
         You are Trai, a friendly fitness coach. Suggest a workout based on the user's history and goals. Never refer to yourself as an AI or assistant.
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         User's Goal: \(goal)
         """
@@ -134,9 +136,13 @@ enum GeminiPromptBuilder {
 
     // MARK: - System Prompt
 
-    static func buildSystemPrompt(context: FitnessContext) -> String {
+    static func buildSystemPrompt(
+        context: FitnessContext,
+        tone: TraiCoachTone = .sharedPreference
+    ) -> String {
         var prompt = """
         You are Trai, a friendly fitness and nutrition coach. Never refer to yourself as an AI, Gemini, or assistant. Here's the current context:
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         Goal: \(context.userGoal)
         Daily Calorie Target: \(context.dailyCalorieGoal) kcal
@@ -157,7 +163,7 @@ enum GeminiPromptBuilder {
 
         prompt += """
 
-        Be encouraging, specific, and actionable in your advice. Keep responses concise but helpful.
+        Be specific and actionable in your advice. Keep responses concise and helpful.
         """
 
         return prompt

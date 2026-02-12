@@ -36,7 +36,7 @@ extension GeminiService {
         ])
         contents.append([
             "role": "model",
-            "parts": [["text": "Hey! What's going on?"]]
+            "parts": [["text": context.coachTone.primingReply]]
         ])
 
         // Add conversation history
@@ -259,6 +259,8 @@ extension GeminiService {
         }
 
         // Generate conversational responses for suggestions
+        let toneInstruction = context.coachTone.followUpInstructionSuffix
+
         if !suggestedFoods.isEmpty, textResponse.isEmpty {
             let foodNames = suggestedFoods.map { $0.name }.joined(separator: ", ")
             let totalCalories = suggestedFoods.reduce(0) { $0 + $1.calories }
@@ -270,8 +272,8 @@ extension GeminiService {
                     "food_count": suggestedFoods.count,
                     "total_calories": totalCalories,
                     "instruction": suggestedFoods.count > 1
-                        ? "The user will see cards with \(suggestedFoods.count) food suggestions. Please write a brief, friendly message acknowledging what they ate. Be conversational and encouraging."
-                        : "The user will see a card with this food suggestion. Please write a brief, friendly message acknowledging what they ate. Be conversational and encouraging."
+                        ? "The user will see cards with \(suggestedFoods.count) food suggestions. Please write a brief, friendly message acknowledging what they ate. \(toneInstruction)"
+                        : "The user will see a card with this food suggestion. Please write a brief, friendly message acknowledging what they ate. \(toneInstruction)"
                 ],
                 previousContents: contents,
                 originalParts: accumulatedParts,
@@ -290,7 +292,7 @@ extension GeminiService {
                     "protein": plan.proteinGrams as Any,
                     "carbs": plan.carbsGrams as Any,
                     "fat": plan.fatGrams as Any,
-                    "instruction": "The user will see a card with these plan changes. Please write a brief message explaining why you're suggesting these adjustments. Be conversational and explain your reasoning."
+                    "instruction": "The user will see a card with these plan changes. Please write a brief message explaining why you're suggesting these adjustments. \(toneInstruction)"
                 ],
                 previousContents: contents,
                 originalParts: accumulatedParts,
@@ -308,7 +310,7 @@ extension GeminiService {
                     "status": "suggestion_ready",
                     "entry_name": edit.name,
                     "changes": changesDescription,
-                    "instruction": "The user will see a card with these proposed changes. Please write a brief, friendly message explaining what you're suggesting to update and why. Be conversational."
+                    "instruction": "The user will see a card with these proposed changes. Please write a brief, friendly message explaining what you're suggesting to update and why. \(toneInstruction)"
                 ],
                 previousContents: contents,
                 originalParts: accumulatedParts,
@@ -329,7 +331,7 @@ extension GeminiService {
                     "exercise_count": workout.exercises.count,
                     "exercises_preview": exerciseNames,
                     "duration_minutes": workout.durationMinutes,
-                    "instruction": "The user will see a card with this workout suggestion. Please write a brief, encouraging message about the workout you're suggesting. Mention why this workout is good for them based on their goals/recovery. Be conversational and motivating."
+                    "instruction": "The user will see a card with this workout suggestion. Please write a brief message about why this workout fits their goals/recovery. \(toneInstruction)"
                 ],
                 previousContents: contents,
                 originalParts: accumulatedParts,
@@ -349,7 +351,7 @@ extension GeminiService {
                     "exercise_count": workoutLog.exercises.count,
                     "exercises": exercisesSummary,
                     "duration_minutes": workoutLog.durationMinutes as Any,
-                    "instruction": "The user will see a card to confirm logging this workout. Please write a brief, encouraging message acknowledging their workout. Congratulate them on completing it and be motivating. Be conversational."
+                    "instruction": "The user will see a card to confirm logging this workout. Please write a brief acknowledgement of their effort. \(toneInstruction)"
                 ],
                 previousContents: contents,
                 originalParts: accumulatedParts,
@@ -371,7 +373,7 @@ extension GeminiService {
                     name: calledDataFunctions.first!,
                     response: [
                         "status": "data_retrieved",
-                        "instruction": "The data has been retrieved. Please summarize the information for the user in a helpful, conversational way. Answer their original question based on the data."
+                        "instruction": "The data has been retrieved. Please summarize the information for the user and answer their original question based on the data. \(toneInstruction)"
                     ],
                     previousContents: contents,
                     originalParts: accumulatedParts,

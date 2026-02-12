@@ -34,6 +34,7 @@ struct LiveWorkoutView: View {
     @State private var showingExerciseReplacement = false
     @State private var entryToReplace: LiveWorkoutEntry?
     @State private var showingLiveActivityDisabledAlert = false
+    @State private var showingPulseCheckIn = false
 
     // MARK: - Initialization
 
@@ -51,7 +52,7 @@ struct LiveWorkoutView: View {
                     WorkoutSummaryContent(
                         workout: viewModel.workout,
                         achievedPRs: viewModel.achievedPRs,
-                        onDismiss: { dismiss() }
+                        onDismiss: handleSummaryDone
                     )
                 } else {
                     workoutContent
@@ -63,7 +64,7 @@ struct LiveWorkoutView: View {
                 if showingSummary {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done", systemImage: "checkmark") {
-                            dismiss()
+                            handleSummaryDone()
                         }
                     }
                 } else {
@@ -116,6 +117,12 @@ struct LiveWorkoutView: View {
                     entryToReplace = nil
                     showingExerciseReplacement = false
                 }
+            }
+            .sheet(isPresented: $showingPulseCheckIn) {
+                PostWorkoutPulseCheckInSheet(
+                    onSubmit: savePostWorkoutCheckIn,
+                    onSkip: skipPostWorkoutCheckIn
+                )
             }
             .sheet(isPresented: $showingChat) {
                 NavigationStack {
@@ -305,6 +312,10 @@ struct LiveWorkoutView: View {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
+    private func handleSummaryDone() {
+        showingPulseCheckIn = true
+    }
+
     private func startHeartRateUpdates() {
         // Poll every 2 seconds for a snappier live-data UI without per-sample view churn.
         heartRateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
@@ -352,6 +363,67 @@ struct LiveWorkoutView: View {
             totalVolume: volumeWithData,
             targetMuscleGroups: viewModel.targetMuscleGroups
         )
+    }
+
+    private func savePostWorkoutCheckIn(_ data: PostWorkoutPulseCheckInData) {
+        let normalizedTags = data.selectedTags.filter { !$0.localizedStandardContains("felt great") }
+        let hasPainCue = normalizedTags.contains { tag in
+            tag.localizedStandardContains("shoulder") ||
+            tag.localizedStandardContains("knee") ||
+            tag.localizedStandardContains("back")
+        }
+        let isPainFocused = hasPainCue || data.discomfort >= 4
+
+        let hasUsefulInput = !normalizedTags.isEmpty ||
+            !data.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            data.discomfort >= 3
+        guard hasUsefulInput else {
+            dismiss()
+            return
+        }
+
+        let domain: CoachSignalDomain
+        if isPainFocused {
+            domain = .pain
+        } else if data.discomfort >= 6 {
+            domain = .recovery
+        } else {
+            domain = .readiness
+        }
+
+        let title: String
+        if isPainFocused {
+            title = "Post-workout discomfort"
+        } else if data.discomfort >= 6 {
+            title = "High workout strain"
+        } else {
+            title = "Post-workout readiness"
+        }
+
+        var detailParts: [String] = []
+        if !normalizedTags.isEmpty {
+            detailParts.append("Tags: \(normalizedTags.joined(separator: ", "))")
+        }
+        detailParts.append("Discomfort: \(data.discomfort)/10")
+        if !data.note.isEmpty {
+            detailParts.append("Note: \(data.note)")
+        }
+
+        _ = CoachSignalService(modelContext: modelContext).addSignal(
+            title: title,
+            detail: detailParts.joined(separator: ". "),
+            source: .workoutCheckIn,
+            domain: domain,
+            severity: min(max(Double(data.discomfort) / 10.0, 0.2), 1.0),
+            confidence: 0.8,
+            expiresAfter: isPainFocused ? 72 * 60 * 60 : 48 * 60 * 60
+        )
+
+        dismiss()
+    }
+
+    private func skipPostWorkoutCheckIn() {
+        dismiss()
     }
 }
 

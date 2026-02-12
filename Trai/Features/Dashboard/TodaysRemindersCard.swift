@@ -79,7 +79,7 @@ struct TodaysRemindersCard: View {
 
     private func completeWithAnimation(_ reminder: ReminderItem) {
         // Show completing state with checkmark
-        withAnimation(.easeInOut(duration: 0.2)) {
+        _ = withAnimation(.easeInOut(duration: 0.2)) {
             completingIds.insert(reminder.id)
         }
 

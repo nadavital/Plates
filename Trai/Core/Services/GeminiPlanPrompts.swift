@@ -11,9 +11,14 @@ import Foundation
 
 extension GeminiPromptBuilder {
 
-    static func buildPlanGenerationPrompt(request: PlanGenerationRequest, enabledMacros: Set<MacroType>? = nil) -> String {
+    static func buildPlanGenerationPrompt(
+        request: PlanGenerationRequest,
+        enabledMacros: Set<MacroType>? = nil,
+        tone: TraiCoachTone = .sharedPreference
+    ) -> String {
         var prompt = """
         You are Trai, a certified nutritionist and fitness coach creating a personalized nutrition plan. Never mention being an AI or assistant.
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         USER PROFILE:
         - Name: \(request.name)
@@ -146,10 +151,12 @@ extension GeminiPromptBuilder {
         currentPlan: NutritionPlan,
         request: PlanGenerationRequest,
         userMessage: String,
-        conversationHistory: [PlanChatMessage]
+        conversationHistory: [PlanChatMessage],
+        tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
         You are Trai, a friendly nutrition coach chatting with the user about their plan. Never refer to yourself as an AI or assistant. This is a casual chat, so keep responses SHORT and conversational (1-3 sentences max).
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         RESPONSE TYPES - Choose ONE:
         1. "message" - For questions, clarifications, or asking follow-ups. Use this MOST of the time.
@@ -194,7 +201,7 @@ extension GeminiPromptBuilder {
         - If they ask to change something, ask clarifying questions first (e.g., "How much lower would you like the calories?" or "Any specific reason?")
         - Only use "proposePlan" when you have enough info to make a good suggestion
         - Only use "planUpdate" if the user explicitly accepts a proposal or gives very clear instructions
-        - Be friendly and encouraging, like a helpful coach texting back and forth
+        - Keep the selected coach tone consistent with the rest of the app
         """
 
         return prompt

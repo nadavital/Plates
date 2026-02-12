@@ -84,6 +84,8 @@ struct SavedMemoriesSheet: View {
                 ForEach(memories) { memory in
                     MemoryListRow(memory: memory, onDelete: {
                         deleteMemory(memory)
+                    }, onUpdate: {
+                        fetchMemories()
                     })
                 }
             }

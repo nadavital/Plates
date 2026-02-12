@@ -24,6 +24,9 @@ struct DashboardView: View {
 
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
     private var weightEntries: [WeightEntry]
+    @Query(filter: #Predicate<CoachSignal> { !$0.isResolved }, sort: \CoachSignal.createdAt, order: .reverse)
+    private var coachSignals: [CoachSignal]
+    @Query private var suggestionUsage: [SuggestionUsage]
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
@@ -47,6 +50,8 @@ struct DashboardView: View {
     @State private var showingWorkoutSheet = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
+    @AppStorage("pendingPulseSeedPrompt") private var pendingPulseSeedPrompt: String = ""
+    @AppStorage("selectedTab") private var selectedTabRaw: String = AppTab.dashboard.rawValue
 
     init(showRemindersBinding: Binding<Bool> = .constant(false)) {
         _showRemindersBinding = showRemindersBinding
@@ -126,19 +131,63 @@ struct DashboardView: View {
         return template?.name
     }
 
+    private var coachRecommendedWorkoutName: String? {
+        guard let plan = profile?.workoutPlan else { return nil }
+        let recommendedId = recoveryService.getRecommendedTemplateId(plan: plan, modelContext: modelContext)
+        let template = plan.templates.first { $0.id == recommendedId } ?? plan.templates.first
+        return template?.name
+    }
+
+    private var hasActiveLiveWorkout: Bool {
+        liveWorkouts.contains { $0.completedAt == nil }
+    }
+
+    private var dailyCoachContext: DailyCoachContext? {
+        guard isViewingToday, let profile else { return nil }
+
+        let recoveryInfo = recoveryService.getRecoveryStatus(modelContext: modelContext)
+        let readyMuscleCount = recoveryInfo.filter { $0.status == .ready }.count
+        let hasWorkout = todayTotalWorkoutCount > 0
+        let calorieGoal = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkout || hasActiveLiveWorkout)
+        let activeSignals = coachSignals.active(now: .now)
+
+        return DailyCoachContext(
+            now: .now,
+            hasWorkoutToday: hasWorkout,
+            hasActiveWorkout: hasActiveLiveWorkout,
+            caloriesConsumed: totalCalories,
+            calorieGoal: calorieGoal,
+            proteinConsumed: Int(totalProtein.rounded()),
+            proteinGoal: profile.dailyProteinGoal,
+            readyMuscleCount: readyMuscleCount,
+            recommendedWorkoutName: coachRecommendedWorkoutName,
+            activeSignals: activeSignals,
+            trend: pulseTrendSnapshot,
+            patternProfile: pulsePatternProfile
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { scrollProxy in
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 18) {
                         // Date Navigation
                         DateNavigationBar(
                             selectedDate: $selectedDate,
                             isToday: isViewingToday
                         )
 
-                        if isViewingToday, let profile {
-                            GreetingCard(name: profile.name, goal: profile.goal)
+                        if isViewingToday, profile != nil {
+                            if let coachContext = dailyCoachContext {
+                                TraiPulseHeroCard(
+                                    context: coachContext,
+                                    onAction: handleCoachAction,
+                                    onQuestionAnswer: handleCoachQuestionAnswer,
+                                    onPlanProposalDecision: handlePlanProposalDecision,
+                                    onQuickChat: handlePulseQuickChat
+                                )
+                            }
 
                             // Quick action buttons (only on today)
                             QuickActionsCard(
@@ -216,6 +265,11 @@ struct DashboardView: View {
                     }
                     .padding()
                 }
+                .background(alignment: .top) {
+                    if isViewingToday, profile != nil {
+                        DashboardPulseTopGradient()
+                    }
+                }
                 .onChange(of: showRemindersBinding) { _, isShowing in
                     // Scroll to reminders section when triggered by notification
                     if isShowing {
@@ -244,8 +298,8 @@ struct DashboardView: View {
                     }
                 }
             }
-            .navigationTitle("Dashboard")
             .task {
+                _ = CoachSignalService(modelContext: modelContext).pruneExpiredSignals()
                 fetchCustomReminders()
                 remindersLoaded = true
                 await loadActivityData()
@@ -361,6 +415,32 @@ struct DashboardView: View {
         selectedDayFoodEntries.reduce(0) { $0 + ($1.sugarGrams ?? 0) }
     }
 
+    private var pulseTrendSnapshot: TraiPulseTrendSnapshot? {
+        guard isViewingToday else { return nil }
+
+        return TraiPulsePatternService.buildTrendSnapshot(
+            now: .now,
+            foodEntries: allFoodEntries,
+            workouts: allWorkouts,
+            liveWorkouts: liveWorkouts,
+            profile: profile,
+            daysWindow: 7
+        )
+    }
+
+    private var pulsePatternProfile: TraiPulsePatternProfile? {
+        guard isViewingToday else { return nil }
+
+        return TraiPulsePatternService.buildProfile(
+            now: .now,
+            foodEntries: allFoodEntries,
+            workouts: allWorkouts,
+            liveWorkouts: liveWorkouts,
+            suggestionUsage: suggestionUsage,
+            profile: profile
+        )
+    }
+
     private var todaysReminderItems: [TodaysRemindersCard.ReminderItem] {
         guard let profile else { return [] }
 
@@ -415,7 +495,7 @@ struct DashboardView: View {
         modelContext.insert(completion)
 
         // Update local state with animation for smooth removal
-        withAnimation(.easeInOut(duration: 0.3)) {
+        _ = withAnimation(.easeInOut(duration: 0.3)) {
             todaysCompletedReminderIds.insert(reminder.id)
         }
 
@@ -509,6 +589,191 @@ struct DashboardView: View {
         showingWorkoutSheet = true
         HapticManager.selectionChanged()
     }
+
+    private func handleCoachAction(_ action: DailyCoachAction.Kind) {
+        switch action {
+        case .startWorkout:
+            trackPulseInteraction("pulse_action_start_workout")
+            startWorkout()
+        case .logFood:
+            trackPulseInteraction("pulse_action_log_food")
+            showingLogFood = true
+            HapticManager.selectionChanged()
+        case .openChat:
+            trackPulseInteraction("pulse_action_open_chat")
+            if pendingPulseSeedPrompt.isEmpty {
+                pendingPulseSeedPrompt = buildPulseHandoffPrompt()
+            }
+            selectedTabRaw = AppTab.trai.rawValue
+            HapticManager.selectionChanged()
+        }
+    }
+
+    private func handleCoachQuestionAnswer(_ question: TraiPulseQuestion, _ answer: String) {
+        let interpretation = TraiPulseResponseInterpreter.interpret(question: question, answer: answer)
+        let detail = "[PulseQuestion:\(question.id)] \(question.prompt) Answer: \(answer) [PulseAdaptation:\(interpretation.adaptationLine)]"
+
+        _ = CoachSignalService(modelContext: modelContext).addSignal(
+            title: interpretation.signalTitle,
+            detail: detail,
+            source: .dashboardNote,
+            domain: interpretation.domain,
+            severity: interpretation.severity,
+            confidence: interpretation.confidence,
+            expiresAfter: interpretation.expiresAfter,
+            metadata: [
+                "question_id": question.id,
+                "question_prompt": question.prompt
+            ]
+        )
+
+        savePulseMemoryIfNeeded(interpretation.memoryCandidate)
+        pendingPulseSeedPrompt = interpretation.handoffPrompt
+        trackPulseInteraction("pulse_question_answered_\(question.id)")
+        HapticManager.success()
+    }
+
+    private func handlePlanProposalDecision(_ proposal: TraiPulsePlanProposal, _ decision: TraiPulsePlanProposalDecision) {
+        let decisionTitle: String
+        let prompt: String
+
+        switch decision {
+        case .apply:
+            decisionTitle = "Plan adjustment approved"
+            prompt = "Pulse plan proposal approved. Proposal: \(proposal.title). Changes: \(proposal.changes.joined(separator: "; ")). Rationale: \(proposal.rationale). Any plan mutation must still require explicit user confirmation."
+            selectedTabRaw = AppTab.trai.rawValue
+        case .review:
+            decisionTitle = "Plan adjustment review requested"
+            prompt = "Pulse plan proposal review requested. Proposal: \(proposal.title). Changes: \(proposal.changes.joined(separator: "; ")). Impact: \(proposal.impact)."
+            selectedTabRaw = AppTab.trai.rawValue
+        case .later:
+            decisionTitle = "Plan adjustment deferred"
+            prompt = "Pulse plan proposal deferred: \(proposal.title). Do not re-suggest daily; revisit later with lighter framing."
+        }
+
+        _ = CoachSignalService(modelContext: modelContext).addSignal(
+            title: decisionTitle,
+            detail: "[PulsePlanProposal:\(proposal.id)] \(proposal.title) [Decision:\(decision.rawValue)]",
+            source: .dashboardNote,
+            domain: .general,
+            severity: decision == .later ? 0.25 : 0.45,
+            confidence: 0.85,
+            expiresAfter: 5 * 24 * 60 * 60,
+            metadata: [
+                "proposal_id": proposal.id,
+                "decision": decision.rawValue
+            ]
+        )
+
+        pendingPulseSeedPrompt = prompt
+        trackPulseInteraction("pulse_plan_proposal_\(decision.rawValue)")
+        HapticManager.success()
+    }
+
+    private func handlePulseQuickChat(_ prompt: String) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pendingPulseSeedPrompt = trimmed
+        trackPulseInteraction("pulse_quick_chat")
+        selectedTabRaw = AppTab.trai.rawValue
+        HapticManager.selectionChanged()
+    }
+
+    private func buildPulseHandoffPrompt() -> String {
+        var sections: [String] = []
+
+        if let context = dailyCoachContext {
+            let inferredWindow = TraiPulseAdaptivePreferences.inferWorkoutWindow(for: context)
+            let inferredMinutes = TraiPulseAdaptivePreferences.inferTomorrowWorkoutMinutes(for: context)
+            let window = inferredWindow.hours
+            let activeSnapshots = coachSignals.activeSnapshots(now: .now)
+            let pulseInput = TraiPulseInputContext(
+                now: context.now,
+                hasWorkoutToday: context.hasWorkoutToday,
+                hasActiveWorkout: context.hasActiveWorkout,
+                caloriesConsumed: context.caloriesConsumed,
+                calorieGoal: context.calorieGoal,
+                proteinConsumed: context.proteinConsumed,
+                proteinGoal: context.proteinGoal,
+                readyMuscleCount: context.readyMuscleCount,
+                recommendedWorkoutName: context.recommendedWorkoutName,
+                workoutWindowStartHour: window.start,
+                workoutWindowEndHour: window.end,
+                activeSignals: activeSnapshots,
+                tomorrowWorkoutMinutes: inferredMinutes,
+                trend: context.trend,
+                patternProfile: context.patternProfile,
+                contextPacket: nil
+            )
+
+            let packet = TraiPulseContextAssembler.assemble(
+                patternProfile: context.patternProfile ?? .empty,
+                activeSignals: activeSnapshots,
+                context: pulseInput,
+                tokenBudget: 550
+            )
+            sections.append("Pulse packet: \(packet.promptSummary)")
+        }
+
+        if let recentAnswer = TraiPulseResponseInterpreter.recentPulseAnswer(
+            from: coachSignals.activeSnapshots(now: .now),
+            now: .now
+        ) {
+            sections.append("Recent check-in: \(recentAnswer.answer).")
+        }
+
+        sections.append("User opened Trai from Pulse. Use this context when relevant.")
+        return sections.joined(separator: " ")
+    }
+
+    private func trackPulseInteraction(_ suggestionType: String) {
+        if let existing = suggestionUsage.first(where: { $0.suggestionType == suggestionType }) {
+            existing.recordTap()
+        } else {
+            let usage = SuggestionUsage(suggestionType: suggestionType)
+            usage.recordTap()
+            modelContext.insert(usage)
+        }
+        try? modelContext.save()
+    }
+
+    private func savePulseMemoryIfNeeded(_ candidate: TraiPulseMemoryCandidate?) {
+        guard let candidate else { return }
+
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate { $0.isActive },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let activeMemories = (try? modelContext.fetch(descriptor)) ?? []
+        let normalizedCandidate = normalizeMemoryContent(candidate.content)
+        let duplicateExists = activeMemories.contains { memory in
+            let normalizedExisting = normalizeMemoryContent(memory.content)
+            return normalizedExisting == normalizedCandidate ||
+                normalizedExisting.contains(normalizedCandidate) ||
+                normalizedCandidate.contains(normalizedExisting)
+        }
+
+        guard !duplicateExists else { return }
+
+        let memory = CoachMemory(
+            content: candidate.content,
+            category: candidate.category,
+            topic: candidate.topic,
+            source: "pulse",
+            importance: candidate.importance
+        )
+        modelContext.insert(memory)
+        try? modelContext.save()
+    }
+
+    private func normalizeMemoryContent(_ raw: String) -> String {
+        raw
+            .lowercased()
+            .replacingOccurrences(of: ".", with: " ")
+            .replacingOccurrences(of: ",", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
 }
 
 #Preview {
@@ -517,6 +782,7 @@ struct DashboardView: View {
             UserProfile.self,
             FoodEntry.self,
             WorkoutSession.self,
-            WeightEntry.self
+            WeightEntry.self,
+            CoachSignal.self
         ], inMemory: true)
 }

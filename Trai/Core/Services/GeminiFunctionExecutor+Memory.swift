@@ -142,6 +142,101 @@ extension GeminiFunctionExecutor {
         ))
     }
 
+    /// Save temporary short-term context as an expiring CoachSignal
+    func executeSaveShortTermContext(_ args: [String: Any]) -> ExecutionResult {
+        if isIncognitoMode {
+            return .dataResponse(FunctionResult(
+                name: "save_short_term_context",
+                response: [
+                    "success": false,
+                    "reason": "Short-term context not saved - incognito mode is active"
+                ]
+            ))
+        }
+
+        guard let content = args["content"] as? String,
+              !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .dataResponse(FunctionResult(
+                name: "save_short_term_context",
+                response: ["error": "Missing required parameter: content"]
+            ))
+        }
+
+        let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let domainRaw = (args["domain"] as? String) ?? CoachSignalDomain.general.rawValue
+        let domain = CoachSignalDomain(rawValue: domainRaw) ?? .general
+        let severity = args["severity"] as? Double ?? 0.45
+        let confidence = args["confidence"] as? Double ?? 0.7
+        let hoursToLive = args["hours_to_live"] as? Double ?? 48.0
+
+        let signalService = CoachSignalService(modelContext: modelContext)
+        let signal = signalService.addSignal(
+            title: (title?.isEmpty == false ? title : nil) ?? defaultSignalTitle(for: domain),
+            detail: content,
+            source: .chat,
+            domain: domain,
+            severity: severity,
+            confidence: confidence,
+            expiresAfter: max(1.0, hoursToLive) * 60 * 60
+        )
+
+        return .dataResponse(FunctionResult(
+            name: "save_short_term_context",
+            response: [
+                "success": true,
+                "signal_id": signal.id.uuidString,
+                "domain": signal.domain.rawValue,
+                "title": signal.title
+            ]
+        ))
+    }
+
+    /// Resolve temporary short-term context signals by domain and/or content match
+    func executeClearShortTermContext(_ args: [String: Any]) -> ExecutionResult {
+        let domainRaw = args["domain"] as? String
+        let domainFilter = domainRaw.flatMap(CoachSignalDomain.init(rawValue:))
+        let contentMatch = (args["content_match"] as? String)?.lowercased()
+        let reason = args["reason"] as? String
+
+        let signalService = CoachSignalService(modelContext: modelContext)
+        let activeSignals = signalService.activeSignals(now: .now)
+
+        let matchingSignals = activeSignals.filter { signal in
+            let matchesDomain = domainFilter == nil || signal.domain == domainFilter
+            let matchesContent: Bool
+            if let contentMatch {
+                matchesContent = signal.title.lowercased().contains(contentMatch) ||
+                    signal.detail.lowercased().contains(contentMatch)
+            } else {
+                matchesContent = true
+            }
+            return matchesDomain && matchesContent
+        }
+
+        guard !matchingSignals.isEmpty else {
+            return .dataResponse(FunctionResult(
+                name: "clear_short_term_context",
+                response: [
+                    "success": false,
+                    "reason": "No matching short-term context found"
+                ]
+            ))
+        }
+
+        for signal in matchingSignals {
+            signal.markResolved(note: reason ?? "Cleared by chat tool")
+        }
+        try? modelContext.save()
+
+        return .dataResponse(FunctionResult(
+            name: "clear_short_term_context",
+            response: [
+                "success": true,
+                "cleared_count": matchingSignals.count
+            ]
+        ))
+    }
+
     /// Get all active memories (helper for building prompts)
     func getActiveMemories() -> [CoachMemory] {
         let descriptor = FetchDescriptor<CoachMemory>(
@@ -153,5 +248,18 @@ extension GeminiFunctionExecutor {
         )
 
         return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func defaultSignalTitle(for domain: CoachSignalDomain) -> String {
+        switch domain {
+        case .pain: "Pain signal"
+        case .schedule: "Schedule constraint"
+        case .sleep: "Sleep signal"
+        case .stress: "Stress signal"
+        case .recovery: "Recovery signal"
+        case .readiness: "Readiness signal"
+        case .nutrition: "Nutrition signal"
+        case .general: "Temporary context"
+        }
     }
 }

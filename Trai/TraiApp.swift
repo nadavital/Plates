@@ -35,6 +35,7 @@ struct TraiApp: App {
                 LiveWorkoutEntry.self,
                 ExerciseHistory.self,
                 CoachMemory.self,
+                CoachSignal.self,
                 NutritionPlanVersion.self,
                 WorkoutPlanVersion.self,
                 CustomReminder.self,

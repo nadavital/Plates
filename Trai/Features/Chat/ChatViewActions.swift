@@ -437,6 +437,14 @@ extension ChatView {
         startNewSession(silent: true)
         sendMessage("Can you review my workout split and suggest any updates based on my recovery and recent workouts?")
     }
+
+    /// Check if Dashboard queued a Pulse context prompt for chat handoff
+    func checkForPendingPulsePrompt() {
+        let prompt = pendingPulseSeedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        pendingPulseSeedPrompt = ""
+        pulseHandoffContext = prompt
+    }
 }
 
 // MARK: - Reminder Suggestion Actions

@@ -56,7 +56,8 @@ extension GeminiService {
     func analyzeFoodImageWithChat(
         _ imageData: Data?,
         userMessage: String,
-        context: FitnessContext
+        context: FitnessContext,
+        tone: TraiCoachTone = .sharedPreference
     ) async throws -> ChatFoodAnalysisResult {
         isLoading = true
         lastError = nil
@@ -71,7 +72,8 @@ extension GeminiService {
         let prompt = GeminiPromptBuilder.buildImageChatPrompt(
             userMessage: userMessage,
             context: context,
-            currentDateTime: currentDateTime
+            currentDateTime: currentDateTime,
+            tone: tone
         )
 
         parts.append(["text": prompt])

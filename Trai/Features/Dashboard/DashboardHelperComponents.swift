@@ -152,7 +152,6 @@ struct DateNavigationBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 12))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 }

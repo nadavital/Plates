@@ -139,6 +139,12 @@ final class GeminiFunctionExecutor {
         case "delete_memory":
             return executeDeleteMemory(call.arguments)
 
+        case "save_short_term_context":
+            return executeSaveShortTermContext(call.arguments)
+
+        case "clear_short_term_context":
+            return executeClearShortTermContext(call.arguments)
+
         case "create_reminder":
             return executeCreateReminder(call.arguments)
 

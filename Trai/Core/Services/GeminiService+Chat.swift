@@ -16,13 +16,19 @@ extension GeminiService {
     func chat(
         message: String,
         context: FitnessContext,
-        conversationHistory: [ChatMessage] = []
+        conversationHistory: [ChatMessage] = [],
+        tone: TraiCoachTone = .sharedPreference
     ) async throws -> String {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
 
-        let contents = buildChatContents(message: message, context: context, conversationHistory: conversationHistory)
+        let contents = buildChatContents(
+            message: message,
+            context: context,
+            conversationHistory: conversationHistory,
+            tone: tone
+        )
 
         let requestBody: [String: Any] = [
             "contents": contents,
@@ -37,13 +43,19 @@ extension GeminiService {
         message: String,
         context: FitnessContext,
         conversationHistory: [ChatMessage] = [],
+        tone: TraiCoachTone = .sharedPreference,
         onChunk: @escaping (String) -> Void
     ) async throws {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
 
-        let contents = buildChatContents(message: message, context: context, conversationHistory: conversationHistory)
+        let contents = buildChatContents(
+            message: message,
+            context: context,
+            conversationHistory: conversationHistory,
+            tone: tone
+        )
 
         let requestBody: [String: Any] = [
             "contents": contents,
@@ -58,7 +70,8 @@ extension GeminiService {
         message: String,
         context: FitnessContext,
         conversationHistory: [ChatMessage] = [],
-        pendingSuggestion: SuggestedFoodEntry? = nil
+        pendingSuggestion: SuggestedFoodEntry? = nil,
+        tone: TraiCoachTone = .sharedPreference
     ) async throws -> ChatFoodAnalysisResult {
         isLoading = true
         lastError = nil
@@ -77,7 +90,8 @@ extension GeminiService {
             context: context,
             currentDateTime: currentDateTime,
             conversationHistory: historyString,
-            pendingSuggestion: pendingSuggestion
+            pendingSuggestion: pendingSuggestion,
+            tone: tone
         )
 
         let requestBody: [String: Any] = [
@@ -92,17 +106,22 @@ extension GeminiService {
         return try parseChatFoodAnalysis(from: responseText)
     }
 
-    func buildChatContents(message: String, context: FitnessContext, conversationHistory: [ChatMessage]) -> [[String: Any]] {
+    func buildChatContents(
+        message: String,
+        context: FitnessContext,
+        conversationHistory: [ChatMessage],
+        tone: TraiCoachTone = .sharedPreference
+    ) -> [[String: Any]] {
         var contents: [[String: Any]] = []
 
-        let systemPrompt = GeminiPromptBuilder.buildSystemPrompt(context: context)
+        let systemPrompt = GeminiPromptBuilder.buildSystemPrompt(context: context, tone: tone)
         contents.append([
             "role": "user",
             "parts": [["text": systemPrompt]]
         ])
         contents.append([
             "role": "model",
-            "parts": [["text": "Hey! What's going on?"]]
+            "parts": [["text": tone.primingReply]]
         ])
 
         for msg in conversationHistory.suffix(10) {

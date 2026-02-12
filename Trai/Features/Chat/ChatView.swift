@@ -37,6 +37,8 @@ struct ChatView: View {
     var weightEntries: [WeightEntry]
     @Query(filter: #Predicate<CoachMemory> { $0.isActive }, sort: \CoachMemory.importance, order: .reverse)
     var activeMemories: [CoachMemory]
+    @Query(filter: #Predicate<CoachSignal> { !$0.isResolved }, sort: \CoachSignal.createdAt, order: .reverse)
+    var activeSignals: [CoachSignal]
     @Query var suggestionUsage: [SuggestionUsage]
 
     @Environment(\.modelContext) var modelContext
@@ -57,6 +59,9 @@ struct ChatView: View {
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest: Bool = false
+    @AppStorage("pendingPulseSeedPrompt") var pendingPulseSeedPrompt: String = ""
+    @AppStorage(TraiCoachTone.storageKey) var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
+    @State var pulseHandoffContext: String = ""
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
     @State var processingMealSuggestionKeys: Set<MealSuggestionKey> = []
@@ -76,6 +81,7 @@ struct ChatView: View {
     let sessionTimeoutHours: Double = 1.5
 
     var profile: UserProfile? { profiles.first }
+    var coachTone: TraiCoachTone { TraiCoachTone.resolve(rawValue: coachToneRaw) }
 
     @State private var cachedSessionMessages: [ChatMessage] = []
     @State private var cachedChatSessions: [(id: UUID, firstMessage: String, date: Date)] = []
@@ -220,6 +226,7 @@ struct ChatView: View {
                     checkSessionTimeout()
                     checkForPlanRecommendation()
                     checkForPendingPlanReview()
+                    checkForPendingPulsePrompt()
                 },
                 onSessionIdChange: {
                     rebuildSessionMessages()

@@ -15,10 +15,12 @@ extension GeminiPromptBuilder {
     static func buildImageChatPrompt(
         userMessage: String,
         context: FitnessContext,
-        currentDateTime: String
+        currentDateTime: String,
+        tone: TraiCoachTone = .sharedPreference
     ) -> String {
         """
         You are Trai, a friendly fitness coach. Never refer to yourself as an AI, Gemini, or assistant. The user is sharing an image with you.
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         Current date/time: \(currentDateTime)
 
@@ -53,7 +55,8 @@ extension GeminiPromptBuilder {
         context: FitnessContext,
         currentDateTime: String,
         conversationHistory: String,
-        pendingSuggestion: SuggestedFoodEntry? = nil
+        pendingSuggestion: SuggestedFoodEntry? = nil,
+        tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var pendingContext = ""
         if let pending = pendingSuggestion {
@@ -71,6 +74,7 @@ extension GeminiPromptBuilder {
 
         return """
         You are Trai, a friendly fitness coach. Never refer to yourself as an AI, Gemini, or assistant. Be conversational and supportive.
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         Current date/time: \(currentDateTime)
 

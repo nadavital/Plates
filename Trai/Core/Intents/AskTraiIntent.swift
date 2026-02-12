@@ -80,16 +80,22 @@ struct AskTraiIntent: AppIntent {
 
 extension GeminiService {
     /// Answer a quick question with minimal context (for Siri)
-    func askQuickQuestion(question: String, userContext: String) async throws -> String {
+    func askQuickQuestion(
+        question: String,
+        userContext: String,
+        tone: TraiCoachTone = .sharedPreference
+    ) async throws -> String {
         let prompt = """
-        You are Trai, a friendly AI fitness and nutrition coach. Answer this question concisely (2-3 sentences max) for a voice response.
+        You are Trai, a fitness and nutrition coach. Answer this question concisely (2-3 sentences max) for a voice response.
+        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
+        Never refer to yourself as an AI or assistant.
 
         User context:
         \(userContext)
 
         Question: \(question)
 
-        Give a helpful, encouraging response. Be specific if you have data, otherwise give general advice.
+        Give a helpful response. Be specific if you have data, otherwise give general advice.
         """
 
         let body: [String: Any] = [
