@@ -20,6 +20,7 @@ struct TraiApp: App {
     @State private var notificationDelegate: NotificationDelegate?
     @State private var showRemindersFromNotification = false
     @State private var deepLinkDestination: AppRoute?
+    @State private var lastHealthKitWorkoutSyncDate: Date?
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -83,6 +84,9 @@ struct TraiApp: App {
                     Task { @MainActor in
                         WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
                     }
+                    Task { @MainActor in
+                        await syncRecentWorkoutsFromHealthKit()
+                    }
                 }
                 .onOpenURL { url in
                     handleDeepLink(url)
@@ -94,6 +98,10 @@ struct TraiApp: App {
                 // Update widget data when app goes to background
                 Task { @MainActor in
                     WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
+                }
+            } else if newPhase == .active {
+                Task { @MainActor in
+                    await syncRecentWorkoutsFromHealthKit()
                 }
             }
         }
@@ -114,6 +122,59 @@ struct TraiApp: App {
             showRemindersFromNotification = true
         }
         notificationDelegate = delegate
+    }
+
+    @MainActor
+    private func syncRecentWorkoutsFromHealthKit() async {
+        let now = Date()
+
+        // Debounce repeated syncs while app is already open and active.
+        if let lastSync = lastHealthKitWorkoutSyncDate, now.timeIntervalSince(lastSync) < 60 {
+            return
+        }
+
+        do {
+            let context = modelContainer.mainContext
+            let oneMonthAgo = Calendar.current.date(byAdding: .month, value: -1, to: now) ?? now
+            let healthKitWorkouts = try await healthKitService.fetchWorkoutsAuthorized(from: oneMonthAgo, to: now)
+
+            let workoutDescriptor = FetchDescriptor<WorkoutSession>()
+            let existingWorkouts = (try? context.fetch(workoutDescriptor)) ?? []
+            let existingIDs = Set(existingWorkouts.compactMap { $0.healthKitWorkoutID })
+            let newWorkouts = healthKitWorkouts.filter { !existingIDs.contains($0.healthKitWorkoutID ?? "") }
+
+            for workout in newWorkouts {
+                context.insert(workout)
+            }
+            if !newWorkouts.isEmpty {
+                try? context.save()
+            }
+
+            let liveDescriptor = FetchDescriptor<LiveWorkout>(predicate: #Predicate { $0.completedAt != nil })
+            let completedLiveWorkouts = (try? context.fetch(liveDescriptor)) ?? []
+
+            var didMerge = false
+            for workout in completedLiveWorkouts where workout.mergedHealthKitWorkoutID == nil {
+                if let match = healthKitService.bestOverlappingWorkout(for: workout, from: healthKitWorkouts, searchBufferMinutes: 15) {
+                    workout.mergedHealthKitWorkoutID = match.healthKitWorkoutID
+                    if let calories = match.caloriesBurned {
+                        workout.healthKitCalories = Double(calories)
+                    }
+                    if let avgHR = match.averageHeartRate {
+                        workout.healthKitAvgHeartRate = Double(avgHR)
+                    }
+                    didMerge = true
+                }
+            }
+
+            if didMerge {
+                try? context.save()
+            }
+
+            lastHealthKitWorkoutSyncDate = now
+        } catch {
+            // Handle silently to avoid blocking app startup.
+        }
     }
 }
 

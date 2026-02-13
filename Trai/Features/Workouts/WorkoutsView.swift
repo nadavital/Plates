@@ -153,7 +153,6 @@ struct WorkoutsView: View {
             }
             .task {
                 loadRecoveryAndScores()
-                await syncHealthKit()
             }
             .onChange(of: workoutPlan) {
                 loadRecoveryAndScores()

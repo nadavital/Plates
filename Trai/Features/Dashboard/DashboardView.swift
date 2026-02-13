@@ -37,10 +37,13 @@ struct DashboardView: View {
     @State private var todaysCompletedReminderIds: Set<UUID> = []
     @State private var remindersLoaded = false
     @State private var pendingScrollToReminders = false
+    @State private var reminderCompletionHistory: [ReminderCompletion] = []
+    private let reminderCompletionHistoryCapPerWindow = 400
 
     // Sheet presentation state
     @State private var showingLogFood = false
     @State private var showingLogWeight = false
+    @State private var showingWeightTracking = false
     @State private var showingCalorieDetail = false
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
@@ -50,6 +53,8 @@ struct DashboardView: View {
     @State private var showingWorkoutSheet = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
+    @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
+    @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest = false
     @AppStorage("pendingPulseSeedPrompt") private var pendingPulseSeedPrompt: String = ""
     @AppStorage("selectedTab") private var selectedTabRaw: String = AppTab.dashboard.rawValue
 
@@ -65,6 +70,8 @@ struct DashboardView: View {
     @State private var todayActiveCalories = 0
     @State private var todayExerciseMinutes = 0
     @State private var isLoadingActivity = false
+
+    private let reminderHabitWindowDays = 30
 
     private var profile: UserProfile? { profiles.first }
 
@@ -150,6 +157,17 @@ struct DashboardView: View {
         let hasWorkout = todayTotalWorkoutCount > 0
         let calorieGoal = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkout || hasActiveLiveWorkout)
         let activeSignals = coachSignals.active(now: .now)
+        let reminderCompletionRate = todaysReminderCompletionRate
+        let missedReminderCount = todaysMissedReminderCount
+        let daysSinceLatestWeightLog = daysSinceLastWeightLog
+        let weightLoggedThisWeek = loggedWeightThisWeek
+        let weightLoggedThisWeekDays = inferredWeightLogWeekdays
+        let weightLikelyLogTimes = inferredWeightLogTimes
+        let likelyReminderTimes = todaysReminderItemsAll.map(\.time)
+        let likelyWorkoutTimes = TraiPulsePatternService.learnedWorkoutTimeWindows(from: pulsePatternProfile)
+        let lastActiveWorkoutHour = lastRecentWorkoutHour
+        let planReviewRecommendation = pendingPlanReviewRecommendation
+        let reminderCandidateScores = todaysReminderCandidateScores
 
         return DailyCoachContext(
             now: .now,
@@ -161,10 +179,28 @@ struct DashboardView: View {
             proteinGoal: profile.dailyProteinGoal,
             readyMuscleCount: readyMuscleCount,
             recommendedWorkoutName: coachRecommendedWorkoutName,
-            activeSignals: activeSignals,
-            trend: pulseTrendSnapshot,
-            patternProfile: pulsePatternProfile
-        )
+                activeSignals: activeSignals,
+                trend: pulseTrendSnapshot,
+                patternProfile: pulsePatternProfile,
+                reminderCompletionRate: reminderCompletionRate,
+                recentMissedReminderCount: missedReminderCount,
+            daysSinceLastWeightLog: daysSinceLatestWeightLog,
+            weightLoggedThisWeek: weightLoggedThisWeek,
+            weightLoggedThisWeekDays: weightLoggedThisWeekDays,
+            weightLikelyLogTimes: weightLikelyLogTimes,
+            weightRecentRangeKg: recentWeightRangeKg,
+                weightLogRoutineScore: inferredWeightLogRoutineScore,
+                todaysExerciseMinutes: todayExerciseMinutes,
+                lastActiveWorkoutHour: lastActiveWorkoutHour,
+                likelyReminderTimes: likelyReminderTimes,
+                likelyWorkoutTimes: likelyWorkoutTimes,
+                planReviewTrigger: planReviewRecommendation?.trigger.rawValue,
+                planReviewMessage: pendingPlanReviewMessage,
+                planReviewDaysSince: planReviewRecommendation?.details.daysSinceReview,
+                planReviewWeightDeltaKg: planReviewRecommendation?.details.weightChangeKg,
+                pendingReminderCandidates: todaysReminderCandidates,
+                pendingReminderCandidateScores: reminderCandidateScores
+            )
     }
 
     var body: some View {
@@ -325,6 +361,9 @@ struct DashboardView: View {
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
             }
+            .sheet(isPresented: $showingWeightTracking) {
+                WeightTrackingView()
+            }
             .sheet(isPresented: $showingWorkoutSheet) {
                 if let workout = pendingWorkout {
                     NavigationStack {
@@ -461,19 +500,332 @@ struct DashboardView: View {
         return allItems.filter { !todaysCompletedReminderIds.contains($0.id) }
     }
 
+    private var todaysReminderItemsAll: [TodaysRemindersCard.ReminderItem] {
+        guard let profile else { return [] }
+
+        return TodaysRemindersCard.buildReminderItems(
+            from: customReminders,
+            mealRemindersEnabled: profile.mealRemindersEnabled,
+            enabledMeals: Set(profile.enabledMealReminders.split(separator: ",").map(String.init)),
+            workoutRemindersEnabled: profile.workoutRemindersEnabled,
+            workoutDays: Set(profile.workoutReminderDays.split(separator: ",").compactMap { Int($0) }),
+            workoutHour: profile.workoutReminderHour,
+            workoutMinute: profile.workoutReminderMinute
+        )
+    }
+
+    private var todaysReminderCandidates: [TraiPulseReminderCandidate] {
+        let candidates = todaysReminderItems.map {
+            TraiPulseReminderCandidate(
+                id: $0.id.uuidString,
+                title: $0.title,
+                time: $0.time,
+                hour: $0.hour,
+                minute: $0.minute
+            )
+        }
+
+        return candidates.sorted { lhs, rhs in
+            let lhsScore = todaysReminderCandidateScores[lhs.id] ?? 0
+            let rhsScore = todaysReminderCandidateScores[rhs.id] ?? 0
+            if lhsScore != rhsScore { return lhsScore > rhsScore }
+            if lhs.hour != rhs.hour { return lhs.hour < rhs.hour }
+            return lhs.minute < rhs.minute
+        }
+    }
+
+    private var todaysReminderCandidateScores: [String: Double] {
+        let groupedCompletions = reminderCompletionsByReminderId
+        return todaysReminderItems.reduce(into: [:]) { scores, item in
+            let candidate = TraiPulseReminderCandidate(
+                id: item.id.uuidString,
+                title: item.title,
+                time: item.time,
+                hour: item.hour,
+                minute: item.minute
+            )
+            let candidateCompletions = groupedCompletions[item.id] ?? []
+            scores[candidate.id] = reminderHabitScore(for: candidate, completions: candidateCompletions)
+        }
+    }
+
+    private var reminderCompletionsByReminderId: [UUID: [ReminderCompletion]] {
+        let start = Calendar.current.date(
+            byAdding: .day,
+            value: -reminderHabitWindowDays,
+            to: Date()
+        ) ?? Date()
+
+        return Dictionary(grouping: reminderCompletionHistory.filter { $0.completedAt >= start }) { $0.reminderId }
+    }
+
+    private func reminderHabitScore(
+        for reminder: TraiPulseReminderCandidate,
+        completions: [ReminderCompletion]
+    ) -> Double {
+        guard !completions.isEmpty else { return 0 }
+
+        let now = Date()
+        let calendar = Calendar.current
+        let currentWeekday = calendar.component(.weekday, from: now)
+        let scheduledMinutes = reminder.hour * 60 + reminder.minute
+        let maxClockDistance = 180.0
+
+        var weightedSum = 0.0
+        for completion in completions {
+            let dayDiff = max(0, calendar.dateComponents([.day], from: completion.completedAt, to: now).day ?? 0)
+            let recency = max(0.0, Double(reminderHabitWindowDays - dayDiff)) / Double(reminderHabitWindowDays)
+
+            let completionMinutes = calendar.component(.hour, from: completion.completedAt) * 60
+                + calendar.component(.minute, from: completion.completedAt)
+            let rawDistance = abs(completionMinutes - scheduledMinutes)
+            let circularDistance = min(rawDistance, (24 * 60) - rawDistance)
+            let timeMatch = 1.0 - min(1.0, Double(circularDistance) / maxClockDistance)
+            let weekdayMatch = calendar.component(.weekday, from: completion.completedAt) == currentWeekday ? 0.2 : 0.0
+            let onTimeMatch = completion.wasOnTime ? 0.15 : 0.0
+
+            weightedSum += (0.5 * recency) + (0.25 * timeMatch) + onTimeMatch + weekdayMatch
+        }
+
+        let completionRate = reminderHabitCompletionRate(completions)
+        let averageConfidence = min(1.0, (weightedSum / Double(completions.count)) / 1.35)
+        return clamp((0.75 * averageConfidence) + (0.25 * completionRate))
+    }
+
+    private func reminderHabitCompletionRate(_ completions: [ReminderCompletion]) -> Double {
+        min(1.0, Double(completions.count) / 3.0)
+    }
+
+    private func clamp(_ value: Double) -> Double {
+        max(0.0, min(1.0, value))
+    }
+
+    private var todaysReminderCompletionRate: Double? {
+        guard !todaysReminderItemsAll.isEmpty else { return nil }
+        let completed = todaysReminderItemsAll.filter { todaysCompletedReminderIds.contains($0.id) }.count
+        return Double(completed) / Double(todaysReminderItemsAll.count)
+    }
+
+    private var todaysMissedReminderCount: Int? {
+        guard !todaysReminderItemsAll.isEmpty else { return nil }
+        return max(0, todaysReminderItemsAll.count - todaysReminderItems.count)
+    }
+
+    private var daysSinceLastWeightLog: Int? {
+        guard let latest = weightEntries.first else { return nil }
+
+        let calendar = Calendar.current
+        let latestDay = calendar.startOfDay(for: latest.loggedAt)
+        let today = calendar.startOfDay(for: Date())
+        let delta = calendar.dateComponents([.day], from: latestDay, to: today).day ?? 0
+        return max(delta, 0)
+    }
+
+    private var loggedWeightThisWeek: Bool? {
+        let calendar = Calendar.current
+        guard let weekStart = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: Date())) else {
+            return nil
+        }
+        return weightEntries.contains { $0.loggedAt >= weekStart }
+    }
+
+    private var inferredWeightLogWeekdays: [String] {
+        let recentWeightEntries = Array(weightEntries.prefix(12))
+        guard recentWeightEntries.count >= 3 else { return [] }
+
+        let weekdayCounts = recentWeightEntries.reduce(into: [Int: Int]()) { counts, entry in
+            let weekday = Calendar.current.component(.weekday, from: entry.loggedAt)
+            counts[weekday, default: 0] += 1
+        }
+
+        let sortedDays = weekdayCounts.sorted { lhs, rhs in
+            if lhs.value != rhs.value { return lhs.value > rhs.value }
+            return lhs.key < rhs.key
+        }
+
+        guard let topCount = sortedDays.first?.value, topCount >= 2 else { return [] }
+        let threshold = max(2, Int(Double(topCount) * 0.5.rounded(.up)))
+
+        return sortedDays
+            .filter { $0.value >= threshold }
+            .compactMap { weekday in
+                switch weekday.key {
+                case 1: return "Sunday"
+                case 2: return "Monday"
+                case 3: return "Tuesday"
+                case 4: return "Wednesday"
+                case 5: return "Thursday"
+                case 6: return "Friday"
+                case 7: return "Saturday"
+                default: return nil
+                }
+            }
+    }
+
+    private var inferredWeightLogTimes: [String] {
+        let recentWeightEntries = Array(weightEntries.prefix(10))
+        guard recentWeightEntries.count >= 3 else { return [] }
+
+        let timeCounts = recentWeightEntries.reduce(into: [String: Int]()) { counts, entry in
+            let hour = Calendar.current.component(.hour, from: entry.loggedAt)
+            let bucket: String
+            switch hour {
+            case 4..<9:
+                bucket = "Morning (4-9 AM)"
+            case 9..<12:
+                bucket = "Late Morning (9-12 PM)"
+            case 12..<15:
+                bucket = "Early Afternoon (12-3 PM)"
+            case 15..<18:
+                bucket = "Mid-Afternoon (3-6 PM)"
+            case 18..<22:
+                bucket = "Evening (6-10 PM)"
+            default:
+                bucket = "Night (10 PM-4 AM)"
+            }
+            counts[bucket, default: 0] += 1
+        }
+
+        guard !timeCounts.isEmpty else { return [] }
+        let topCount = timeCounts.values.max() ?? 0
+        guard topCount >= 2 else { return [] }
+        let threshold = max(2, Int(Double(topCount) * 0.5.rounded(.up)))
+
+        return timeCounts
+            .filter { $0.value >= threshold }
+            .keys
+            .sorted()
+    }
+
+    private var inferredWeightLogRoutineScore: Double {
+        guard weightEntries.count >= 4 else { return 0 }
+        guard let daysSince = daysSinceLastWeightLog else { return 0 }
+
+        let calendar = Calendar.current
+        let currentWeekday = weekdayLabel(for: calendar.component(.weekday, from: Date()))
+        let currentHour = calendar.component(.hour, from: Date())
+        let isUsualWeekday = inferredWeightLogWeekdays.contains(currentWeekday)
+        let isUsualTime = matchingWeightLogWindow(hour: currentHour, windows: inferredWeightLogTimes) != nil
+
+        let daysSinceScore = min(Double(daysSince), 10.0) / 20.0
+        let recurrenceScore = isUsualWeekday ? 0.22 : 0.0
+        let timeScore = isUsualTime ? 0.2 : 0.0
+        let volumeScore = min(Double(min(weightEntries.count, 20)), 20.0) / 100.0
+        let routinePenalty = isUsualWeekday && isUsualTime ? 0.0 : -0.12
+
+        return clamp(daysSinceScore + recurrenceScore + timeScore + volumeScore + routinePenalty)
+    }
+
+    private func weekdayLabel(for weekday: Int) -> String {
+        switch weekday {
+        case 1: return "Sunday"
+        case 2: return "Monday"
+        case 3: return "Tuesday"
+        case 4: return "Wednesday"
+        case 5: return "Thursday"
+        case 6: return "Friday"
+        case 7: return "Saturday"
+        default: return ""
+        }
+    }
+
+    private func matchingWeightLogWindow(hour: Int, windows: [String]) -> String? {
+        guard (0...23).contains(hour) else { return nil }
+
+        for window in windows {
+            switch window {
+            case "Morning (4-9 AM)":
+                if (4...8).contains(hour) { return "morning window" }
+            case "Late Morning (9-12 PM)":
+                if (9...11).contains(hour) { return "late morning window" }
+            case "Early Afternoon (12-3 PM)":
+                if (12...14).contains(hour) { return "early afternoon window" }
+            case "Mid-Afternoon (3-6 PM)":
+                if (15...17).contains(hour) { return "mid afternoon window" }
+            case "Evening (6-10 PM)":
+                if (18...21).contains(hour) { return "evening window" }
+            case "Night (10 PM-4 AM)":
+                if hour >= 22 || hour <= 3 { return "night window" }
+            default:
+                continue
+            }
+        }
+
+        return nil
+    }
+
+    private var recentWeightRangeKg: Double? {
+        let recentWeightEntries = Array(weightEntries.prefix(20))
+        guard recentWeightEntries.count >= 5 else { return nil }
+
+        let weights = recentWeightEntries.map(\.weightKg)
+        guard let minWeight = weights.min(), let maxWeight = weights.max() else { return nil }
+
+        return maxWeight - minWeight
+    }
+
+    private var pendingPlanReviewRecommendation: PlanRecommendation? {
+        guard let profile else { return nil }
+        return PlanAssessmentService().checkForRecommendation(
+            profile: profile,
+            weightEntries: Array(weightEntries),
+            foodEntries: Array(allFoodEntries)
+        )
+    }
+
+    private var pendingPlanReviewMessage: String? {
+        guard
+            let profile,
+            let recommendation = pendingPlanReviewRecommendation
+        else { return nil }
+        return PlanAssessmentService().getRecommendationMessage(
+            recommendation,
+            useLbs: !(profile.usesMetricWeight)
+        )
+    }
+
+    private var lastRecentWorkoutHour: Int? {
+        let referenceDate = Date()
+        let recentWorkoutDate = allWorkouts.map(\.loggedAt) + liveWorkouts.map { $0.completedAt ?? $0.startedAt }
+            .filter { $0 <= referenceDate }
+        guard let latest = recentWorkoutDate.max() else { return nil }
+        return Calendar.current.component(.hour, from: latest)
+    }
+
     private func fetchCustomReminders() {
         let descriptor = FetchDescriptor<CustomReminder>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         customReminders = (try? modelContext.fetch(descriptor)) ?? []
 
-        // Fetch today's completed reminder IDs
+        let now = Date()
+        let lookbackStart = Calendar.current.date(byAdding: .day, value: -reminderHabitWindowDays, to: now) ?? now
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let completionDescriptor = FetchDescriptor<ReminderCompletion>(
-            predicate: #Predicate { $0.completedAt >= startOfDay }
+            predicate: #Predicate { $0.completedAt >= lookbackStart },
+            sortBy: [SortDescriptor(\.completedAt, order: .reverse)]
         )
         let completions = (try? modelContext.fetch(completionDescriptor)) ?? []
-        todaysCompletedReminderIds = Set(completions.map { $0.reminderId })
+        reminderCompletionHistory = completions
+        trimReminderCompletionHistory(to: now)
+        todaysCompletedReminderIds = Set(
+            completions
+                .filter { $0.completedAt >= startOfDay }
+                .map { $0.reminderId }
+        )
+    }
+
+    private func trimReminderCompletionHistory(to referenceDate: Date) {
+        let start = Calendar.current.date(
+            byAdding: .day,
+            value: -reminderHabitWindowDays,
+            to: referenceDate
+        ) ?? referenceDate
+
+        reminderCompletionHistory.removeAll { $0.completedAt < start }
+        while reminderCompletionHistory.count > reminderCompletionHistoryCapPerWindow {
+            reminderCompletionHistory.removeLast()
+        }
     }
 
     private func completeReminder(_ reminder: TodaysRemindersCard.ReminderItem) {
@@ -493,6 +845,8 @@ struct DashboardView: View {
             wasOnTime: wasOnTime
         )
         modelContext.insert(completion)
+        reminderCompletionHistory.insert(completion, at: 0)
+        trimReminderCompletionHistory(to: now)
 
         // Update local state with animation for smooth removal
         _ = withAnimation(.easeInOut(duration: 0.3)) {
@@ -544,6 +898,55 @@ struct DashboardView: View {
         }
     }
 
+    private func startWorkoutTemplate(_ action: DailyCoachAction) {
+        guard let metadata = action.metadata else {
+            startWorkout()
+            return
+        }
+
+        let templateID = metadata["template_id"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let templateName = metadata["template_name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? metadata["name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? metadata["workout_name"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let profile, let plan = profile.workoutPlan else {
+            startCustomWorkout()
+            return
+        }
+
+        if let templateID,
+           let id = UUID(uuidString: templateID),
+           let template = plan.templates.first(where: { $0.id == id }) {
+            startWorkoutFromTemplate(template)
+            return
+        }
+
+        if let templateName, !templateName.isEmpty,
+           let template = plan.templates.first(where: { $0.name.caseInsensitiveCompare(templateName) == .orderedSame }) {
+            startWorkoutFromTemplate(template)
+            return
+        }
+
+        startWorkout()
+    }
+
+    private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
+        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+
+        let workout = LiveWorkout(
+            name: template.name,
+            workoutType: .strength,
+            targetMuscleGroups: muscleGroups
+        )
+        modelContext.insert(workout)
+        try? modelContext.save()
+
+        pendingTemplate = template
+        pendingWorkout = workout
+        showingWorkoutSheet = true
+        HapticManager.selectionChanged()
+    }
+
     private func startCustomWorkout() {
         let workout = LiveWorkout(
             name: "Custom Workout",
@@ -590,23 +993,127 @@ struct DashboardView: View {
         HapticManager.selectionChanged()
     }
 
-    private func handleCoachAction(_ action: DailyCoachAction.Kind) {
-        switch action {
+    private func handleCoachAction(_ action: DailyCoachAction) {
+        switch action.kind {
         case .startWorkout:
             trackPulseInteraction("pulse_action_start_workout")
             startWorkout()
+        case .startWorkoutTemplate:
+            trackPulseInteraction("pulse_action_start_workout_template")
+            startWorkoutTemplate(action)
         case .logFood:
             trackPulseInteraction("pulse_action_log_food")
             showingLogFood = true
             HapticManager.selectionChanged()
-        case .openChat:
-            trackPulseInteraction("pulse_action_open_chat")
-            if pendingPulseSeedPrompt.isEmpty {
-                pendingPulseSeedPrompt = buildPulseHandoffPrompt()
-            }
+        case .logFoodCamera:
+            trackPulseInteraction("pulse_action_log_food_camera")
+            showingLogFood = true
+            HapticManager.selectionChanged()
+        case .logWeight:
+            trackPulseInteraction("pulse_action_log_weight")
+            showingLogWeight = true
+            HapticManager.selectionChanged()
+        case .openWeight:
+            trackPulseInteraction("pulse_action_open_weight")
+            selectedDate = .now
+            showingWeightTracking = true
+            HapticManager.selectionChanged()
+        case .openCalorieDetail:
+            trackPulseInteraction("pulse_action_open_calorie_detail")
+            selectedDate = .now
+            showingCalorieDetail = true
+            HapticManager.selectionChanged()
+        case .openMacroDetail:
+            trackPulseInteraction("pulse_action_open_macro_detail")
+            selectedDate = .now
+            showingMacroDetail = true
+            HapticManager.selectionChanged()
+        case .openProfile:
+            trackPulseInteraction("pulse_action_open_profile")
+            selectedTabRaw = AppTab.profile.rawValue
+            HapticManager.selectionChanged()
+        case .openWorkouts:
+            trackPulseInteraction("pulse_action_open_workouts")
+            selectedTabRaw = AppTab.workouts.rawValue
+            HapticManager.selectionChanged()
+        case .openWorkoutPlan:
+            trackPulseInteraction("pulse_action_open_workout_plan")
+            selectedTabRaw = AppTab.workouts.rawValue
+            HapticManager.selectionChanged()
+        case .openRecovery:
+            trackPulseInteraction("pulse_action_open_recovery")
+            selectedTabRaw = AppTab.workouts.rawValue
+            HapticManager.selectionChanged()
+        case .reviewNutritionPlan:
+            trackPulseInteraction("pulse_action_review_nutrition_plan")
+            pendingPlanReviewRequest = true
             selectedTabRaw = AppTab.trai.rawValue
             HapticManager.selectionChanged()
+        case .reviewWorkoutPlan:
+            trackPulseInteraction("pulse_action_review_workout_plan")
+            pendingWorkoutPlanReviewRequest = true
+            selectedTabRaw = AppTab.trai.rawValue
+            HapticManager.selectionChanged()
+        case .completeReminder:
+            trackPulseInteraction("pulse_action_complete_reminder")
+            guard let reminder = reminderToComplete(action: action) else {
+                return
+            }
+            selectedDate = .now
+            completeReminder(reminder)
+            HapticManager.selectionChanged()
         }
+    }
+
+    private func reminderToComplete(action: DailyCoachAction) -> TodaysRemindersCard.ReminderItem? {
+        guard let metadata = action.metadata else { return nil }
+        let candidates = todaysReminderItems
+
+        if let reminderID = metadata["reminder_id"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let id = UUID(uuidString: reminderID),
+           let matched = candidates.first(where: { $0.id == id }) {
+            return matched
+        }
+
+        if let title = metadata["reminder_title"]?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            let byTitle = candidates.filter { $0.title == title }
+            if byTitle.count == 1 {
+                return byTitle.first
+            }
+
+            if let time = metadata["reminder_time"]?.trimmingCharacters(in: .whitespacesAndNewlines), !time.isEmpty {
+                let byTime = byTitle.filter { $0.time == time }
+                if byTime.count == 1 {
+                    return byTime.first
+                }
+            }
+        }
+
+        if let hourValue = parseInt(metadata["reminder_hour"]),
+           let minuteValue = parseInt(metadata["reminder_minute"]) {
+            let byClock = candidates.filter { $0.hour == hourValue && $0.minute == minuteValue }
+            if byClock.count == 1 {
+                return byClock.first
+            }
+            if let title = metadata["reminder_title"]?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+                let exact = byClock.filter { $0.title == title }
+                if exact.count == 1 {
+                    return exact.first
+                }
+            }
+        }
+
+        if candidates.count == 1 {
+            return candidates.first
+        }
+
+        return nil
+    }
+
+    private func parseInt(_ raw: String?) -> Int? {
+        raw
+            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .flatMap(Int.init)
     }
 
     private func handleCoachQuestionAnswer(_ question: TraiPulseQuestion, _ answer: String) {
@@ -703,6 +1210,24 @@ struct DashboardView: View {
                 tomorrowWorkoutMinutes: inferredMinutes,
                 trend: context.trend,
                 patternProfile: context.patternProfile,
+                reminderCompletionRate: context.reminderCompletionRate,
+                recentMissedReminderCount: context.recentMissedReminderCount,
+                daysSinceLastWeightLog: context.daysSinceLastWeightLog,
+                weightLoggedThisWeek: context.weightLoggedThisWeek,
+                weightLoggedThisWeekDays: context.weightLoggedThisWeekDays,
+                weightLikelyLogTimes: context.weightLikelyLogTimes,
+                weightRecentRangeKg: context.weightRecentRangeKg,
+                weightLogRoutineScore: context.weightLogRoutineScore,
+                todaysExerciseMinutes: context.todaysExerciseMinutes,
+                lastActiveWorkoutHour: context.lastActiveWorkoutHour,
+                likelyReminderTimes: context.likelyReminderTimes,
+                likelyWorkoutTimes: context.likelyWorkoutTimes,
+                planReviewTrigger: context.planReviewTrigger,
+                planReviewMessage: context.planReviewMessage,
+                planReviewDaysSince: context.planReviewDaysSince,
+                planReviewWeightDeltaKg: context.planReviewWeightDeltaKg,
+                pendingReminderCandidates: todaysReminderCandidates,
+                pendingReminderCandidateScores: context.pendingReminderCandidateScores,
                 contextPacket: nil
             )
 

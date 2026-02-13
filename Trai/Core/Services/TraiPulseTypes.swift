@@ -80,6 +80,14 @@ struct TraiPulsePatternProfile: Hashable, Sendable {
     }
 }
 
+struct TraiPulseReminderCandidate: Hashable, Sendable {
+    let id: String
+    let title: String
+    let time: String
+    let hour: Int
+    let minute: Int
+}
+
 struct TraiPulseContextPacket: Hashable, Sendable {
     let goal: String
     let constraints: [String]
@@ -119,15 +127,34 @@ struct TraiPulseAction: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable {
         case startWorkout
         case logFood
-        case openChat
-        case addNote
-        case viewRecovery
+        case logFoodCamera
+        case logWeight
+        case openWeight
+        case openCalorieDetail
+        case openMacroDetail
+        case openProfile
+        case openWorkouts
+        case openWorkoutPlan
+        case openRecovery
+        case startWorkoutTemplate
+        case reviewNutritionPlan
+        case reviewWorkoutPlan
+        case completeReminder
     }
 
-    let id = UUID()
+    let id: UUID
     let kind: Kind
     let title: String
     let subtitle: String?
+    let metadata: [String: String]?
+
+    init(id: UUID = UUID(), kind: Kind, title: String, subtitle: String?, metadata: [String: String]? = nil) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.subtitle = subtitle
+        self.metadata = metadata
+    }
 }
 
 struct TraiPulseReason: Identifiable, Hashable, Sendable {
@@ -202,4 +229,94 @@ struct TraiPulseInputContext: Sendable {
     let trend: TraiPulseTrendSnapshot?
     let patternProfile: TraiPulsePatternProfile?
     let contextPacket: TraiPulseContextPacket?
+    let reminderCompletionRate: Double?
+    let recentMissedReminderCount: Int?
+    let daysSinceLastWeightLog: Int?
+    let weightLoggedThisWeek: Bool?
+    let weightLoggedThisWeekDays: [String]
+    let weightLikelyLogTimes: [String]
+    let weightRecentRangeKg: Double?
+    let weightLogRoutineScore: Double
+    let todaysExerciseMinutes: Int?
+    let lastActiveWorkoutHour: Int?
+    let likelyReminderTimes: [String]
+    let likelyWorkoutTimes: [String]
+    let planReviewTrigger: String?
+    let planReviewMessage: String?
+    let planReviewDaysSince: Int?
+    let planReviewWeightDeltaKg: Double?
+    let pendingReminderCandidates: [TraiPulseReminderCandidate]
+    let pendingReminderCandidateScores: [String: Double]
+
+    init(
+        now: Date,
+        hasWorkoutToday: Bool,
+        hasActiveWorkout: Bool,
+        caloriesConsumed: Int,
+        calorieGoal: Int,
+        proteinConsumed: Int,
+        proteinGoal: Int,
+        readyMuscleCount: Int,
+        recommendedWorkoutName: String?,
+        workoutWindowStartHour: Int,
+        workoutWindowEndHour: Int,
+        activeSignals: [CoachSignalSnapshot],
+        tomorrowWorkoutMinutes: Int,
+        trend: TraiPulseTrendSnapshot?,
+        patternProfile: TraiPulsePatternProfile?,
+        reminderCompletionRate: Double? = nil,
+        recentMissedReminderCount: Int? = nil,
+        daysSinceLastWeightLog: Int? = nil,
+        weightLoggedThisWeek: Bool? = nil,
+        weightLoggedThisWeekDays: [String] = [],
+        weightLikelyLogTimes: [String] = [],
+        weightRecentRangeKg: Double? = nil,
+        weightLogRoutineScore: Double = 0.0,
+        todaysExerciseMinutes: Int? = nil,
+        lastActiveWorkoutHour: Int? = nil,
+        likelyReminderTimes: [String] = [],
+        likelyWorkoutTimes: [String] = [],
+        planReviewTrigger: String? = nil,
+        planReviewMessage: String? = nil,
+        planReviewDaysSince: Int? = nil,
+        planReviewWeightDeltaKg: Double? = nil,
+        pendingReminderCandidates: [TraiPulseReminderCandidate] = [],
+        pendingReminderCandidateScores: [String: Double] = [:],
+        contextPacket: TraiPulseContextPacket?
+    ) {
+        self.now = now
+        self.hasWorkoutToday = hasWorkoutToday
+        self.hasActiveWorkout = hasActiveWorkout
+        self.caloriesConsumed = caloriesConsumed
+        self.calorieGoal = calorieGoal
+        self.proteinConsumed = proteinConsumed
+        self.proteinGoal = proteinGoal
+        self.readyMuscleCount = readyMuscleCount
+        self.recommendedWorkoutName = recommendedWorkoutName
+        self.workoutWindowStartHour = workoutWindowStartHour
+        self.workoutWindowEndHour = workoutWindowEndHour
+        self.activeSignals = activeSignals
+        self.tomorrowWorkoutMinutes = tomorrowWorkoutMinutes
+        self.trend = trend
+        self.patternProfile = patternProfile
+        self.reminderCompletionRate = reminderCompletionRate
+        self.recentMissedReminderCount = recentMissedReminderCount
+        self.daysSinceLastWeightLog = daysSinceLastWeightLog
+        self.weightLoggedThisWeek = weightLoggedThisWeek
+        self.weightLoggedThisWeekDays = weightLoggedThisWeekDays
+        self.weightLikelyLogTimes = weightLikelyLogTimes
+        self.weightRecentRangeKg = weightRecentRangeKg
+        self.weightLogRoutineScore = weightLogRoutineScore
+        self.todaysExerciseMinutes = todaysExerciseMinutes
+        self.lastActiveWorkoutHour = lastActiveWorkoutHour
+        self.likelyReminderTimes = likelyReminderTimes
+        self.likelyWorkoutTimes = likelyWorkoutTimes
+        self.planReviewTrigger = planReviewTrigger
+        self.planReviewMessage = planReviewMessage
+        self.planReviewDaysSince = planReviewDaysSince
+        self.planReviewWeightDeltaKg = planReviewWeightDeltaKg
+        self.pendingReminderCandidates = pendingReminderCandidates
+        self.pendingReminderCandidateScores = pendingReminderCandidateScores
+        self.contextPacket = contextPacket
+    }
 }

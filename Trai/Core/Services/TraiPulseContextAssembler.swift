@@ -116,6 +116,65 @@ enum TraiPulseContextAssembler {
             }
         }
 
+        if let reminderRate = context.reminderCompletionRate {
+            if reminderRate < 0.6 {
+                ranked.append(
+                    RankedSnippet(
+                        text: "Reminder completion is low",
+                        utility: clamp(0.64 + (1 - reminderRate) * 0.25)
+                    )
+                )
+            }
+        }
+
+        if let missed = context.recentMissedReminderCount, missed > 0 {
+            ranked.append(
+                RankedSnippet(
+                    text: "\(missed) reminders still pending",
+                    utility: clamp(0.61 + Double(min(missed, 4)) * 0.08)
+                )
+            )
+        }
+
+        if let daysSinceWeight = context.daysSinceLastWeightLog, daysSinceWeight >= 3 {
+            ranked.append(
+                RankedSnippet(
+                    text: "Last weight log was \(daysSinceWeight)d ago",
+                    utility: clamp(0.6 + Double(min(daysSinceWeight, 6)) * 0.06)
+                )
+            )
+        }
+
+        if !context.weightLoggedThisWeekDays.isEmpty {
+            let currentWeekday = weekdayName(for: Calendar.current.component(.weekday, from: context.now))
+            if context.weightLoggedThisWeekDays.contains(currentWeekday) {
+                ranked.append(
+                    RankedSnippet(
+                        text: "You usually log weight on \(currentWeekday)",
+                        utility: 0.62
+                    )
+                )
+            }
+        }
+
+        if let exerciseMinutes = context.todaysExerciseMinutes {
+            if exerciseMinutes == 0 && !context.hasWorkoutToday && !context.hasActiveWorkout {
+                ranked.append(
+                    RankedSnippet(
+                        text: "No exercise minutes logged today",
+                        utility: 0.58
+                    )
+                )
+            } else if exerciseMinutes < 10 {
+                ranked.append(
+                    RankedSnippet(
+                        text: "Exercise today is light (\(exerciseMinutes)m)",
+                        utility: 0.44 + min(Double(exerciseMinutes) / 40.0, 0.06)
+                    )
+                )
+            }
+        }
+
         return ranked.sorted { $0.utility > $1.utility }
     }
 
@@ -196,6 +255,48 @@ enum TraiPulseContextAssembler {
             )
         }
 
+        if context.weightLoggedThisWeek == false {
+            anomalies.append(
+                RankedSnippet(
+                    text: "Weight hasn't been logged this week",
+                    utility: 0.66
+                )
+            )
+        }
+
+        if !context.weightLoggedThisWeekDays.isEmpty &&
+            context.daysSinceLastWeightLog != nil &&
+            context.daysSinceLastWeightLog! >= 2 {
+            let currentWeekday = weekdayName(for: Calendar.current.component(.weekday, from: context.now))
+            if context.weightLoggedThisWeekDays.contains(currentWeekday) {
+                anomalies.append(
+                    RankedSnippet(
+                        text: "Today is a usual weight-log day but no log yet",
+                        utility: 0.7
+                    )
+                )
+            }
+        }
+
+        if let planReviewMessage = context.planReviewMessage, !planReviewMessage.isEmpty {
+            anomalies.append(
+                RankedSnippet(
+                    text: planReviewMessage,
+                    utility: clamp(0.76 + (context.planReviewWeightDeltaKg.map { min(abs($0) / 4.0, 0.1) } ?? 0))
+                )
+            )
+        }
+
+        if let weightRange = context.weightRecentRangeKg,
+           weightRange >= 1.6 {
+            anomalies.append(
+                RankedSnippet(
+                    text: "Weight has fluctuated by about \(String(format: "%.1f", weightRange))kg recently",
+                    utility: clamp(0.68 + min(weightRange / 5.0, 0.18))
+                )
+            )
+        }
+
         return anomalies.sorted { $0.utility > $1.utility }
     }
 
@@ -206,14 +307,125 @@ enum TraiPulseContextAssembler {
     ) -> [RankedSnippet] {
         let workoutTitle = context.recommendedWorkoutName ?? "recommended workout"
         var ranked: [RankedSnippet] = []
+        var hasWeightLogAction = false
 
-        if !context.hasWorkoutToday && !context.hasActiveWorkout {
+        if let reminderRate = context.reminderCompletionRate, reminderRate < 0.7 {
             ranked.append(
                 RankedSnippet(
-                    text: "Start \(workoutTitle)",
-                    utility: clamp(0.74 + patternProfile.affinity(for: .startWorkout) * 0.22)
+                    text: "Reminder completion is low",
+                    utility: clamp(0.74 + (1 - reminderRate) * 0.2)
                 )
             )
+        } else if let missed = context.recentMissedReminderCount, missed > 1 {
+            ranked.append(
+                RankedSnippet(
+                    text: "You have \(missed) reminders pending",
+                    utility: clamp(0.7 + min(Double(missed), 3) * 0.06)
+                )
+            )
+        }
+
+        for reminder in rankedReminderCandidates(context: context).prefix(3) {
+            let actionUtility = reminderScoreToUtility(reminder.score)
+            ranked.append(
+                RankedSnippet(
+                    text: "Complete \(reminder.candidate.title) at \(reminder.candidate.time)",
+                    utility: actionUtility
+                )
+            )
+        }
+
+        if !context.hasWorkoutToday && !context.hasActiveWorkout,
+           let bestWorkoutWindow = patternProfile.strongestWorkoutWindow(minScore: 0.24) {
+            ranked.append(
+                RankedSnippet(
+                    text: "Start workout in your \(bestWorkoutWindow.label.lowercased()) pattern window",
+                    utility: clamp(0.76 + patternProfile.affinity(for: .startWorkout) * 0.15)
+                )
+            )
+        }
+
+        for workoutWindow in context.likelyWorkoutTimes.prefix(3) {
+            ranked.append(
+                RankedSnippet(
+                    text: "Workout around \(workoutWindow)",
+                    utility: clamp(0.63)
+                )
+            )
+        }
+
+        let currentWeekday = weekdayName(for: Calendar.current.component(.weekday, from: context.now))
+        let usualWeightDay = context.weightLoggedThisWeekDays.contains(currentWeekday)
+        let currentHour = Calendar.current.component(.hour, from: context.now)
+        let currentWeightLogWindow = matchingWeightLogWindow(
+            hour: currentHour,
+            windows: context.weightLikelyLogTimes
+        )
+        let weightLogRoutineScore = context.weightLogRoutineScore
+
+        if let daysSinceWeight = context.daysSinceLastWeightLog,
+           (daysSinceWeight >= 4 && (context.weightLoggedThisWeek ?? true) == false) {
+            ranked.append(
+                RankedSnippet(
+                    text: "Log Weight",
+                    utility: clamp(0.76 + Double(min(daysSinceWeight, 7)) * 0.02 + (weightLogRoutineScore * 0.08))
+                )
+            )
+            hasWeightLogAction = true
+        } else if usualWeightDay && (context.weightLoggedThisWeek ?? true) == false {
+            ranked.append(
+                RankedSnippet(
+                    text: "Log Weight",
+                    utility: clamp(0.78 + (weightLogRoutineScore * 0.06))
+                )
+            )
+            hasWeightLogAction = true
+        } else if let weightWindow = currentWeightLogWindow, (context.weightLoggedThisWeek ?? true) == false {
+            ranked.append(
+                RankedSnippet(
+                    text: "Log Weight (\(weightWindow))",
+                    utility: clamp(0.73 + (weightLogRoutineScore * 0.07))
+                )
+            )
+            hasWeightLogAction = true
+        }
+
+        if !hasWeightLogAction && (context.weightLoggedThisWeek ?? true) == false && currentWeightLogWindow != nil {
+            ranked.append(
+                RankedSnippet(
+                    text: "Log Weight (\(currentWeightLogWindow ?? "your usual slot"))",
+                    utility: clamp(0.66 + (weightLogRoutineScore * 0.08))
+                )
+            )
+            hasWeightLogAction = true
+        }
+
+        if let daysSinceWeight = context.daysSinceLastWeightLog, daysSinceWeight >= 8 {
+            ranked.append(
+                RankedSnippet(
+                    text: "Open Weight",
+                    utility: clamp(0.62 + (weightLogRoutineScore * 0.05))
+                )
+            )
+        } else if context.weightLoggedThisWeek == false {
+            ranked.append(
+                RankedSnippet(
+                    text: "Open Weight",
+                    utility: clamp(0.54 + (weightLogRoutineScore * 0.08))
+                )
+            )
+        }
+
+        if !context.hasWorkoutToday && !context.hasActiveWorkout {
+            let workoutWindow = Calendar.current.component(.hour, from: context.now)
+            if workoutWindow >= context.workoutWindowStartHour && workoutWindow <= context.workoutWindowEndHour {
+                ranked.append(
+                    RankedSnippet(
+                        text: "Start \(workoutTitle)",
+                        utility: clamp(0.74 + patternProfile.affinity(for: .startWorkout) * 0.22)
+                    )
+                )
+            }
         }
 
         if proteinRemaining >= 25 {
@@ -228,15 +440,63 @@ enum TraiPulseContextAssembler {
         if context.activeSignals.contains(where: { $0.domain == .pain || $0.domain == .recovery }) {
             ranked.append(
                 RankedSnippet(
-                    text: "Open Trai for a pain-aware adjustment",
-                    utility: clamp(0.72 + patternProfile.affinity(for: .openChat) * 0.18)
+                    text: "Open Recovery",
+                    utility: clamp(0.72 + patternProfile.affinity(for: .openRecovery) * 0.18)
                 )
             )
-        } else {
+        }
+
+        if context.todaysExerciseMinutes == 0 && !context.hasActiveWorkout && !context.hasWorkoutToday {
             ranked.append(
                 RankedSnippet(
-                    text: "Open Trai to refine tomorrow's plan",
-                    utility: clamp(0.55 + patternProfile.affinity(for: .openChat) * 0.24)
+                    text: "Open Workouts",
+                    utility: 0.48 + patternProfile.affinity(for: .openWorkouts) * 0.17
+                )
+            )
+        }
+
+        if let planReviewTrigger = context.planReviewTrigger, !planReviewTrigger.isEmpty {
+            let reviewAction: String
+            let affinityKind: TraiPulseAction.Kind
+            switch planReviewTrigger {
+            case "weight_change", "weight_plateau":
+                reviewAction = "Review Nutrition Plan"
+                affinityKind = .reviewNutritionPlan
+            default:
+                reviewAction = "Review Workout Plan"
+                affinityKind = .reviewWorkoutPlan
+            }
+
+            ranked.append(
+                RankedSnippet(
+                    text: reviewAction,
+                    utility: clamp(0.84 + (patternProfile.affinity(for: affinityKind) * 0.16) +
+                                   (context.planReviewDaysSince ?? 0 > 30 ? 0.06 : 0.0))
+                )
+            )
+        } else if let weightRange = context.weightRecentRangeKg, weightRange >= 2.2 {
+            ranked.append(
+                RankedSnippet(
+                    text: "Review Nutrition Plan",
+                    utility: clamp(0.75 + patternProfile.affinity(for: .reviewNutritionPlan) * 0.15)
+                )
+            )
+        }
+
+        if context.caloriesConsumed > 0 {
+            ranked.append(
+                RankedSnippet(
+                    text: "Open Calorie Detail",
+                    utility: clamp(0.45 + (patternProfile.affinity(for: .openCalorieDetail) * 0.16))
+                )
+            )
+        }
+
+        if context.proteinConsumed > 0 || context.proteinGoal > 0 {
+            ranked.append(
+                RankedSnippet(
+                    text: "Open Macro Detail",
+                    utility: clamp(0.44 + (patternProfile.affinity(for: .openMacroDetail) * 0.15))
                 )
             )
         }
@@ -246,6 +506,42 @@ enum TraiPulseContextAssembler {
 
     private static func select(from snippets: [RankedSnippet], limit: Int) -> [String] {
         Array(snippets.prefix(max(limit, 0)).map(\.text))
+    }
+
+    private static func rankedReminderCandidates(
+        context: TraiPulseInputContext
+    ) -> [(candidate: TraiPulseReminderCandidate, score: Double)] {
+        guard !context.pendingReminderCandidates.isEmpty else { return [] }
+
+        return context.pendingReminderCandidates
+            .map { candidate in
+                (candidate: candidate, score: context.pendingReminderCandidateScores[candidate.id] ?? 0)
+            }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                if lhs.candidate.hour != rhs.candidate.hour {
+                    return lhs.candidate.hour < rhs.candidate.hour
+                }
+                return lhs.candidate.minute < rhs.candidate.minute
+            }
+    }
+
+    private static func reminderScoreToUtility(_ score: Double) -> Double {
+        let boundedScore = clamp(score)
+        return clamp(0.74 + (boundedScore * 0.18))
+    }
+
+    private static func weekdayName(for weekday: Int) -> String {
+        switch weekday {
+        case 1: return "Sunday"
+        case 2: return "Monday"
+        case 3: return "Tuesday"
+        case 4: return "Wednesday"
+        case 5: return "Thursday"
+        case 6: return "Friday"
+        case 7: return "Saturday"
+        default: return "Unknown"
+        }
     }
 
     private static func packetFrom(
@@ -291,5 +587,30 @@ enum TraiPulseContextAssembler {
 
     private static func clamp(_ value: Double) -> Double {
         min(max(value, 0), 1)
+    }
+
+    private static func matchingWeightLogWindow(hour: Int, windows: [String]) -> String? {
+        guard (0...23).contains(hour) else { return nil }
+
+        for window in windows {
+            switch window {
+            case "Morning (4-9 AM)":
+                if (4...8).contains(hour) { return "morning window" }
+            case "Late Morning (9-12 PM)":
+                if (9...11).contains(hour) { return "late morning window" }
+            case "Early Afternoon (12-3 PM)":
+                if (12...14).contains(hour) { return "early afternoon window" }
+            case "Mid-Afternoon (3-6 PM)":
+                if (15...17).contains(hour) { return "mid afternoon window" }
+            case "Evening (6-10 PM)":
+                if (18...21).contains(hour) { return "evening window" }
+            case "Night (10 PM-4 AM)":
+                if hour >= 22 || hour <= 3 { return "night window" }
+            default:
+                continue
+            }
+        }
+
+        return nil
     }
 }

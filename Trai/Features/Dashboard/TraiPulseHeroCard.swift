@@ -10,7 +10,7 @@ import SwiftUI
 
 struct TraiPulseHeroCard: View {
     let context: DailyCoachContext
-    let onAction: (DailyCoachAction.Kind) -> Void
+    let onAction: (DailyCoachAction) -> Void
     var onQuestionAnswer: ((TraiPulseQuestion, String) -> Void)?
     var onPlanProposalDecision: ((TraiPulsePlanProposal, TraiPulsePlanProposalDecision) -> Void)?
     var onQuickChat: ((String) -> Void)?
@@ -150,36 +150,17 @@ struct TraiPulseHeroCard: View {
                     promptBlock(pulseContent)
                 }
 
-                Button {
-                    let prompt = quickChatPrompt(for: pulseContent)
-                    if let onQuickChat {
-                        onQuickChat(prompt)
-                    } else {
-                        onAction(.openChat)
+                if let action = actionPrompt(for: pulseContent) {
+                    VStack(spacing: 8) {
+                        actionButton(action, style: pulseContent.surfaceType, compact: false)
+                        quickChatButton(
+                            prompt: quickChatPrompt(for: pulseContent),
+                            compact: false
+                        )
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                        Text("Chat With Trai")
-                            .fontWeight(.semibold)
-                        Spacer(minLength: 0)
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule()
-                            .fill(Color.accentColor.opacity(0.14))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
-                    )
+                } else {
+                    quickChatButton(prompt: quickChatPrompt(for: pulseContent), compact: false)
                 }
-                .buttonStyle(.plain)
             } else if isLoadingPulse {
                 loadingBlock
             } else {
@@ -304,8 +285,8 @@ struct TraiPulseHeroCard: View {
             if shouldShowQuestion(question) {
                 questionSection(question, style: content.surfaceType)
             }
-        case .action(let action):
-            actionPrompt(action, style: content.surfaceType)
+        case .action:
+            EmptyView()
         case .planProposal(let proposal):
             planProposalSection(proposal)
         case .none:
@@ -313,34 +294,106 @@ struct TraiPulseHeroCard: View {
         }
     }
 
-    private func actionPrompt(_ action: DailyCoachAction, style: TraiPulseSurfaceType) -> some View {
+    private func actionButton(_ action: DailyCoachAction, style: TraiPulseSurfaceType, compact: Bool) -> some View {
         Button {
-            onAction(action.kind)
+            onAction(action)
         } label: {
             HStack(spacing: 10) {
+                Image(systemName: actionIconName(for: action))
+                    .font(.subheadline)
+                    .foregroundStyle(PulseTheme.surfaceTint(style))
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(action.title)
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                        .lineLimit(compact ? 2 : nil)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let subtitle = action.subtitle {
+                    if !compact, let subtitle = action.subtitle {
                         Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Spacer()
-                Image(systemName: "arrow.right")
-                    .font(.caption)
-                    .foregroundStyle(PulseTheme.surfaceTint(style))
+                Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(PulseTheme.surfaceTint(style).opacity(0.12), in: .capsule)
+            .background(
+                Capsule()
+                    .fill(PulseTheme.surfaceTint(style).opacity(0.12))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(PulseTheme.surfaceTint(style).opacity(0.30), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
+    }
+
+    private func quickChatButton(prompt: String, compact: Bool) -> some View {
+        Button {
+            if let onQuickChat {
+                onQuickChat(prompt)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "circle.hexagongrid.circle")
+                    .font(.subheadline)
+                Text("Chat with Trai")
+                    .fontWeight(.semibold)
+                    .lineLimit(compact ? 2 : 1)
+                if !compact {
+                    Spacer(minLength: 0)
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(Color.accentColor)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.14))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func actionPrompt(for content: TraiPulseContentSnapshot) -> DailyCoachAction? {
+        guard case .action(let action) = content.prompt else { return nil }
+        return action
+    }
+
+    private func actionIconName(for action: DailyCoachAction) -> String {
+        switch action.kind {
+        case .startWorkout, .startWorkoutTemplate:
+            return "figure.strengthtraining.traditional"
+        case .logFood, .openCalorieDetail, .openMacroDetail:
+            return "fork.knife"
+        case .logWeight, .openWeight:
+            return "scalemass"
+        case .openProfile:
+            return "person.crop.circle"
+        case .openWorkouts, .openWorkoutPlan:
+            return "dumbbell.fill"
+        case .openRecovery:
+            return "heart.text.square"
+        case .reviewNutritionPlan:
+            return "list.bullet.clipboard"
+        case .reviewWorkoutPlan:
+            return "calendar.badge.clock"
+        case .completeReminder:
+            return "checkmark.circle"
+        case .logFoodCamera:
+            return "camera"
+        }
     }
 
     @ViewBuilder

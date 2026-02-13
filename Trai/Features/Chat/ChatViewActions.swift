@@ -491,7 +491,8 @@ extension ChatView {
         let prompt = pendingPulseSeedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
         pendingPulseSeedPrompt = ""
-        pulseHandoffContext = prompt
+        startNewSession(silent: true)
+        startPulseConversation(from: prompt)
     }
 }
 

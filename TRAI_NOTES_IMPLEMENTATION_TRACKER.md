@@ -1,6 +1,6 @@
 # Trai Notes Implementation Tracker
 
-Last updated: 2026-02-07
+Last updated: 2026-02-13
 
 ## Status Legend
 - `OPEN`: Not implemented
@@ -94,3 +94,10 @@ Last updated: 2026-02-07
 - 2026-02-07: Additional #2/#9 optimization by rendering the actively streaming AI bubble as plain text (skip markdown parsing until stream completion) in `/Users/nadav/Desktop/Trai/Trai/Features/Chat/ChatContentList.swift` and `/Users/nadav/Desktop/Trai/Trai/Features/Chat/ChatMessageViews.swift`.
 - 2026-02-07: Additional #2/#9 optimization in `/Users/nadav/Desktop/Trai/Trai/Features/Chat/ChatContentList.swift` + `/Users/nadav/Desktop/Trai/Trai/Features/Chat/ChatMessageViews.swift` to limit text selection to the most recent AI messages, reducing interaction overhead in long chat histories.
 - 2026-02-07: Additional #2/#9 optimization in `/Users/nadav/Desktop/Trai/Trai/Features/Chat/ChatMessageViews.swift` + `/Users/nadav/Desktop/Trai/Trai/Features/Chat/ChatContentList.swift` to restrict heavy state animations to the newest visible message only, reducing update overhead in long threads.
+
+### 2026-02-13: Trai Pulse Surface Expansion (Habit-aware + broader action routing)
+- DONE: Added plan-review and habit context inputs to `DailyCoachContext`, `TraiPulseInputContext`, and context assembly (`reminderCompletionRate`, weight cadence fields, exercise timing, plan review metadata).
+- DONE: Expanded Pulse action enums and schema to remove chat-style actions and add explicit navigation/actions (`open_weight`, `open_calorie_detail`, `open_macro_detail`, `open_profile`, `open_workouts`, `open_workout_plan`, `open_recovery`, `open_reminders`, `start_workout_template`, `log_food_camera`, `log_weight`).
+- DONE: Wired action handling in Dashboard flow (`DashboardView`) for new action types and added missing sheet entry points where needed (`WeightTrackingView`, calorie/macro detail sheets).
+- DONE: Added habit-aware context packet candidates for reminders/weight and plan review (weight cadence, plan age/weight flags), plus contextual suppression support by removing always-on detail actions.
+- IN PROGRESS: Decide whether to add first-class Pulse prompts for reminder-window nudges and plan-edit timing nudges before finalizing model policy.

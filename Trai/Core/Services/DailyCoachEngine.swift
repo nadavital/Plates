@@ -95,19 +95,121 @@ struct DailyCoachContext {
     let activeSignals: [CoachSignal]
     let trend: TraiPulseTrendSnapshot?
     let patternProfile: TraiPulsePatternProfile?
+    let reminderCompletionRate: Double?
+    let recentMissedReminderCount: Int?
+    let daysSinceLastWeightLog: Int?
+    let weightLoggedThisWeek: Bool?
+    let weightLoggedThisWeekDays: [String]
+    let weightLikelyLogTimes: [String]
+    let weightRecentRangeKg: Double?
+    let weightLogRoutineScore: Double
+    let todaysExerciseMinutes: Int?
+    let lastActiveWorkoutHour: Int?
+    let likelyReminderTimes: [String]
+    let likelyWorkoutTimes: [String]
+    let planReviewTrigger: String?
+    let planReviewMessage: String?
+    let planReviewDaysSince: Int?
+    let planReviewWeightDeltaKg: Double?
+    let pendingReminderCandidates: [TraiPulseReminderCandidate]
+    let pendingReminderCandidateScores: [String: Double]
+
+    init(
+        now: Date,
+        hasWorkoutToday: Bool,
+        hasActiveWorkout: Bool,
+        caloriesConsumed: Int,
+        calorieGoal: Int,
+        proteinConsumed: Int,
+        proteinGoal: Int,
+        readyMuscleCount: Int,
+        recommendedWorkoutName: String?,
+        activeSignals: [CoachSignal],
+        trend: TraiPulseTrendSnapshot?,
+        patternProfile: TraiPulsePatternProfile?,
+        reminderCompletionRate: Double? = nil,
+        recentMissedReminderCount: Int? = nil,
+        daysSinceLastWeightLog: Int? = nil,
+        weightLoggedThisWeek: Bool? = nil,
+        weightLoggedThisWeekDays: [String] = [],
+        weightLikelyLogTimes: [String] = [],
+        weightRecentRangeKg: Double? = nil,
+        weightLogRoutineScore: Double = 0.0,
+        todaysExerciseMinutes: Int? = nil,
+        lastActiveWorkoutHour: Int? = nil,
+        likelyReminderTimes: [String] = [],
+        likelyWorkoutTimes: [String] = [],
+        planReviewTrigger: String? = nil,
+        planReviewMessage: String? = nil,
+        planReviewDaysSince: Int? = nil,
+        planReviewWeightDeltaKg: Double? = nil,
+        pendingReminderCandidates: [TraiPulseReminderCandidate] = [],
+        pendingReminderCandidateScores: [String: Double] = [:]
+    ) {
+        self.now = now
+        self.hasWorkoutToday = hasWorkoutToday
+        self.hasActiveWorkout = hasActiveWorkout
+        self.caloriesConsumed = caloriesConsumed
+        self.calorieGoal = calorieGoal
+        self.proteinConsumed = proteinConsumed
+        self.proteinGoal = proteinGoal
+        self.readyMuscleCount = readyMuscleCount
+        self.recommendedWorkoutName = recommendedWorkoutName
+        self.activeSignals = activeSignals
+        self.trend = trend
+        self.patternProfile = patternProfile
+        self.reminderCompletionRate = reminderCompletionRate
+        self.recentMissedReminderCount = recentMissedReminderCount
+        self.daysSinceLastWeightLog = daysSinceLastWeightLog
+        self.weightLoggedThisWeek = weightLoggedThisWeek
+        self.weightLoggedThisWeekDays = weightLoggedThisWeekDays
+        self.weightLikelyLogTimes = weightLikelyLogTimes
+        self.weightRecentRangeKg = weightRecentRangeKg
+        self.weightLogRoutineScore = weightLogRoutineScore
+        self.todaysExerciseMinutes = todaysExerciseMinutes
+        self.lastActiveWorkoutHour = lastActiveWorkoutHour
+        self.likelyReminderTimes = likelyReminderTimes
+        self.likelyWorkoutTimes = likelyWorkoutTimes
+        self.planReviewTrigger = planReviewTrigger
+        self.planReviewMessage = planReviewMessage
+        self.planReviewDaysSince = planReviewDaysSince
+        self.planReviewWeightDeltaKg = planReviewWeightDeltaKg
+        self.pendingReminderCandidates = pendingReminderCandidates
+        self.pendingReminderCandidateScores = pendingReminderCandidateScores
+    }
 }
 
 struct DailyCoachAction: Identifiable, Hashable {
     enum Kind: String {
         case startWorkout
         case logFood
-        case openChat
+        case logFoodCamera
+        case logWeight
+        case openWeight
+        case openCalorieDetail
+        case openMacroDetail
+        case openProfile
+        case openWorkouts
+        case openWorkoutPlan
+        case openRecovery
+        case startWorkoutTemplate
+        case reviewNutritionPlan
+        case reviewWorkoutPlan
+        case completeReminder
     }
 
     let id = UUID()
     let kind: Kind
     let title: String
     let subtitle: String?
+    let metadata: [String: String]?
+
+    init(kind: Kind, title: String, subtitle: String? = nil, metadata: [String: String]? = nil) {
+        self.kind = kind
+        self.title = title
+        self.subtitle = subtitle
+        self.metadata = metadata
+    }
 }
 
 struct DailyCoachSwapOption: Identifiable, Hashable {
@@ -162,6 +264,20 @@ enum DailyCoachEngine {
             tomorrowWorkoutMinutes: preferences.tomorrowWorkoutMinutes,
             trend: context.trend,
             patternProfile: context.patternProfile,
+            reminderCompletionRate: context.reminderCompletionRate,
+            recentMissedReminderCount: context.recentMissedReminderCount,
+            daysSinceLastWeightLog: context.daysSinceLastWeightLog,
+            weightLoggedThisWeek: context.weightLoggedThisWeek,
+            weightLoggedThisWeekDays: context.weightLoggedThisWeekDays,
+            weightLikelyLogTimes: context.weightLikelyLogTimes,
+            weightRecentRangeKg: context.weightRecentRangeKg,
+            weightLogRoutineScore: context.weightLogRoutineScore,
+            todaysExerciseMinutes: context.todaysExerciseMinutes,
+            lastActiveWorkoutHour: context.lastActiveWorkoutHour,
+            likelyReminderTimes: context.likelyReminderTimes,
+            likelyWorkoutTimes: context.likelyWorkoutTimes,
+            pendingReminderCandidates: context.pendingReminderCandidates,
+            pendingReminderCandidateScores: context.pendingReminderCandidateScores,
             contextPacket: nil
         )
         let packet = TraiPulseContextAssembler.assemble(
@@ -185,6 +301,20 @@ enum DailyCoachEngine {
             tomorrowWorkoutMinutes: basePulseInput.tomorrowWorkoutMinutes,
             trend: basePulseInput.trend,
             patternProfile: basePulseInput.patternProfile,
+            reminderCompletionRate: basePulseInput.reminderCompletionRate,
+            recentMissedReminderCount: basePulseInput.recentMissedReminderCount,
+            daysSinceLastWeightLog: basePulseInput.daysSinceLastWeightLog,
+            weightLoggedThisWeek: basePulseInput.weightLoggedThisWeek,
+            weightLoggedThisWeekDays: basePulseInput.weightLoggedThisWeekDays,
+            weightLikelyLogTimes: basePulseInput.weightLikelyLogTimes,
+            weightRecentRangeKg: basePulseInput.weightRecentRangeKg,
+            weightLogRoutineScore: basePulseInput.weightLogRoutineScore,
+            todaysExerciseMinutes: basePulseInput.todaysExerciseMinutes,
+            lastActiveWorkoutHour: basePulseInput.lastActiveWorkoutHour,
+            likelyReminderTimes: basePulseInput.likelyReminderTimes,
+            likelyWorkoutTimes: basePulseInput.likelyWorkoutTimes,
+            pendingReminderCandidates: basePulseInput.pendingReminderCandidates,
+            pendingReminderCandidateScores: basePulseInput.pendingReminderCandidateScores,
             contextPacket: packet
         )
         let pulse = TraiPulseEngine.makeBrief(context: pulseInput)
@@ -275,14 +405,39 @@ enum DailyCoachEngine {
             kind = .startWorkout
         case .logFood:
             kind = .logFood
-        case .openChat, .addNote, .viewRecovery:
-            kind = .openChat
+        case .logWeight:
+            kind = .logWeight
+        case .openWeight:
+            kind = .openWeight
+        case .openCalorieDetail:
+            kind = .openCalorieDetail
+        case .openMacroDetail:
+            kind = .openMacroDetail
+        case .openProfile:
+            kind = .openProfile
+        case .openWorkouts:
+            kind = .openWorkouts
+        case .openWorkoutPlan:
+            kind = .openWorkoutPlan
+        case .openRecovery:
+            kind = .openRecovery
+        case .startWorkoutTemplate:
+            kind = .startWorkoutTemplate
+        case .reviewNutritionPlan:
+            kind = .reviewNutritionPlan
+        case .reviewWorkoutPlan:
+            kind = .reviewWorkoutPlan
+        case .logFoodCamera:
+            kind = .logFoodCamera
+        case .completeReminder:
+            kind = .completeReminder
         }
 
         return DailyCoachAction(
             kind: kind,
             title: action.title,
-            subtitle: action.subtitle
+            subtitle: action.subtitle,
+            metadata: action.metadata
         )
     }
 
@@ -313,7 +468,7 @@ enum DailyCoachEngine {
             DailyCoachSwapOption(
                 title: "Coach-Led Swap",
                 detail: "Generate a custom backup for tonight",
-                action: DailyCoachAction(kind: .openChat, title: "Open Trai Coach", subtitle: nil)
+                action: DailyCoachAction(kind: .openProfile, title: "Open Trai Profile", subtitle: nil)
             )
         ]
     }

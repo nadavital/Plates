@@ -72,6 +72,34 @@ extension ChatView {
 // MARK: - Messaging
 
 extension ChatView {
+    func startPulseConversation(from handoffPrompt: String) {
+        let trimmedPrompt = handoffPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return }
+
+        updateLastActivity()
+        pulseHandoffContext = trimmedPrompt
+
+        let previousMessages = Array(currentSessionMessages.suffix(10))
+        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
+        let baseContext = buildFitnessContext()
+        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
+
+        if isTemporarySession {
+            temporaryMessages.append(aiMessage)
+        } else {
+            modelContext.insert(aiMessage)
+        }
+
+        currentMessageTask = Task {
+            await performSendMessage(
+                text: "Open with a concise Pulse check-in and clear next step based on the dashboard handoff context.",
+                capturedImage: nil,
+                previousMessages: previousMessages,
+                aiMessage: aiMessage
+            )
+        }
+    }
+
     func friendlyFunctionName(_ name: String) -> String {
         switch name {
         case "suggest_food_log":
@@ -387,6 +415,36 @@ extension ChatView {
             .getRecoveryStatus(modelContext: modelContext)
             .filter { $0.status == .ready }
             .count
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: today) ?? now
+        let daysSinceLastWeightLog: Int?
+        if let latestWeight = weightEntries.first {
+            let latestDay = calendar.startOfDay(for: latestWeight.loggedAt)
+            let delta = calendar.dateComponents([.day], from: latestDay, to: today).day ?? 0
+            daysSinceLastWeightLog = max(delta, 0)
+        } else {
+            daysSinceLastWeightLog = nil
+        }
+        let weightLoggedThisWeek: Bool
+        if let weekStart = calendar.date(byAdding: .day, value: -6, to: today) {
+            weightLoggedThisWeek = weightEntries.contains { $0.loggedAt >= weekStart }
+        } else {
+            weightLoggedThisWeek = false
+        }
+        let todaysExerciseMinutes = recentWorkouts
+            .filter { $0.loggedAt >= today && $0.loggedAt < endOfDay }
+            .reduce(0) { total, session in
+                total + Int(session.durationMinutes ?? 0)
+            }
+        let lastActiveWorkoutHour: Int? = {
+            let candidates = recentWorkouts
+                .filter { $0.loggedAt >= today && $0.loggedAt < endOfDay }
+                .map(\.loggedAt) + liveWorkouts.compactMap { $0.completedAt ?? $0.startedAt }
+                .filter { $0 >= today && $0 < endOfDay }
+            guard let latest = candidates.max() else { return nil }
+            return calendar.component(.hour, from: latest)
+        }()
 
         let preferredWindow = patternProfile.strongestWorkoutWindow(minScore: 0.38)?.hourRange ?? (9, 21)
         let context = TraiPulseInputContext(
@@ -405,6 +463,13 @@ extension ChatView {
             tomorrowWorkoutMinutes: 40,
             trend: trend,
             patternProfile: patternProfile,
+            reminderCompletionRate: nil,
+            recentMissedReminderCount: nil,
+            daysSinceLastWeightLog: daysSinceLastWeightLog,
+            weightLoggedThisWeek: weightLoggedThisWeek,
+            todaysExerciseMinutes: todaysExerciseMinutes,
+            lastActiveWorkoutHour: lastActiveWorkoutHour,
+            likelyReminderTimes: [],
             contextPacket: nil
         )
 

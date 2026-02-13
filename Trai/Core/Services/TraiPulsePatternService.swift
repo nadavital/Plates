@@ -257,17 +257,77 @@ enum TraiPulsePatternService {
         return normalized
     }
 
-    private static func actionKind(for suggestionType: String) -> TraiPulseAction.Kind {
-        if suggestionType.contains("workout") || suggestionType.contains("train") {
-            return .startWorkout
+    static func learnedWorkoutTimeWindows(from profile: TraiPulsePatternProfile?, maxWindows: Int = 2, minScore: Double = 0.18) -> [String] {
+        guard
+            let profile,
+            maxWindows > 0
+        else { return [] }
+
+        let rankedWindows = profile.workoutWindowScores
+            .compactMap { rawWindow, score -> (TraiPulseTimeWindow, Double)? in
+                guard
+                    let window = TraiPulseTimeWindow(rawValue: rawWindow),
+                    score >= minScore
+                else { return nil }
+                return (window, score)
+            }
+            .sorted { lhs, rhs in
+                if lhs.1 == rhs.1 { return lhs.0.rawValue < rhs.0.rawValue }
+                return lhs.1 > rhs.1
+            }
+
+        return rankedWindows
+            .prefix(maxWindows)
+            .map { "\(label(for: $0.0.label))" }
+    }
+
+    private static func label(for windowLabel: String) -> String {
+        if let window = TraiPulseTimeWindow.allCases.first(where: { $0.label == windowLabel }) {
+            return "\(window.label) (\(window.hourRange.start)-\(window.hourRange.end))"
         }
-        if suggestionType.contains("log_") || suggestionType.contains("meal") || suggestionType.contains("protein") {
+        return windowLabel
+    }
+
+    private static func actionKind(for suggestionType: String) -> TraiPulseAction.Kind {
+        let suggestion = suggestionType.lowercased()
+
+        if suggestion.contains("reminder") {
+            return .completeReminder
+        }
+        if suggestion.contains("log_") || suggestion.contains("meal") || suggestion.contains("protein") {
             return .logFood
         }
-        if suggestionType.contains("recovery") {
-            return .viewRecovery
+        if suggestion.contains("recovery") {
+            return .openRecovery
         }
-        return .openChat
+        if suggestion.contains("review") {
+            if suggestion.contains("workout") {
+                return .reviewWorkoutPlan
+            }
+            return .reviewNutritionPlan
+        }
+        if suggestion.contains("plan") && suggestion.contains("workout") {
+            return .reviewWorkoutPlan
+        }
+        if suggestion.contains("plan") {
+            return .reviewNutritionPlan
+        }
+        if suggestion.contains("workout") || suggestion.contains("train") {
+            return .startWorkout
+        }
+        if suggestion.contains("calorie") {
+            return .openCalorieDetail
+        }
+        if suggestion.contains("macro") {
+            return .openMacroDetail
+        }
+        if suggestion.contains("nutrition") {
+            return .openProfile
+        }
+        if suggestion.contains("profile") || suggestion.contains("setting") {
+            return .openProfile
+        }
+        return .openProfile
     }
 
     private static func topProteinAnchors(entries: [FoodEntry], proteinGoal: Int?) -> [String] {

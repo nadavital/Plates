@@ -35,6 +35,7 @@ extension GeminiService {
                 let kind: String
                 let title: String
                 let subtitle: String?
+                let metadata: [String: String]?
             }
 
             struct PlanProposalPayload: Decodable {
@@ -64,6 +65,15 @@ extension GeminiService {
         let calendar = Calendar.current
         let now = request.context.now
         let hour = calendar.component(.hour, from: now)
+        let reminderCompletionRate = request.context.reminderCompletionRate
+        let missedReminderCount = request.context.recentMissedReminderCount
+        let daysSinceWeightLog = request.context.daysSinceLastWeightLog
+        let weightLoggedThisWeek = request.context.weightLoggedThisWeek
+        let weightLoggedThisWeekDays = request.context.weightLoggedThisWeekDays
+        let weightLikelyLogTimes = request.context.weightLikelyLogTimes
+        let todaysExerciseMinutes = request.context.todaysExerciseMinutes
+        let lastActiveWorkoutHour = request.context.lastActiveWorkoutHour
+        let likelyReminderTimes = request.context.likelyReminderTimes
 
         let activeSnapshots = request.context.activeSignals.activeSnapshots(now: now)
 
@@ -84,6 +94,19 @@ extension GeminiService {
             tomorrowWorkoutMinutes: request.preferences.tomorrowWorkoutMinutes,
             trend: request.context.trend,
             patternProfile: request.context.patternProfile,
+            reminderCompletionRate: reminderCompletionRate,
+            recentMissedReminderCount: missedReminderCount,
+            daysSinceLastWeightLog: daysSinceWeightLog,
+            weightLoggedThisWeek: weightLoggedThisWeek,
+            weightLoggedThisWeekDays: weightLoggedThisWeekDays,
+            weightLikelyLogTimes: weightLikelyLogTimes,
+            weightRecentRangeKg: request.context.weightRecentRangeKg,
+            weightLogRoutineScore: request.context.weightLogRoutineScore,
+            todaysExerciseMinutes: todaysExerciseMinutes,
+            lastActiveWorkoutHour: lastActiveWorkoutHour,
+            likelyReminderTimes: likelyReminderTimes,
+            pendingReminderCandidates: request.context.pendingReminderCandidates,
+            pendingReminderCandidateScores: request.context.pendingReminderCandidateScores,
             contextPacket: nil
         )
 
@@ -95,6 +118,28 @@ extension GeminiService {
         )
 
         let recentAnswer = TraiPulseResponseInterpreter.recentPulseAnswer(from: activeSnapshots, now: now)
+        let weightLogRoutineScore = request.context.weightLogRoutineScore
+        let pendingReminderCandidates = request.context.pendingReminderCandidates
+        let pendingReminderPromptValue = pendingReminderCandidates.isEmpty
+            ? "none"
+            : pendingReminderCandidates
+                .prefix(6)
+                .map { "\($0.title) at \($0.time) [id:\($0.id)]" }
+                .joined(separator: "; ")
+        let pendingReminderPriorityValue = pendingReminderCandidates.isEmpty
+            ? "none"
+            : pendingReminderCandidates
+                .prefix(6)
+                .map {
+                    let score = request.context.pendingReminderCandidateScores[$0.id]
+                    let title = $0.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let weight = String(format: "%.2f", score ?? 0.0)
+                    return "\(title) at \($0.time) [id:\($0.id)] [score:\(weight)]"
+                }
+                .joined(separator: "; ")
+        let likelyWorkoutTimes = request.context.likelyWorkoutTimes
+            .isEmpty ? "none" : request.context.likelyWorkoutTimes.joined(separator: ", ")
+        let weightRecentRangeKg = request.context.weightRecentRangeKg.map { String(format: "%.1f", $0) } ?? "none"
         let workoutName = request.context.recommendedWorkoutName ?? "recommended workout"
 
         let prompt = """
@@ -114,6 +159,7 @@ extension GeminiService {
         SURFACE RULES:
         - Return JSON only.
         - Produce one main message and at most one prompt.
+        - It is valid to return no prompt when there is no high-confidence action or question.
         - Prompt can be either:
           1) one actionable suggestion (`kind=action`), or
           2) one context question (`kind=question`), or
@@ -127,7 +173,30 @@ extension GeminiService {
 
         ACTION KIND ENUM:
         - start_workout
+        - start_workout_template
         - log_food
+        - log_food_camera
+        - log_weight
+        - open_weight
+        - open_calorie_detail
+        - open_macro_detail
+        - open_profile
+        - open_workouts
+        - open_workout_plan
+        - open_recovery
+        - review_nutrition_plan
+        - review_workout_plan
+        - complete_reminder
+        - Do not propose chat-like actions.
+
+        For start_workout_template, use `metadata.template_id` (UUID string) when known, otherwise `metadata.template_name`.
+        For complete_reminder, include `reminder_id` (UUID string), and optionally:
+        - `reminder_title` (exact reminder label if useful),
+        - `reminder_time` (same format as reminder card),
+        - `reminder_hour`,
+        - `reminder_minute`.
+        - If there is more than one pending reminder, always include `reminder_id` and match one exact item.
+        - If no valid pending reminder can be identified, return `none` rather than a generic complete reminder.
 
         QUESTION MODE ENUM:
         - single_choice
@@ -159,6 +228,24 @@ extension GeminiService {
         - protein_today: \(request.context.proteinConsumed)
         - protein_goal: \(request.context.proteinGoal)
         - ready_muscle_count: \(request.context.readyMuscleCount)
+        - reminder_completion_rate: \(reminderCompletionRate == nil ? "unknown" : String(format: "%.2f", reminderCompletionRate!))
+        - missed_reminders_today: \(missedReminderCount == nil ? "unknown" : String(missedReminderCount!))
+        - days_since_weight_log: \(daysSinceWeightLog == nil ? "unknown" : String(daysSinceWeightLog!))
+        - weight_logged_this_week: \(weightLoggedThisWeek == nil ? "unknown" : (weightLoggedThisWeek! ? "true" : "false"))
+        - weight_log_weekdays: \(weightLoggedThisWeekDays.isEmpty ? "unknown" : weightLoggedThisWeekDays.joined(separator: ", "))
+        - weight_log_times: \(weightLikelyLogTimes.isEmpty ? "unknown" : weightLikelyLogTimes.joined(separator: ", "))
+        - weight_log_routine_score: \(String(format: "%.2f", weightLogRoutineScore))
+        - plan_review_trigger: \(request.context.planReviewTrigger ?? "none")
+        - plan_review_message: \(request.context.planReviewMessage ?? "none")
+        - plan_review_days_since: \(request.context.planReviewDaysSince == nil ? "none" : String(request.context.planReviewDaysSince!))
+        - plan_review_weight_delta_kg: \(request.context.planReviewWeightDeltaKg == nil ? "none" : String(request.context.planReviewWeightDeltaKg!))
+        - todays_exercise_minutes: \(todaysExerciseMinutes == nil ? "unknown" : String(todaysExerciseMinutes!))
+        - last_active_workout_hour: \(lastActiveWorkoutHour == nil ? "unknown" : String(lastActiveWorkoutHour!))
+        - likely_reminder_times: \(likelyReminderTimes.isEmpty ? "none" : likelyReminderTimes.joined(separator: ", "))
+        - likely_workout_times: \(likelyWorkoutTimes.isEmpty ? "none" : likelyWorkoutTimes)
+        - recent_weight_range_kg: \(weightRecentRangeKg)
+        - pending_reminders: \(pendingReminderPromptValue)
+        - pending_reminder_priorities: \(pendingReminderPriorityValue)
         - allow_question: \(request.allowQuestion)
         - blocked_question_id: \(request.blockedQuestionID ?? "")
         - recent_answer: \(recentAnswer?.answer ?? "")
@@ -239,18 +326,52 @@ extension GeminiService {
             kind = .startWorkout
         case "log_food":
             kind = .logFood
+        case "start_workout_template":
+            kind = .startWorkoutTemplate
+        case "log_food_camera":
+            kind = .logFoodCamera
+        case "log_weight":
+            kind = .logWeight
+        case "open_weight":
+            kind = .openWeight
+        case "open_calorie_detail":
+            kind = .openCalorieDetail
+        case "open_macro_detail":
+            kind = .openMacroDetail
+        case "open_profile":
+            kind = .openProfile
+        case "open_workouts":
+            kind = .openWorkouts
+        case "open_workout_plan":
+            kind = .openWorkoutPlan
+        case "open_recovery":
+            kind = .openRecovery
+        case "review_nutrition_plan":
+            kind = .reviewNutritionPlan
+        case "review_workout_plan":
+            kind = .reviewWorkoutPlan
+        case "complete_reminder":
+            kind = .completeReminder
         default:
             throw GeminiError.parsingError
         }
 
         let title = payload.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let subtitle = payload.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let metadata = payload.metadata?.reduce(into: [String: String]()) { partial, entry in
+            let key = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty && !value.isEmpty {
+                partial[key] = value
+            }
+        }
         guard !title.isEmpty else { throw GeminiError.parsingError }
 
         return DailyCoachAction(
             kind: kind,
             title: title,
-            subtitle: subtitle?.isEmpty == true ? nil : subtitle
+            subtitle: subtitle?.isEmpty == true ? nil : subtitle,
+            metadata: (metadata?.isEmpty ?? true) ? nil : metadata
         )
     }
 
@@ -399,10 +520,39 @@ extension GeminiService {
                             "properties": [
                                 "kind": [
                                     "type": "string",
-                                    "enum": ["start_workout", "log_food"]
+                                    "enum": [
+                                "start_workout",
+                                "start_workout_template",
+                                "log_food",
+                                "log_food_camera",
+                                "log_weight",
+                                "open_weight",
+                                "open_calorie_detail",
+                                "open_macro_detail",
+                                "open_profile",
+                                "open_workouts",
+                                "open_workout_plan",
+                                        "open_recovery",
+                                        "review_nutrition_plan",
+                                        "review_workout_plan",
+                                        "complete_reminder"
+                                    ]
                                 ],
                                 "title": ["type": "string"],
-                                "subtitle": ["type": "string"]
+                                "subtitle": ["type": "string"],
+                                "metadata": [
+                                    "type": "object",
+                                    "nullable": true,
+                                    "properties": [
+                                        "template_id": ["type": "string"],
+                                        "template_name": ["type": "string"],
+                                        "reminder_id": ["type": "string"],
+                                        "reminder_title": ["type": "string"],
+                                        "reminder_time": ["type": "string"],
+                                        "reminder_hour": ["type": "string"],
+                                        "reminder_minute": ["type": "string"]
+                                    ]
+                                ]
                             ],
                             "required": ["kind", "title"]
                         ],

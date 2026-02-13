@@ -525,8 +525,8 @@ enum TraiPulseEngine {
 
         if phase == .completed && noFoodTonight {
             return TraiPulseAction(
-                kind: .openChat,
-                title: "Plan Tomorrow Protein",
+                kind: .openProfile,
+                title: "Review Tomorrow Protein",
                 subtitle: "No more food tonight"
             )
         }
@@ -614,7 +614,7 @@ enum TraiPulseEngine {
 
         if phase == .completed && noFoodTonight {
             return TraiPulseAction(
-                kind: .openChat,
+                kind: .openProfile,
                 title: "Set Morning Plan",
                 subtitle: "Protein-first tomorrow"
             )
@@ -624,7 +624,7 @@ enum TraiPulseEngine {
             let answer = recentAnswer.answer.lowercased()
             if recentAnswer.questionID.contains("protein"), answer.contains("need suggestions") {
                 return TraiPulseAction(
-                    kind: .openChat,
+                    kind: .openProfile,
                     title: "Get Easy Protein Ideas",
                     subtitle: "Based on your preference"
                 )
@@ -632,7 +632,7 @@ enum TraiPulseEngine {
 
             if recentAnswer.questionID.contains("workout-consistency"), answer.contains("need a lighter plan") {
                 return TraiPulseAction(
-                    kind: .openChat,
+                    kind: .openProfile,
                     title: "Build Lighter Plan",
                     subtitle: "Match your consistency goal"
                 )
@@ -649,7 +649,7 @@ enum TraiPulseEngine {
 
         if painSignal != nil {
             return TraiPulseAction(
-                kind: .openChat,
+                kind: .openRecovery,
                 title: "Adjust with Trai",
                 subtitle: "Pain-aware plan"
             )
@@ -657,7 +657,7 @@ enum TraiPulseEngine {
 
         if phase == .completed, let trend, trend.lowProteinStreak >= 2 {
             return TraiPulseAction(
-                kind: .openChat,
+                kind: .openProfile,
                 title: "Get Meal Ideas",
                 subtitle: "Fast protein options"
             )
@@ -665,8 +665,8 @@ enum TraiPulseEngine {
 
         if phase == .rescue || scheduleRisk > 0.88 {
             return TraiPulseAction(
-                kind: .openChat,
-                title: "Build Quick Plan",
+                kind: .openProfile,
+                title: "Review Profile",
                 subtitle: "2-minute adjustment"
             )
         }
@@ -680,8 +680,8 @@ enum TraiPulseEngine {
         }
 
         return TraiPulseAction(
-            kind: .openChat,
-            title: "Open Trai Coach",
+            kind: .openProfile,
+            title: "Review Profile",
             subtitle: "Context-aware guidance"
         )
     }

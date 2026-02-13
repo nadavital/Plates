@@ -7,9 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		090355E73CD8CE91D184469F /* TraiPulseContextAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */; };
+		11005DF0194ABAD4F254B859 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 798CA7F0428F6892AAAA2CE4 /* Foundation.framework */; };
 		50550A782F2067D000068DCD /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A772F2067D000068DCD /* WidgetKit.framework */; };
 		50550A7A2F2067D000068DCD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A792F2067D000068DCD /* SwiftUI.framework */; };
 		50550A8B2F2067D100068DCD /* TraiWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A2C961AB7A8B0C439B9FB78A /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,6 +22,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 50550A742F2067D000068DCD;
 			remoteInfo = TraiWidgetsExtension;
+		};
+		B0ABCB0D9BD74FED2A8F65AC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 507B711A2EFDE03E00DE636E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 507B71212EFDE03E00DE636E;
+			remoteInfo = Trai;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -37,10 +47,14 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		21244ABFE007089D0AC73493 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TraiWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		50550A772F2067D000068DCD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		50550A792F2067D000068DCD /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		507B71222EFDE03E00DE636E /* Trai.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Trai.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7888F9EC3466C3F845899CD8 /* TraiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		798CA7F0428F6892AAAA2CE4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulseContextAssemblerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -75,6 +89,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		219D9E9A84CE8EA01E63B82C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				11005DF0194ABAD4F254B859 /* Foundation.framework in Frameworks */,
+				A2C961AB7A8B0C439B9FB78A /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		50550A722F2067D000068DCD /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -99,6 +122,8 @@
 			children = (
 				50550A772F2067D000068DCD /* WidgetKit.framework */,
 				50550A792F2067D000068DCD /* SwiftUI.framework */,
+				A2FDE580BCB52BE8D6CF5033 /* iOS */,
+				21244ABFE007089D0AC73493 /* XCTest.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -111,6 +136,7 @@
 				60A0C0013B00000100A0C001 /* Shared */,
 				50550A762F2067D000068DCD /* Frameworks */,
 				507B71232EFDE03E00DE636E /* Products */,
+				BD0EB4BE4273B147615FCF00 /* TraiTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -119,8 +145,25 @@
 			children = (
 				507B71222EFDE03E00DE636E /* Trai.app */,
 				50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */,
+				7888F9EC3466C3F845899CD8 /* TraiTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A2FDE580BCB52BE8D6CF5033 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				798CA7F0428F6892AAAA2CE4 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		BD0EB4BE4273B147615FCF00 /* TraiTests */ = {
+			isa = PBXGroup;
+			children = (
+				C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */,
+			);
+			path = TraiTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -143,8 +186,6 @@
 				60A0C0013B00000100A0C001 /* Shared */,
 			);
 			name = TraiWidgetsExtension;
-			packageProductDependencies = (
-			);
 			productName = TraiWidgetsExtension;
 			productReference = 50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -168,11 +209,27 @@
 				60A0C0013B00000100A0C001 /* Shared */,
 			);
 			name = Trai;
-			packageProductDependencies = (
-			);
 			productName = Trai;
 			productReference = 507B71222EFDE03E00DE636E /* Trai.app */;
 			productType = "com.apple.product-type.application";
+		};
+		FC994245983587BA3218A0DE /* TraiTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3F9346387A9047254285043D /* Build configuration list for PBXNativeTarget "TraiTests" */;
+			buildPhases = (
+				6D43421B999D4EF7C5BE7BAB /* Sources */,
+				219D9E9A84CE8EA01E63B82C /* Frameworks */,
+				F3DEBD99679C88464AD081C9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3295DD2F2076AA7B70BA4523 /* PBXTargetDependency */,
+			);
+			name = TraiTests;
+			productName = TraiTests;
+			productReference = 7888F9EC3466C3F845899CD8 /* TraiTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -208,6 +265,7 @@
 			targets = (
 				507B71212EFDE03E00DE636E /* Trai */,
 				50550A742F2067D000068DCD /* TraiWidgetsExtension */,
+				FC994245983587BA3218A0DE /* TraiTests */,
 			);
 		};
 /* End PBXProject section */
@@ -221,6 +279,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		507B71202EFDE03E00DE636E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F3DEBD99679C88464AD081C9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -244,9 +309,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6D43421B999D4EF7C5BE7BAB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				090355E73CD8CE91D184469F /* TraiPulseContextAssemblerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		3295DD2F2076AA7B70BA4523 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Trai;
+			target = 507B71212EFDE03E00DE636E /* Trai */;
+			targetProxy = B0ABCB0D9BD74FED2A8F65AC /* PBXContainerItemProxy */;
+		};
 		50550A8A2F2067D100068DCD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 50550A742F2067D000068DCD /* TraiWidgetsExtension */;
@@ -451,6 +530,7 @@
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TraiAppInfo.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trai needs camera access to take photos of your food for AI analysis";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads your health data to track workouts, weight, and body composition";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves your weight and nutrition data to Apple Health";
@@ -458,7 +538,6 @@
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -490,6 +569,7 @@
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TraiAppInfo.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trai needs camera access to take photos of your food for AI analysis";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads your health data to track workouts, weight, and body composition";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves your weight and nutrition data to Apple Health";
@@ -497,7 +577,6 @@
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -518,9 +597,53 @@
 			};
 			name = Release;
 		};
+		6C4FF228DED09E0778D0ADFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				PRODUCT_BUNDLE_IDENTIFIER = Nadav.Trai.TraiTests;
+				PRODUCT_MODULE_NAME = TraiTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Trai.app/Trai";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D9A4AFEAFF33339F073B38DB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				PRODUCT_BUNDLE_IDENTIFIER = Nadav.Trai.TraiTests;
+				PRODUCT_MODULE_NAME = TraiTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Trai.app/Trai";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		3F9346387A9047254285043D /* Build configuration list for PBXNativeTarget "TraiTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6C4FF228DED09E0778D0ADFB /* Release */,
+				D9A4AFEAFF33339F073B38DB /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		50550A902F2067D100068DCD /* Build configuration list for PBXNativeTarget "TraiWidgetsExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

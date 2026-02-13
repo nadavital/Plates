@@ -18,6 +18,26 @@ enum TraiPulsePolicyEngine {
     ) -> TraiPulseContentSnapshot {
         var adjusted = snapshot
 
+        if case .some(.action(let action)) = adjusted.prompt,
+           let validated = validateCompleteReminderAction(action, context: request.context) {
+            adjusted = TraiPulseContentSnapshot(
+                source: adjusted.source,
+                surfaceType: adjusted.surfaceType,
+                title: adjusted.title,
+                message: adjusted.message,
+                prompt: .action(validated)
+            )
+        } else if case .some(.action(let action)) = adjusted.prompt,
+                  action.kind == .completeReminder {
+            adjusted = TraiPulseContentSnapshot(
+                source: adjusted.source,
+                surfaceType: adjusted.surfaceType,
+                title: adjusted.title,
+                message: adjusted.message,
+                prompt: nil
+            )
+        }
+
         if case .some(.planProposal(let proposal)) = adjusted.prompt {
             if !hasPlanProposalEvidence(request.context) {
                 adjusted = TraiPulseContentSnapshot(
@@ -60,6 +80,29 @@ enum TraiPulsePolicyEngine {
         }
 
         return adjusted
+    }
+
+    private static func validateCompleteReminderAction(
+        _ action: DailyCoachAction,
+        context: DailyCoachContext
+    ) -> DailyCoachAction? {
+        guard action.kind == .completeReminder else { return action }
+
+        let candidates = context.pendingReminderCandidates
+        guard !candidates.isEmpty else { return nil }
+
+        guard let metadata = action.metadata else {
+            return candidates.count == 1 ? action : nil
+        }
+
+        let candidateIDs = Set(candidates.compactMap { UUID(uuidString: $0.id) })
+        if let reminderID = metadata["reminder_id"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let parsedID = UUID(uuidString: reminderID),
+           candidateIDs.contains(parsedID) {
+            return action
+        }
+
+        return candidates.count == 1 ? action : nil
     }
 
     private static func hasPlanProposalEvidence(_ context: DailyCoachContext) -> Bool {
