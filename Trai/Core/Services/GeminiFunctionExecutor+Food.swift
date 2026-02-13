@@ -65,13 +65,116 @@ extension GeminiFunctionExecutor {
         // Collect proposed changes WITHOUT applying them
         var fieldChanges: [SuggestedFoodEdit.FieldChange] = []
 
+        let trimmedName = (
+            args["name"] as? String ??
+            args["title"] as? String ??
+            args["meal_name"] as? String ??
+            args["mealTitle"] as? String
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let newName = trimmedName, !newName.isEmpty, newName != entry.name {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Title",
+                fieldKey: "name",
+                oldValue: entry.name,
+                newValue: newName,
+                newNumericValue: nil,
+                newStringValue: newName
+            ))
+        }
+
+        let trimmedServingSize = (args["serving_size"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let newServingSize = trimmedServingSize, newServingSize != (entry.servingSize ?? "") {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Serving Size",
+                fieldKey: "servingSize",
+                oldValue: entry.servingSize ?? "Not set",
+                newValue: newServingSize.isEmpty ? "Not set" : newServingSize,
+                newNumericValue: nil,
+                newStringValue: newServingSize
+            ))
+        }
+
+        let mealTypeInput = (args["meal_type"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+
+        if let requestedMealType = mealTypeInput,
+           FoodEntry.MealType(rawValue: requestedMealType) != nil,
+           requestedMealType != entry.mealType {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Meal Type",
+                fieldKey: "mealType",
+                oldValue: entry.meal.displayName,
+                newValue: FoodEntry.MealType(rawValue: requestedMealType)?.displayName ?? requestedMealType.capitalized,
+                newNumericValue: nil,
+                newStringValue: requestedMealType
+            ))
+        }
+
+        let trimmedNotes = (args["notes"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let notes = trimmedNotes, notes != (entry.userDescription ?? "") {
+            fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                field: "Notes",
+                fieldKey: "notes",
+                oldValue: entry.userDescription ?? "Not set",
+                newValue: notes.isEmpty ? "Not set" : notes,
+                newNumericValue: nil,
+                newStringValue: notes
+            ))
+        }
+
+        let trimmedLoggedAtTime = (args["logged_at_time"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let loggedAtTime = trimmedLoggedAtTime, !loggedAtTime.isEmpty {
+            let timeFormatter = DateFormatter()
+            timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+            timeFormatter.dateFormat = "HH:mm"
+
+            if let timeValue = timeFormatter.date(from: loggedAtTime) {
+                let clockComponents = Calendar.current.dateComponents([.hour, .minute], from: timeValue)
+                guard let hour = clockComponents.hour, let minute = clockComponents.minute else {
+                    return .dataResponse(FunctionResult(
+                        name: "edit_food_entry",
+                        response: ["error": "Invalid logged_at_time format. Use HH:mm."]
+                    ))
+                }
+
+                var components = Calendar.current.dateComponents([.year, .month, .day], from: entry.loggedAt)
+                components.hour = hour
+                components.minute = minute
+                components.second = 0
+
+                if let updatedAt = Calendar.current.date(from: components) {
+                    let oldTimeValue = timeFormatter.string(from: entry.loggedAt)
+                    if oldTimeValue != loggedAtTime {
+                        fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                            field: "Logged Time",
+                            fieldKey: "loggedAt",
+                            oldValue: oldTimeValue,
+                            newValue: loggedAtTime,
+                            newNumericValue: nil,
+                            newStringValue: loggedAtTime
+                        ))
+                    }
+                }
+            }
+        }
+
         if let newCalories = args["calories"] as? Int, newCalories != entry.calories {
             fieldChanges.append(SuggestedFoodEdit.FieldChange(
                 field: "Calories",
                 fieldKey: "calories",
                 oldValue: "\(entry.calories)",
                 newValue: "\(newCalories)",
-                newNumericValue: Double(newCalories)
+                newNumericValue: Double(newCalories),
+                newStringValue: nil
             ))
         }
         if let newProtein = args["protein_grams"] as? Double ?? (args["protein_grams"] as? Int).map(Double.init),
@@ -81,7 +184,8 @@ extension GeminiFunctionExecutor {
                 fieldKey: "proteinGrams",
                 oldValue: "\(Int(entry.proteinGrams))g",
                 newValue: "\(Int(newProtein))g",
-                newNumericValue: newProtein
+                newNumericValue: newProtein,
+                newStringValue: nil
             ))
         }
         if let newCarbs = args["carbs_grams"] as? Double ?? (args["carbs_grams"] as? Int).map(Double.init),
@@ -91,7 +195,8 @@ extension GeminiFunctionExecutor {
                 fieldKey: "carbsGrams",
                 oldValue: "\(Int(entry.carbsGrams))g",
                 newValue: "\(Int(newCarbs))g",
-                newNumericValue: newCarbs
+                newNumericValue: newCarbs,
+                newStringValue: nil
             ))
         }
         if let newFat = args["fat_grams"] as? Double ?? (args["fat_grams"] as? Int).map(Double.init),
@@ -101,7 +206,8 @@ extension GeminiFunctionExecutor {
                 fieldKey: "fatGrams",
                 oldValue: "\(Int(entry.fatGrams))g",
                 newValue: "\(Int(newFat))g",
-                newNumericValue: newFat
+                newNumericValue: newFat,
+                newStringValue: nil
             ))
         }
         if let newFiber = args["fiber_grams"] as? Double ?? (args["fiber_grams"] as? Int).map(Double.init) {
@@ -112,7 +218,8 @@ extension GeminiFunctionExecutor {
                     fieldKey: "fiberGrams",
                     oldValue: "\(Int(oldFiber))g",
                     newValue: "\(Int(newFiber))g",
-                    newNumericValue: newFiber
+                    newNumericValue: newFiber,
+                    newStringValue: nil
                 ))
             }
         }

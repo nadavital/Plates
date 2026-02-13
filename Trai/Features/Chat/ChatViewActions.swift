@@ -315,15 +315,63 @@ extension ChatView {
         for change in edit.changes {
             switch change.fieldKey {
             case "calories":
-                entry.calories = Int(change.newNumericValue)
+                if let value = change.newNumericValue {
+                    entry.calories = Int(value)
+                }
             case "proteinGrams":
-                entry.proteinGrams = change.newNumericValue
+                if let value = change.newNumericValue {
+                    entry.proteinGrams = value
+                }
             case "carbsGrams":
-                entry.carbsGrams = change.newNumericValue
+                if let value = change.newNumericValue {
+                    entry.carbsGrams = value
+                }
             case "fatGrams":
-                entry.fatGrams = change.newNumericValue
+                if let value = change.newNumericValue {
+                    entry.fatGrams = value
+                }
             case "fiberGrams":
-                entry.fiberGrams = change.newNumericValue
+                if let value = change.newNumericValue {
+                    entry.fiberGrams = value
+                }
+            case "name", "title":
+                if let value = change.newStringValue {
+                    entry.name = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            case "servingSize":
+                if let value = change.newStringValue {
+                    let servingSize = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    entry.servingSize = servingSize.isEmpty ? nil : servingSize
+                }
+            case "mealType":
+                if let value = change.newStringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: " ", with: "_"),
+                   FoodEntry.MealType(rawValue: value) != nil {
+                    entry.meal = .init(rawValue: value) ?? entry.meal
+                }
+            case "notes":
+                if let value = change.newStringValue?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                    entry.userDescription = value.isEmpty ? nil : value
+                }
+            case "loggedAt":
+                if let timeString = change.newStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !timeString.isEmpty {
+                    let timeFormatter = DateFormatter()
+                    timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+                    timeFormatter.dateFormat = "HH:mm"
+
+                    guard let timeValue = timeFormatter.date(from: timeString) else { break }
+                    let clockComponents = Calendar.current.dateComponents([.hour, .minute], from: timeValue)
+                    guard let hour = clockComponents.hour, let minute = clockComponents.minute else { break }
+
+                    var dateComponents = Calendar.current.dateComponents([.year, .month, .day], from: entry.loggedAt)
+                    dateComponents.hour = hour
+                    dateComponents.minute = minute
+                    dateComponents.second = 0
+
+                    if let updatedAt = Calendar.current.date(from: dateComponents) {
+                        entry.loggedAt = updatedAt
+                    }
+                }
             default:
                 break
             }

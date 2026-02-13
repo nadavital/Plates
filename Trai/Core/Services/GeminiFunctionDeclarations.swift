@@ -102,7 +102,24 @@ enum GeminiFunctionDeclarations {
                     ],
                     "name": [
                         "type": "string",
-                        "description": "New name for the food (optional)"
+                        "description": "New title/name for the food (optional)"
+                    ],
+                    "title": [
+                        "type": "string",
+                        "description": "Alias for name/title if you prefer this wording"
+                    ],
+                    "serving_size": [
+                        "type": "string",
+                        "description": "New serving size description (e.g., '1 large bowl', '16 oz', '2 slices')"
+                    ],
+                    "meal_type": [
+                        "type": "string",
+                        "description": "New meal type (optional)",
+                        "enum": ["breakfast", "lunch", "dinner", "snack"]
+                    ],
+                    "logged_at_time": [
+                        "type": "string",
+                        "description": "New log time in HH:mm 24-hour format (e.g., '14:30'). Updates only the log time for the same day."
                     ],
                     "calories": [
                         "type": "integer",
@@ -123,6 +140,10 @@ enum GeminiFunctionDeclarations {
                     "fiber_grams": [
                         "type": "number",
                         "description": "New fiber in grams (optional)"
+                    ],
+                    "notes": [
+                        "type": "string",
+                        "description": "New notes for this food entry (optional)"
                     ]
                 ],
                 "required": ["entry_id"]

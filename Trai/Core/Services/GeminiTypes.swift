@@ -133,7 +133,8 @@ struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
         let fieldKey: String  // Internal key for applying (e.g., "calories", "proteinGrams")
         let oldValue: String
         let newValue: String
-        let newNumericValue: Double  // For applying the change
+        let newNumericValue: Double?  // For applying the change
+        let newStringValue: String?  // For string changes
     }
 
     /// Display emoji or default
