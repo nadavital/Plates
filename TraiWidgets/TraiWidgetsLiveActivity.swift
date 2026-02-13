@@ -13,7 +13,12 @@ import WidgetKit
 private enum LiveActivityTheme {
     static let traiSymbol = "circle.hexagongrid.circle"
     static let accent = Color.red
-    static let muted = Color.secondary
+    static let textPrimary = Color.white
+    static let textSecondary = Color.white.opacity(0.82)
+    static let textTertiary = Color.white.opacity(0.62)
+    static let muted = textSecondary
+    static let background = Color(red: 0.09, green: 0.09, blue: 0.12)
+    static let actionForeground = Color.white
 
     static func statusIcon(isPaused: Bool) -> String {
         isPaused ? "pause.fill" : traiSymbol
@@ -94,17 +99,17 @@ private struct LockScreenWorkoutView: View {
                         HStack(spacing: 4) {
                             Text(exercise)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
 
                             // Show equipment if available
                             if !isSmallFamily, let equipment = context.state.currentEquipment {
                                 Text("•")
                                     .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(LiveActivityTheme.textTertiary)
                                 Text(equipment)
                                     .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(LiveActivityTheme.textTertiary)
                                     .lineLimit(1)
                             }
 
@@ -112,7 +117,7 @@ private struct LockScreenWorkoutView: View {
                             if let setDisplay = context.state.currentSetDisplay {
                                 Text("•")
                                     .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(LiveActivityTheme.textTertiary)
                                 Text(setDisplay)
                                     .font(.caption)
                                     .foregroundStyle(LiveActivityTheme.accent)
@@ -125,10 +130,10 @@ private struct LockScreenWorkoutView: View {
                         HStack(spacing: 4) {
                             Text("Next:")
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(LiveActivityTheme.textTertiary)
                             Text(nextExercise)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(LiveActivityTheme.textSecondary)
                                 .lineLimit(1)
                         }
                     }
@@ -141,7 +146,7 @@ private struct LockScreenWorkoutView: View {
                     // Circular progress
                     ZStack {
                         Circle()
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 4)
+                            .stroke(LiveActivityTheme.textPrimary.opacity(0.2), lineWidth: 4)
                             .frame(width: isSmallFamily ? 36 : 44, height: isSmallFamily ? 36 : 44)
 
                         Circle()
@@ -156,7 +161,7 @@ private struct LockScreenWorkoutView: View {
 
                     Text(context.state.setsDisplay)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(LiveActivityTheme.textSecondary)
 
                     // Volume if available
                     if let volume = context.state.volumeDisplay {
@@ -174,11 +179,11 @@ private struct LockScreenWorkoutView: View {
                             if let hr = context.state.heartRate {
                                 Text("\(hr)")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(LiveActivityTheme.textSecondary)
                             } else {
                                 Text("--")
                                     .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(LiveActivityTheme.textTertiary)
                             }
                         }
                     }
@@ -209,9 +214,24 @@ private struct LockScreenWorkoutView: View {
                 }
             }
         }
+        .foregroundStyle(LiveActivityTheme.textPrimary)
         .padding()
-        .activityBackgroundTint(Color(.systemBackground))
-        .activitySystemActionForegroundColor(LiveActivityTheme.accent)
+        .traiLiveActivityContainerBackground()
+        .activityBackgroundTint(LiveActivityTheme.background)
+        .activitySystemActionForegroundColor(LiveActivityTheme.actionForeground)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func traiLiveActivityContainerBackground() -> some View {
+        if #available(iOS 17.0, *) {
+            self.containerBackground(for: .widget) {
+                LiveActivityTheme.background
+            }
+        } else {
+            self.background(LiveActivityTheme.background)
+        }
     }
 }
 
@@ -237,7 +257,7 @@ private struct ExpandedLeadingView: View {
                 } else {
                     Text("--")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(LiveActivityTheme.textTertiary)
                 }
             }
         }
@@ -258,7 +278,7 @@ private struct ExpandedTrailingView: View {
 
             Text(context.state.setsDisplay)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(LiveActivityTheme.textSecondary)
         }
     }
 }
@@ -272,7 +292,7 @@ private struct ExpandedBottomView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color.secondary.opacity(0.2))
+                        .fill(LiveActivityTheme.textPrimary.opacity(0.2))
 
                     Capsule()
                         .fill(LiveActivityTheme.accent)
@@ -288,7 +308,7 @@ private struct ExpandedBottomView: View {
                         HStack(spacing: 4) {
                             Text("Now:")
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(LiveActivityTheme.textSecondary)
                             Text(exercise)
                                 .font(.caption)
                                 .lineLimit(1)
@@ -309,7 +329,7 @@ private struct ExpandedBottomView: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("Volume")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(LiveActivityTheme.textSecondary)
                         Text(volume)
                             .font(.caption)
                             .foregroundStyle(LiveActivityTheme.accent)
