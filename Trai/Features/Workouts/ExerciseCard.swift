@@ -156,17 +156,21 @@ struct ExerciseCard: View {
                     .foregroundStyle(.tertiary)
 
                     // Set rows
-                    ForEach(sets.indices, id: \.self) { index in
+                    ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
                         SetRow(
                             setNumber: index + 1,
-                            set: sets[index],
+                            set: set,
                             usesMetricWeight: usesMetricWeight,
                             previousSetWeight: index > 0 ? sets[index - 1].weightKg : nil,
                             onUpdateReps: { reps in onUpdateSet(index, reps, nil, nil, nil) },
                             onUpdateWeight: { kg, lbs in onUpdateSet(index, nil, kg, lbs, nil) },
                             onUpdateNotes: { notes in onUpdateSet(index, nil, nil, nil, notes) },
                             onToggleWarmup: { onToggleWarmup(index) },
-                            onDelete: { onRemoveSet(index) }
+                            onDelete: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    onRemoveSet(index)
+                                }
+                            }
                         )
                     }
 

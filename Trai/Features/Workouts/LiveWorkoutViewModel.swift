@@ -137,6 +137,7 @@ final class LiveWorkoutViewModel {
     private var performanceService = ExercisePerformanceService()
     private(set) var healthKitService: HealthKitService?
     private var usesMetricWeightPreference = true
+    private let maxSuggestionPoolSize = 12
 
     // MARK: - Exercise Suggestion Model
 
@@ -150,6 +151,12 @@ final class LiveWorkoutViewModel {
         static func == (lhs: ExerciseSuggestion, rhs: ExerciseSuggestion) -> Bool {
             lhs.exerciseName == rhs.exerciseName
         }
+    }
+
+    enum SuggestionRebuildReason: String {
+        case workoutStart
+        case targetMusclesChanged
+        case userRefresh
     }
 
     // MARK: - Computed Properties
@@ -201,65 +208,42 @@ final class LiveWorkoutViewModel {
         Set(entries.map { $0.exerciseName.lowercased() })
     }
 
-    /// Suggestions that are not currently in this workout
+    /// Suggestions that are not currently in this workout, ranked for next-best fit.
     var availableSuggestions: [ExerciseSuggestion] {
-        exerciseSuggestions.filter { !currentExerciseNameSet.contains($0.exerciseName.lowercased()) }
+        let filtered = exerciseSuggestions.filter { !currentExerciseNameSet.contains($0.exerciseName.lowercased()) }
+        guard !filtered.isEmpty else { return [] }
+
+        let recentMuscleGroups = recentMuscleGroupsFromCurrentWorkout(limit: 2)
+        let targetMuscleCounts = currentTargetMuscleCounts()
+
+        return filtered.sorted { lhs, rhs in
+            let lhsScore = suggestionScore(
+                lhs,
+                targetMuscleCounts: targetMuscleCounts,
+                recentMuscleGroups: recentMuscleGroups
+            )
+            let rhsScore = suggestionScore(
+                rhs,
+                targetMuscleCounts: targetMuscleCounts,
+                recentMuscleGroups: recentMuscleGroups
+            )
+            if lhsScore != rhsScore {
+                return lhsScore > rhsScore
+            }
+
+            let lhsUsage = exerciseUsageFrequency[lhs.exerciseName, default: 0]
+            let rhsUsage = exerciseUsageFrequency[rhs.exerciseName, default: 0]
+            if lhsUsage != rhsUsage {
+                return lhsUsage > rhsUsage
+            }
+
+            return lhs.exerciseName.localizedStandardCompare(rhs.exerciseName) == .orderedAscending
+        }
     }
 
-    /// Smart "Up Next" suggestion - rotates through muscle groups, prioritizes user's exercises
-    /// Filters out exercises already in the current workout
+    /// Smart "Up Next" suggestion is the top-ranked available suggestion.
     var upNextSuggestion: ExerciseSuggestion? {
-        let available = availableSuggestions
-        guard !available.isEmpty else { return nil }
-
-        // Get all exercise names currently in this workout
-        let currentExerciseNames = currentExerciseNameSet
-
-        // Filter out exercises already in the workout
-        let notInWorkout = available.filter { !currentExerciseNames.contains($0.exerciseName.lowercased()) }
-        guard !notInWorkout.isEmpty else { return nil }
-
-        // Split into exercises user has used before vs never used
-        let usedExercises = notInWorkout.filter { exerciseUsageFrequency[$0.exerciseName, default: 0] > 0 }
-        let unusedExercises = notInWorkout.filter { exerciseUsageFrequency[$0.exerciseName, default: 0] == 0 }
-
-        // Prefer exercises user has actually used before
-        let preferredPool = usedExercises.isEmpty ? notInWorkout : usedExercises
-
-        // Get last 2 muscle groups worked - avoid immediate repeats
-        let recentMuscleGroups: Set<String> = {
-            var muscles = Set<String>()
-            let recentEntries = entries.suffix(2)
-            for entry in recentEntries {
-                if let muscle = getMuscleGroup(for: entry) {
-                    muscles.insert(muscle)
-                }
-            }
-            return muscles
-        }()
-
-        if !recentMuscleGroups.isEmpty {
-            // Filter out exercises from the same muscle groups as the last 2 exercises
-            let differentMusclePool = preferredPool.filter { !recentMuscleGroups.contains($0.muscleGroup) }
-            let differentMuscleUnused = unusedExercises.filter { !recentMuscleGroups.contains($0.muscleGroup) }
-
-            // Prefer exercises from a different muscle group (from preferred pool first)
-            if let suggestion = differentMusclePool.first {
-                return suggestion
-            }
-            // Fall back to unused exercises with different muscle
-            if let suggestion = differentMuscleUnused.first {
-                return suggestion
-            }
-            // If no different muscle available, fall through to any available
-        }
-
-        // Sort by user preference (most used first)
-        let sortedByPreference = preferredPool.sorted { a, b in
-            (exerciseUsageFrequency[a.exerciseName] ?? 0) > (exerciseUsageFrequency[b.exerciseName] ?? 0)
-        }
-
-        return sortedByPreference.first ?? unusedExercises.first
+        availableSuggestions.first
     }
 
     /// Get the muscle group for a workout entry (checks suggestions first, then database)
@@ -293,6 +277,58 @@ final class LiveWorkoutViewModel {
     /// Group available suggestions by muscle group
     var suggestionsByMuscle: [String: [ExerciseSuggestion]] {
         Dictionary(grouping: availableSuggestions) { $0.muscleGroup }
+    }
+
+    private var targetExerciseMuscleGroups: Set<String> {
+        Set(workout.muscleGroups.map { $0.toExerciseMuscleGroup.rawValue })
+    }
+
+    private func recentMuscleGroupsFromCurrentWorkout(limit: Int) -> Set<String> {
+        var recentMuscles = Set<String>()
+        let recentEntries = entries.suffix(limit)
+        for entry in recentEntries {
+            if let muscle = getMuscleGroup(for: entry) {
+                recentMuscles.insert(muscle)
+            }
+        }
+        return recentMuscles
+    }
+
+    private func currentTargetMuscleCounts() -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for entry in entries {
+            guard let muscle = getMuscleGroup(for: entry) else { continue }
+            guard targetExerciseMuscleGroups.contains(muscle) else { continue }
+            counts[muscle, default: 0] += 1
+        }
+        return counts
+    }
+
+    private func suggestionScore(
+        _ suggestion: ExerciseSuggestion,
+        targetMuscleCounts: [String: Int],
+        recentMuscleGroups: Set<String>
+    ) -> Double {
+        let usageFrequency = Double(exerciseUsageFrequency[suggestion.exerciseName, default: 0])
+        let preferenceScore = log1p(usageFrequency) * 1.5
+
+        let currentTargetCount = targetMuscleCounts[suggestion.muscleGroup, default: 0]
+        let coverageScore: Double
+        if targetExerciseMuscleGroups.contains(suggestion.muscleGroup) {
+            switch currentTargetCount {
+            case 0:
+                coverageScore = 3.0
+            case 1:
+                coverageScore = 1.5
+            default:
+                coverageScore = 0.5
+            }
+        } else {
+            coverageScore = 0.0
+        }
+
+        let diversityPenalty = recentMuscleGroups.contains(suggestion.muscleGroup) ? 1.25 : 0.0
+        return preferenceScore + coverageScore - diversityPenalty
     }
 
     // MARK: - Initialization
@@ -329,13 +365,7 @@ final class LiveWorkoutViewModel {
         startTimer()
         loadLastPerformances()
         loadExerciseUsageFrequency()
-
-        // If no template suggestions, generate from target muscle groups
-        if exerciseSuggestions.isEmpty {
-            loadSuggestionsFromTargetMuscles()
-        }
-
-        loadSuggestionPerformances()
+        rebuildSuggestionPool(reason: .workoutStart)
 
         // Start heart rate streaming from Apple Watch
         startHeartRateMonitoring()
@@ -467,38 +497,56 @@ final class LiveWorkoutViewModel {
         updateWatchDataFromService()
     }
 
-    /// Load exercise suggestions based on workout's target muscle groups
-    private func loadSuggestionsFromTargetMuscles() {
-        guard let modelContext,
-              !workout.targetMuscleGroups.isEmpty else { return }
+    /// Rebuild the session suggestion pool from target muscles.
+    /// This is intentionally event-driven (not tied to set/rep/weight edits).
+    private func rebuildSuggestionPool(reason _: SuggestionRebuildReason) {
+        guard let modelContext else { return }
+        guard !workout.targetMuscleGroups.isEmpty else {
+            exerciseSuggestions = []
+            return
+        }
 
         let targetMuscleTokens = workout.targetMuscleGroups
             .components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-
         let targetMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(targetMuscleTokens)
-        guard !targetMuscles.isEmpty else { return }
+        guard !targetMuscles.isEmpty else {
+            exerciseSuggestions = []
+            return
+        }
 
         let exerciseMuscleGroups = Set(targetMuscles.map { $0.toExerciseMuscleGroup.rawValue })
-
-        // Fetch exercises for target muscle groups
         let descriptor = FetchDescriptor<Exercise>()
         guard let exercises = try? modelContext.fetch(descriptor) else { return }
 
-        let matchingExercises = exercises.filter { exercise in
+        // Exclude custom exercises created in this workout session:
+        // those are usually being performed immediately, not "next suggestion" candidates.
+        let filtered = exercises.filter { exercise in
             guard let muscleGroup = exercise.muscleGroup else { return false }
-            return exerciseMuscleGroups.contains(muscleGroup)
+            guard exerciseMuscleGroups.contains(muscleGroup) else { return false }
+            if exercise.isCustom && exercise.createdAt >= workout.startedAt {
+                return false
+            }
+            return true
         }
 
-        // Sort by frequency (user's preferred exercises first)
-        let sortedExercises = matchingExercises.sorted { a, b in
-            (exerciseUsageFrequency[a.name] ?? 0) > (exerciseUsageFrequency[b.name] ?? 0)
+        let sortedByPreference = filtered.sorted { lhs, rhs in
+            let lhsUsage = exerciseUsageFrequency[lhs.name, default: 0]
+            let rhsUsage = exerciseUsageFrequency[rhs.name, default: 0]
+            if lhsUsage != rhsUsage {
+                return lhsUsage > rhsUsage
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
 
-        // Create suggestions (limit to reasonable number)
+        var seenNames = Set<String>()
+        let uniqueExercises = sortedByPreference.filter { exercise in
+            seenNames.insert(exercise.name.lowercased()).inserted
+        }
+
         let userDefaultReps = getUserDefaultRepCount()
-        exerciseSuggestions = sortedExercises.prefix(12).map { exercise in
+        exerciseSuggestions = Array(uniqueExercises.prefix(maxSuggestionPoolSize)).map { exercise in
             ExerciseSuggestion(
                 exerciseName: exercise.name,
                 muscleGroup: exercise.muscleGroup ?? "other",
@@ -507,6 +555,11 @@ final class LiveWorkoutViewModel {
             )
         }
         cachedMuscleGroupByExerciseName.removeAll(keepingCapacity: true)
+        loadSuggestionPerformances()
+    }
+
+    func refreshSuggestions() {
+        rebuildSuggestionPool(reason: .userRefresh)
     }
 
     /// Load exercise usage frequency from history
@@ -970,6 +1023,7 @@ final class LiveWorkoutViewModel {
                 .joined(separator: " + ")
             workout.name = muscleNames
         }
+        rebuildSuggestionPool(reason: .targetMusclesChanged)
         saveImmediately()
     }
 

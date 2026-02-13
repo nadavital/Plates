@@ -225,6 +225,22 @@ struct LiveWorkoutView: View {
                         isCustomWorkout: viewModel.exerciseSuggestions.isEmpty
                     )
 
+                    if !viewModel.workout.muscleGroups.isEmpty {
+                        HStack {
+                            Spacer()
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    viewModel.refreshSuggestions()
+                                }
+                            } label: {
+                                Label("Refresh Suggestions", systemImage: "arrow.clockwise")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+
                     // Exercise cards - different UI for strength vs cardio
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         if entry.isCardio {
