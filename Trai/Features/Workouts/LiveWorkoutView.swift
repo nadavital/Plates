@@ -188,6 +188,8 @@ struct LiveWorkoutView: View {
                 let entries = viewModel.entries
                 let upNext = viewModel.upNextSuggestion
                 let availableSuggestions = viewModel.availableSuggestions
+                let suggestionsByMuscle = Dictionary(grouping: availableSuggestions) { $0.muscleGroup }
+                let upNextSuggestionID = upNext?.id
 
                 LazyVStack(spacing: 16) {
                     // Timer header with optional watch data
@@ -274,8 +276,9 @@ struct LiveWorkoutView: View {
                     // More suggestions by muscle group
                     if !availableSuggestions.isEmpty {
                         // Filter out the up next suggestion from the grouped view
-                        let filteredSuggestions = viewModel.suggestionsByMuscle.mapValues { suggestions in
-                            suggestions.filter { $0.id != viewModel.upNextSuggestion?.id }
+                        let filteredSuggestions = suggestionsByMuscle.mapValues { suggestions in
+                            guard let upNextSuggestionID else { return suggestions }
+                            return suggestions.filter { $0.id != upNextSuggestionID }
                         }.filter { !$0.value.isEmpty }
 
                         if !filteredSuggestions.isEmpty {

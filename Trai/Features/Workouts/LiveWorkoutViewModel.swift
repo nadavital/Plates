@@ -93,6 +93,18 @@ final class LiveWorkoutViewModel {
         }
     }
 
+    private struct WorkoutMetrics {
+        var totalSets: Int
+        var completedSets: Int
+        var totalVolume: Double
+
+        static let zero = WorkoutMetrics(totalSets: 0, completedSets: 0, totalVolume: 0)
+    }
+
+    private var cachedEntries: [LiveWorkoutEntry] = []
+    private var cachedMetrics: WorkoutMetrics = .zero
+    private var cachedMuscleGroupByExerciseName: [String: String] = [:]
+
     // User preferences cache (exercise usage frequency)
     var exerciseUsageFrequency: [String: Int] = [:]
 
@@ -158,22 +170,20 @@ final class LiveWorkoutViewModel {
     }
 
     var entries: [LiveWorkoutEntry] {
-        (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        cachedEntries
     }
 
     var totalSets: Int {
-        entries.reduce(0) { $0 + $1.sets.count }
+        cachedMetrics.totalSets
     }
 
     /// Count of sets with data entered (reps > 0) - shows workout progress during active workout
     var completedSets: Int {
-        entries.reduce(0) { total, entry in
-            total + entry.sets.filter { !$0.isWarmup && $0.reps > 0 }.count
-        }
+        cachedMetrics.completedSets
     }
 
     var totalVolume: Double {
-        entries.reduce(0) { $0 + $1.totalVolume }
+        cachedMetrics.totalVolume
     }
 
     var isWorkoutComplete: Bool {
@@ -254,8 +264,13 @@ final class LiveWorkoutViewModel {
 
     /// Get the muscle group for a workout entry (checks suggestions first, then database)
     private func getMuscleGroup(for entry: LiveWorkoutEntry) -> String? {
+        if let cachedMuscle = cachedMuscleGroupByExerciseName[entry.exerciseName] {
+            return cachedMuscle
+        }
+
         // First check if it's from our suggestions
         if let suggestion = exerciseSuggestions.first(where: { $0.exerciseName == entry.exerciseName }) {
+            cachedMuscleGroupByExerciseName[entry.exerciseName] = suggestion.muscleGroup
             return suggestion.muscleGroup
         }
 
@@ -266,8 +281,10 @@ final class LiveWorkoutViewModel {
             predicate: #Predicate { $0.name == exerciseName }
         )
         descriptor.fetchLimit = 1
-        if let exercise = try? modelContext.fetch(descriptor).first {
-            return exercise.muscleGroup
+        if let exercise = try? modelContext.fetch(descriptor).first,
+           let muscleGroup = exercise.muscleGroup {
+            cachedMuscleGroupByExerciseName[entry.exerciseName] = muscleGroup
+            return muscleGroup
         }
 
         return nil
@@ -284,6 +301,7 @@ final class LiveWorkoutViewModel {
         self.workout = workout
         // elapsedTime is now computed from workout.startedAt
         self.exerciseSuggestions = suggestions
+        refreshEntriesAndMetrics()
     }
 
     /// Initialize with an existing workout and optional template for suggestions
@@ -307,6 +325,7 @@ final class LiveWorkoutViewModel {
             try? modelContext.save()
         }
 
+        refreshEntriesAndMetrics()
         startTimer()
         loadLastPerformances()
         loadExerciseUsageFrequency()
@@ -332,7 +351,7 @@ final class LiveWorkoutViewModel {
         // Poll App Groups UserDefaults for Live Activity button taps
         // This is needed because LiveActivityIntent runs in the widget extension
         liveActivityIntentTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.checkLiveActivityIntents()
             }
         }
@@ -487,6 +506,7 @@ final class LiveWorkoutViewModel {
                 defaultReps: userDefaultReps
             )
         }
+        cachedMuscleGroupByExerciseName.removeAll(keepingCapacity: true)
     }
 
     /// Load exercise usage frequency from history
@@ -673,6 +693,7 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -711,6 +732,7 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -741,6 +763,7 @@ final class LiveWorkoutViewModel {
             workout.entries = []
         }
         workout.entries?.append(entry)
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -754,6 +777,7 @@ final class LiveWorkoutViewModel {
             entry.orderIndex = newIndex
         }
 
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -791,6 +815,7 @@ final class LiveWorkoutViewModel {
         // Re-sort entries by order index
         workout.entries?.sort { $0.orderIndex < $1.orderIndex }
 
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -802,6 +827,7 @@ final class LiveWorkoutViewModel {
             entry.orderIndex = index
         }
 
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -860,6 +886,7 @@ final class LiveWorkoutViewModel {
             completed: false,
             isWarmup: false
         ))
+        refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: true)
     }
 
@@ -887,11 +914,13 @@ final class LiveWorkoutViewModel {
         }
         guard didChange else { return }
         entry.updateSet(at: index, with: set)
+        refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: true)
     }
 
     func removeSet(at index: Int, from entry: LiveWorkoutEntry) {
         entry.removeSet(at: index)
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -902,6 +931,7 @@ final class LiveWorkoutViewModel {
         var set = sets[index]
         set.isWarmup.toggle()
         entry.updateSet(at: index, with: set)
+        refreshEntriesAndMetrics()
         saveImmediately()
     }
 
@@ -923,6 +953,7 @@ final class LiveWorkoutViewModel {
         } else {
             entry.completedAt = Date()
         }
+        refreshEntriesAndMetrics()
         saveImmediately()
         HapticManager.selectionChanged()
     }
@@ -961,6 +992,7 @@ final class LiveWorkoutViewModel {
                 }
             }
         }
+        refreshEntriesAndMetrics()
 
         // Create ExerciseHistory entries for each exercise
         createExerciseHistoryEntries()
@@ -1014,6 +1046,37 @@ final class LiveWorkoutViewModel {
     }
 
     // MARK: - Private Methods
+
+    private func refreshEntriesAndMetrics() {
+        let sortedEntries = (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
+        cachedEntries = sortedEntries
+        cachedMetrics = calculateMetrics(for: sortedEntries)
+    }
+
+    private func calculateMetrics(for entries: [LiveWorkoutEntry]) -> WorkoutMetrics {
+        var totalSets = 0
+        var completedSetsWithData = 0
+        var totalVolume = 0.0
+
+        for entry in entries {
+            let sets = entry.sets
+            totalSets += sets.count
+            for set in sets where !set.isWarmup {
+                if set.reps > 0 {
+                    completedSetsWithData += 1
+                }
+                if set.completed {
+                    totalVolume += set.volume
+                }
+            }
+        }
+
+        return WorkoutMetrics(
+            totalSets: totalSets,
+            completedSets: completedSetsWithData,
+            totalVolume: totalVolume
+        )
+    }
 
     private func createExerciseHistoryEntries() {
         for entry in entries {
@@ -1078,8 +1141,8 @@ final class LiveWorkoutViewModel {
     private func saveDebounced(updateLiveActivity: Bool = true) {
         pendingSaveTask?.cancel()
         pendingSaveTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: saveDebounceDelay)
             guard let self else { return }
+            try? await Task.sleep(for: self.saveDebounceDelay)
             try? self.modelContext?.save()
             if updateLiveActivity {
                 self.scheduleLiveActivityUpdate()
@@ -1090,8 +1153,9 @@ final class LiveWorkoutViewModel {
     private func scheduleLiveActivityUpdate() {
         pendingLiveActivityUpdateTask?.cancel()
         pendingLiveActivityUpdateTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: liveActivityDebounceDelay)
-            self?.updateLiveActivity()
+            guard let self else { return }
+            try? await Task.sleep(for: self.liveActivityDebounceDelay)
+            self.updateLiveActivity()
         }
     }
 
