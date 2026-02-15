@@ -34,7 +34,6 @@ struct LiveWorkoutView: View {
     @State private var showingExerciseReplacement = false
     @State private var entryToReplace: LiveWorkoutEntry?
     @State private var showingLiveActivityDisabledAlert = false
-    @State private var showingPulseCheckIn = false
 
     // MARK: - Initialization
 
@@ -89,9 +88,9 @@ struct LiveWorkoutView: View {
             .onAppear {
                 viewModel.setup(with: modelContext, healthKitService: healthKitService)
                 startHeartRateUpdates()
-                
+
                 // Check if Live Activities are disabled
-                if !ActivityAuthorizationInfo().areActivitiesEnabled {
+                if !AppLaunchArguments.isUITesting && !ActivityAuthorizationInfo().areActivitiesEnabled {
                     showingLiveActivityDisabledAlert = true
                 }
             }
@@ -117,12 +116,6 @@ struct LiveWorkoutView: View {
                     entryToReplace = nil
                     showingExerciseReplacement = false
                 }
-            }
-            .sheet(isPresented: $showingPulseCheckIn) {
-                PostWorkoutPulseCheckInSheet(
-                    onSubmit: savePostWorkoutCheckIn,
-                    onSkip: skipPostWorkoutCheckIn
-                )
             }
             .sheet(isPresented: $showingChat) {
                 NavigationStack {
@@ -210,10 +203,31 @@ struct LiveWorkoutView: View {
                     )
 
                     if let watchHint = viewModel.watchConnectionHint {
-                        Text(watchHint)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(watchHint)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if !viewModel.isWatchConnected {
+                                Button {
+                                    viewModel.retryWatchSync()
+                                } label: {
+                                    if viewModel.isRetryingWatchSync {
+                                        HStack(spacing: 8) {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                            Text("Syncing...")
+                                        }
+                                    } else {
+                                        Label("Try syncing now", systemImage: "arrow.clockwise")
+                                    }
+                                }
+                                .font(.caption)
+                                .buttonStyle(.bordered)
+                                .disabled(viewModel.isRetryingWatchSync)
+                            }
+                        }
                     }
 
                     // Target muscles selector (editable for custom workouts)
@@ -332,7 +346,7 @@ struct LiveWorkoutView: View {
     }
 
     private func handleSummaryDone() {
-        showingPulseCheckIn = true
+        dismiss()
     }
 
     private func startHeartRateUpdates() {
@@ -384,66 +398,6 @@ struct LiveWorkoutView: View {
         )
     }
 
-    private func savePostWorkoutCheckIn(_ data: PostWorkoutPulseCheckInData) {
-        let normalizedTags = data.selectedTags.filter { !$0.localizedStandardContains("felt great") }
-        let hasPainCue = normalizedTags.contains { tag in
-            tag.localizedStandardContains("shoulder") ||
-            tag.localizedStandardContains("knee") ||
-            tag.localizedStandardContains("back")
-        }
-        let isPainFocused = hasPainCue || data.discomfort >= 4
-
-        let hasUsefulInput = !normalizedTags.isEmpty ||
-            !data.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            data.discomfort >= 3
-        guard hasUsefulInput else {
-            dismiss()
-            return
-        }
-
-        let domain: CoachSignalDomain
-        if isPainFocused {
-            domain = .pain
-        } else if data.discomfort >= 6 {
-            domain = .recovery
-        } else {
-            domain = .readiness
-        }
-
-        let title: String
-        if isPainFocused {
-            title = "Post-workout discomfort"
-        } else if data.discomfort >= 6 {
-            title = "High workout strain"
-        } else {
-            title = "Post-workout readiness"
-        }
-
-        var detailParts: [String] = []
-        if !normalizedTags.isEmpty {
-            detailParts.append("Tags: \(normalizedTags.joined(separator: ", "))")
-        }
-        detailParts.append("Discomfort: \(data.discomfort)/10")
-        if !data.note.isEmpty {
-            detailParts.append("Note: \(data.note)")
-        }
-
-        _ = CoachSignalService(modelContext: modelContext).addSignal(
-            title: title,
-            detail: detailParts.joined(separator: ". "),
-            source: .workoutCheckIn,
-            domain: domain,
-            severity: min(max(Double(data.discomfort) / 10.0, 0.2), 1.0),
-            confidence: 0.8,
-            expiresAfter: isPainFocused ? 72 * 60 * 60 : 48 * 60 * 60
-        )
-
-        dismiss()
-    }
-
-    private func skipPostWorkoutCheckIn() {
-        dismiss()
-    }
 }
 
 // MARK: - Preview

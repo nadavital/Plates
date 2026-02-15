@@ -24,7 +24,7 @@ extension EnvironmentValues {
 struct ContentView: View {
     @Query private var profiles: [UserProfile]
     @Environment(\.modelContext) private var modelContext
-    @State private var isWaitingForSync = true
+    @State private var isWaitingForSync = !AppLaunchArguments.isUITesting
     @Binding var deepLinkDestination: AppRoute?
 
     init(deepLinkDestination: Binding<AppRoute?> = .constant(nil)) {
@@ -32,7 +32,7 @@ struct ContentView: View {
     }
 
     private var hasCompletedOnboarding: Bool {
-        profiles.first?.hasCompletedOnboarding ?? false
+        AppLaunchArguments.isUITesting || (profiles.first?.hasCompletedOnboarding ?? false)
     }
 
     var body: some View {
@@ -57,6 +57,11 @@ struct ContentView: View {
     }
 
     private func waitForCloudKitSync() async {
+        if AppLaunchArguments.isUITesting {
+            isWaitingForSync = false
+            return
+        }
+
         // If profile already exists locally, no need to wait
         if hasCompletedOnboarding {
             isWaitingForSync = false
@@ -272,6 +277,17 @@ struct MainTabView: View {
 
         modelContext.insert(workout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .intent,
+            outcome: .completed,
+            relatedEntityId: workout.id,
+            metadata: [
+                "source": "deep_link",
+                "name": workout.name
+            ]
+        )
 
         // Switch to workouts tab and present the workout
         selectedTabRaw = AppTab.workouts.rawValue
@@ -290,6 +306,7 @@ struct MainTabView: View {
             ChatMessage.self,
             LiveWorkout.self,
             LiveWorkoutEntry.self,
-            ExerciseHistory.self
+            ExerciseHistory.self,
+            BehaviorEvent.self
         ], inMemory: true)
 }

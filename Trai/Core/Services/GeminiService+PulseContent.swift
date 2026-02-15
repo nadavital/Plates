@@ -141,6 +141,39 @@ extension GeminiService {
             .isEmpty ? "none" : request.context.likelyWorkoutTimes.joined(separator: ", ")
         let weightRecentRangeKg = request.context.weightRecentRangeKg.map { String(format: "%.1f", $0) } ?? "none"
         let workoutName = request.context.recommendedWorkoutName ?? "recommended workout"
+        let currentWeekday = weekdayName(for: calendar.component(.weekday, from: now))
+        let hasMorningWeightWindow = weightLikelyLogTimes.contains {
+            $0.localizedStandardContains("Morning (4-9 AM)") ||
+            $0.localizedStandardContains("Late Morning (9-12 PM)")
+        }
+        let isUsualWeightLogDay = weightLoggedThisWeekDays.contains(currentWeekday)
+        let hasWorkoutCheckInSignal = activeSnapshots.contains {
+            $0.source == .workoutCheckIn &&
+            calendar.isDate($0.createdAt, inSameDayAs: now)
+        }
+        let answeredPostWorkoutQuestion = activeSnapshots.contains {
+            $0.source == .dashboardNote &&
+            $0.detail.contains("[PulseQuestion:readiness-post-workout]") &&
+            calendar.isDate($0.createdAt, inSameDayAs: now)
+        }
+        let shouldPrioritizeWeightLogNow: Bool = {
+            guard let daysSinceWeightLog else { return false }
+            if daysSinceWeightLog <= 0 { return false }
+            if !(4..<12).contains(hour) { return false }
+            if hasMorningWeightWindow || isUsualWeightLogDay { return true }
+            return weightLogRoutineScore >= 0.42
+        }()
+        let rankedActions = TraiPulseActionRanker.rankActions(context: request.context, now: now, limit: 4)
+        let deterministicActionLine = rankedActions.isEmpty
+            ? "none"
+            : rankedActions
+                .map { action in
+                    let score = String(format: "%.2f", action.score)
+                    return "\(modelActionKind(for: action.action.kind))[\(score)]"
+                }
+                .joined(separator: ", ")
+        let deterministicTopAction = rankedActions.first.map { modelActionKind(for: $0.action.kind) } ?? "none"
+        let deterministicTopScore = rankedActions.first.map { String(format: "%.2f", $0.score) } ?? "0.00"
 
         let prompt = """
         You are generating content for a fitness app dashboard surface called Trai Pulse.
@@ -235,14 +268,22 @@ extension GeminiService {
         - weight_log_weekdays: \(weightLoggedThisWeekDays.isEmpty ? "unknown" : weightLoggedThisWeekDays.joined(separator: ", "))
         - weight_log_times: \(weightLikelyLogTimes.isEmpty ? "unknown" : weightLikelyLogTimes.joined(separator: ", "))
         - weight_log_routine_score: \(String(format: "%.2f", weightLogRoutineScore))
+        - is_usual_weight_log_day: \(isUsualWeightLogDay)
+        - has_morning_weight_log_window: \(hasMorningWeightWindow)
+        - should_prioritize_weight_log_now: \(shouldPrioritizeWeightLogNow)
         - plan_review_trigger: \(request.context.planReviewTrigger ?? "none")
         - plan_review_message: \(request.context.planReviewMessage ?? "none")
         - plan_review_days_since: \(request.context.planReviewDaysSince == nil ? "none" : String(request.context.planReviewDaysSince!))
         - plan_review_weight_delta_kg: \(request.context.planReviewWeightDeltaKg == nil ? "none" : String(request.context.planReviewWeightDeltaKg!))
         - todays_exercise_minutes: \(todaysExerciseMinutes == nil ? "unknown" : String(todaysExerciseMinutes!))
         - last_active_workout_hour: \(lastActiveWorkoutHour == nil ? "unknown" : String(lastActiveWorkoutHour!))
+        - has_workout_checkin_signal_today: \(hasWorkoutCheckInSignal)
+        - answered_post_workout_question_today: \(answeredPostWorkoutQuestion)
         - likely_reminder_times: \(likelyReminderTimes.isEmpty ? "none" : likelyReminderTimes.joined(separator: ", "))
         - likely_workout_times: \(likelyWorkoutTimes.isEmpty ? "none" : likelyWorkoutTimes)
+        - deterministic_action_candidates: \(deterministicActionLine)
+        - deterministic_top_action: \(deterministicTopAction)
+        - deterministic_top_action_score: \(deterministicTopScore)
         - recent_weight_range_kg: \(weightRecentRangeKg)
         - pending_reminders: \(pendingReminderPromptValue)
         - pending_reminder_priorities: \(pendingReminderPriorityValue)
@@ -257,6 +298,9 @@ extension GeminiService {
         Additional rules:
         - If context implies user is done eating tonight, avoid food logging prompts for tonight.
         - Avoid repeating the same plan change recommendation every day.
+        - If should_prioritize_weight_log_now is true, strongly prefer `log_weight` or `open_weight` over workout-start actions.
+        - If has_workout_today is true, has_active_workout is false, allow_question is true, and no workout check-in has been captured today, prefer a short workout follow-up question before suggesting another workout start.
+        - If deterministic_top_action_score >= 0.78, prefer that action unless there is a stronger safety/context reason not to.
         """
 
         let requestBody: [String: Any] = [
@@ -470,6 +514,54 @@ extension GeminiService {
             return .coachNote
         case .none:
             return .coachNote
+        }
+    }
+
+    private func weekdayName(for weekday: Int) -> String {
+        switch weekday {
+        case 1: return "Sunday"
+        case 2: return "Monday"
+        case 3: return "Tuesday"
+        case 4: return "Wednesday"
+        case 5: return "Thursday"
+        case 6: return "Friday"
+        case 7: return "Saturday"
+        default: return "Unknown"
+        }
+    }
+
+    private func modelActionKind(for kind: DailyCoachAction.Kind) -> String {
+        switch kind {
+        case .startWorkout:
+            return "start_workout"
+        case .startWorkoutTemplate:
+            return "start_workout_template"
+        case .logFood:
+            return "log_food"
+        case .logFoodCamera:
+            return "log_food_camera"
+        case .logWeight:
+            return "log_weight"
+        case .openWeight:
+            return "open_weight"
+        case .openCalorieDetail:
+            return "open_calorie_detail"
+        case .openMacroDetail:
+            return "open_macro_detail"
+        case .openProfile:
+            return "open_profile"
+        case .openWorkouts:
+            return "open_workouts"
+        case .openWorkoutPlan:
+            return "open_workout_plan"
+        case .openRecovery:
+            return "open_recovery"
+        case .reviewNutritionPlan:
+            return "review_nutrition_plan"
+        case .reviewWorkoutPlan:
+            return "review_workout_plan"
+        case .completeReminder:
+            return "complete_reminder"
         }
     }
 

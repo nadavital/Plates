@@ -177,6 +177,17 @@ struct LogWeightSheet: View {
         entry.notes = notes.isEmpty ? nil : notes
 
         modelContext.insert(entry)
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.logWeight,
+            domain: .body,
+            surface: .weight,
+            outcome: .completed,
+            relatedEntityId: entry.id,
+            metadata: [
+                "unit": unitLabel,
+                "source": "manual_sheet"
+            ]
+        )
 
         // Update profile's current weight
         if let profile {

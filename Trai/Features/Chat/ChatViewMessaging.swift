@@ -393,6 +393,7 @@ extension ChatView {
             workouts: recentWorkouts,
             liveWorkouts: liveWorkouts,
             suggestionUsage: suggestionUsage,
+            behaviorEvents: behaviorEvents,
             profile: profile
         )
         let trend = TraiPulsePatternService.buildTrendSnapshot(

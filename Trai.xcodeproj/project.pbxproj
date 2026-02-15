@@ -13,6 +13,13 @@
 		50550A7A2F2067D000068DCD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A792F2067D000068DCD /* SwiftUI.framework */; };
 		50550A8B2F2067D100068DCD /* TraiWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A2C961AB7A8B0C439B9FB78A /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
+		D10000012A00000100D10001 /* TraiUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000052A00000100D10001 /* TraiUITests.swift */; };
+		D10000022A00000100D10001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
+		F20000012A00000100F20001 /* AppRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000022A00000100F20001 /* AppRouteTests.swift */; };
+		F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */; };
+		F20000052A00000100F20001 /* TraiPulsePolicyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */; };
+		F20000072A00000100F20001 /* TraiPulseActionRankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */; };
+		F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -24,6 +31,13 @@
 			remoteInfo = TraiWidgetsExtension;
 		};
 		B0ABCB0D9BD74FED2A8F65AC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 507B711A2EFDE03E00DE636E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 507B71212EFDE03E00DE636E;
+			remoteInfo = Trai;
+		};
+		D10000032A00000100D10001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 507B711A2EFDE03E00DE636E /* Project object */;
 			proxyType = 1;
@@ -55,6 +69,13 @@
 		7888F9EC3466C3F845899CD8 /* TraiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		798CA7F0428F6892AAAA2CE4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulseContextAssemblerTests.swift; sourceTree = "<group>"; };
+		D10000042A00000100D10001 /* TraiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D10000052A00000100D10001 /* TraiUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiUITests.swift; sourceTree = "<group>"; };
+		F20000022A00000100F20001 /* AppRouteTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppRouteTests.swift; sourceTree = "<group>"; };
+		F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BehaviorProfileServiceTests.swift; sourceTree = "<group>"; };
+		F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulsePolicyEngineTests.swift; sourceTree = "<group>"; };
+		F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulseActionRankerTests.swift; sourceTree = "<group>"; };
+		F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BehaviorTrackerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -114,6 +135,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D10000072A00000100D10001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D10000022A00000100D10001 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -137,6 +166,7 @@
 				50550A762F2067D000068DCD /* Frameworks */,
 				507B71232EFDE03E00DE636E /* Products */,
 				BD0EB4BE4273B147615FCF00 /* TraiTests */,
+				D10000062A00000100D10001 /* TraiUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -146,6 +176,7 @@
 				507B71222EFDE03E00DE636E /* Trai.app */,
 				50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */,
 				7888F9EC3466C3F845899CD8 /* TraiTests.xctest */,
+				D10000042A00000100D10001 /* TraiUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -161,9 +192,22 @@
 		BD0EB4BE4273B147615FCF00 /* TraiTests */ = {
 			isa = PBXGroup;
 			children = (
+				F20000022A00000100F20001 /* AppRouteTests.swift */,
+				F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */,
+				F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */,
 				C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */,
+				F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */,
+				F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */,
 			);
 			path = TraiTests;
+			sourceTree = "<group>";
+		};
+		D10000062A00000100D10001 /* TraiUITests */ = {
+			isa = PBXGroup;
+			children = (
+				D10000052A00000100D10001 /* TraiUITests.swift */,
+			);
+			path = TraiUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -231,6 +275,24 @@
 			productReference = 7888F9EC3466C3F845899CD8 /* TraiTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		D10000082A00000100D10001 /* TraiUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D100000E2A00000100D10001 /* Build configuration list for PBXNativeTarget "TraiUITests" */;
+			buildPhases = (
+				D100000A2A00000100D10001 /* Sources */,
+				D10000072A00000100D10001 /* Frameworks */,
+				D10000092A00000100D10001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D100000B2A00000100D10001 /* PBXTargetDependency */,
+			);
+			name = TraiUITests;
+			productName = TraiUITests;
+			productReference = D10000042A00000100D10001 /* TraiUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -246,6 +308,10 @@
 					};
 					507B71212EFDE03E00DE636E = {
 						CreatedOnToolsVersion = 26.1;
+					};
+					D10000082A00000100D10001 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 507B71212EFDE03E00DE636E;
 					};
 				};
 			};
@@ -266,6 +332,7 @@
 				507B71212EFDE03E00DE636E /* Trai */,
 				50550A742F2067D000068DCD /* TraiWidgetsExtension */,
 				FC994245983587BA3218A0DE /* TraiTests */,
+				D10000082A00000100D10001 /* TraiUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -286,6 +353,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F3DEBD99679C88464AD081C9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D10000092A00000100D10001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -313,7 +387,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F20000012A00000100F20001 /* AppRouteTests.swift in Sources */,
+				F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */,
+				F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */,
 				090355E73CD8CE91D184469F /* TraiPulseContextAssemblerTests.swift in Sources */,
+				F20000072A00000100F20001 /* TraiPulseActionRankerTests.swift in Sources */,
+				F20000052A00000100F20001 /* TraiPulsePolicyEngineTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D100000A2A00000100D10001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D10000012A00000100D10001 /* TraiUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -330,6 +417,12 @@
 			isa = PBXTargetDependency;
 			target = 50550A742F2067D000068DCD /* TraiWidgetsExtension */;
 			targetProxy = 50550A892F2067D100068DCD /* PBXContainerItemProxy */;
+		};
+		D100000B2A00000100D10001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Trai;
+			target = 507B71212EFDE03E00DE636E /* Trai */;
+			targetProxy = D10000032A00000100D10001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -632,6 +725,35 @@
 			};
 			name = Debug;
 		};
+		D100000C2A00000100D10001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				PRODUCT_BUNDLE_IDENTIFIER = Nadav.Trai.TraiUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Trai;
+			};
+			name = Debug;
+		};
+		D100000D2A00000100D10001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				PRODUCT_BUNDLE_IDENTIFIER = Nadav.Trai.TraiUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Trai;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -667,6 +789,15 @@
 			buildConfigurations = (
 				507B712E2EFDE03F00DE636E /* Debug */,
 				507B712F2EFDE03F00DE636E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D100000E2A00000100D10001 /* Build configuration list for PBXNativeTarget "TraiUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D100000D2A00000100D10001 /* Release */,
+				D100000C2A00000100D10001 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

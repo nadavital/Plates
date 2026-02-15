@@ -29,6 +29,19 @@ struct StartWorkoutIntent: AppIntent {
         let route = AppRoute.workout(templateName: (templateName?.isEmpty == false) ? templateName : nil)
         PendingAppRouteStore.setPendingRoute(route)
 
+        if let container = TraiApp.sharedModelContainer {
+            BehaviorTracker(modelContext: container.mainContext).record(
+                actionKey: BehaviorActionKey.startWorkout,
+                domain: .workout,
+                surface: .intent,
+                outcome: .opened,
+                metadata: [
+                    "source": "start_workout_intent",
+                    "template_name": templateName ?? ""
+                ]
+            )
+        }
+
         return .result()
     }
 }

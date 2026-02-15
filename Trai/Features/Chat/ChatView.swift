@@ -40,6 +40,8 @@ struct ChatView: View {
     @Query(filter: #Predicate<CoachSignal> { !$0.isResolved }, sort: \CoachSignal.createdAt, order: .reverse)
     var activeSignals: [CoachSignal]
     @Query var suggestionUsage: [SuggestionUsage]
+    @Query(sort: \BehaviorEvent.occurredAt, order: .reverse)
+    var behaviorEvents: [BehaviorEvent]
 
     @Environment(\.modelContext) var modelContext
     @Environment(HealthKitService.self) var healthKitService: HealthKitService?

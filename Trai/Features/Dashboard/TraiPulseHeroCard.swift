@@ -14,6 +14,7 @@ struct TraiPulseHeroCard: View {
     var onQuestionAnswer: ((TraiPulseQuestion, String) -> Void)?
     var onPlanProposalDecision: ((TraiPulsePlanProposal, TraiPulsePlanProposalDecision) -> Void)?
     var onQuickChat: ((String) -> Void)?
+    var onPromptPresented: ((TraiPulseContentSnapshot) -> Void)?
 
     @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
     @AppStorage("pulse_last_question_answered_at") private var lastQuestionAnsweredAt: Double = 0
@@ -32,6 +33,7 @@ struct TraiPulseHeroCard: View {
     @State private var answeredQuestionID: String?
     @State private var questionFeedback: String?
     @State private var showingCustomAnswerField = false
+    @State private var lastTrackedPromptSignature: String?
     @FocusState private var isQuestionInputFocused: Bool
 
     private let questionCooldownSeconds: TimeInterval = 6 * 60 * 60
@@ -170,6 +172,9 @@ struct TraiPulseHeroCard: View {
         .padding(.vertical, 4)
         .onAppear {
             hydrateFromCacheIfNeeded()
+            if let pulseContent {
+                trackPromptPresentationIfNeeded(pulseContent)
+            }
         }
         .task(id: refreshKey) {
             await refreshPulseContent()
@@ -576,8 +581,9 @@ struct TraiPulseHeroCard: View {
     private func shouldShowQuestion(_ question: TraiPulseQuestion) -> Bool {
         let now = Date().timeIntervalSince1970
         let sinceLastAnswer = now - lastQuestionAnsweredAt
+        let isPostWorkoutFollowup = question.id == "readiness-post-workout"
 
-        if sinceLastAnswer < questionCooldownSeconds {
+        if !isPostWorkoutFollowup && sinceLastAnswer < questionCooldownSeconds {
             return false
         }
 
@@ -627,7 +633,9 @@ struct TraiPulseHeroCard: View {
               let cached = try? JSONDecoder().decode(CachedPulseBrief.self, from: data) else {
             return
         }
-        pulseContent = cached.snapshot()
+        let snapshot = cached.snapshot()
+        pulseContent = snapshot
+        trackPromptPresentationIfNeeded(snapshot)
     }
 
     private func persistPulseCache(_ snapshot: TraiPulseContentSnapshot) {
@@ -667,6 +675,7 @@ struct TraiPulseHeroCard: View {
         do {
             let generated = try await geminiService.generatePulseContent(request)
             pulseContent = generated
+            trackPromptPresentationIfNeeded(generated)
             persistPulseCache(generated)
             lastModelRefreshAt = Date().timeIntervalSince1970
         } catch {
@@ -675,6 +684,28 @@ struct TraiPulseHeroCard: View {
         }
 
         isLoadingPulse = false
+    }
+
+    private func trackPromptPresentationIfNeeded(_ snapshot: TraiPulseContentSnapshot) {
+        guard snapshot.prompt != nil else { return }
+        let signature = promptTrackingSignature(for: snapshot)
+        guard !signature.isEmpty else { return }
+        guard signature != lastTrackedPromptSignature else { return }
+        lastTrackedPromptSignature = signature
+        onPromptPresented?(snapshot)
+    }
+
+    private func promptTrackingSignature(for snapshot: TraiPulseContentSnapshot) -> String {
+        switch snapshot.prompt {
+        case .question(let question):
+            return "question:\(question.id)"
+        case .action(let action):
+            return "action:\(action.kind.rawValue):\(action.title)"
+        case .planProposal(let proposal):
+            return "proposal:\(proposal.id)"
+        case .none:
+            return ""
+        }
     }
 }
 

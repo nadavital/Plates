@@ -111,6 +111,10 @@ struct DailyCoachContext {
     let planReviewMessage: String?
     let planReviewDaysSince: Int?
     let planReviewWeightDeltaKg: Double?
+    let behaviorProfile: BehaviorProfileSnapshot?
+    let todayOpenedActionKeys: Set<String>
+    let todayCompletedActionKeys: Set<String>
+    let lastActiveWorkoutAt: Date?
     let pendingReminderCandidates: [TraiPulseReminderCandidate]
     let pendingReminderCandidateScores: [String: Double]
 
@@ -143,6 +147,10 @@ struct DailyCoachContext {
         planReviewMessage: String? = nil,
         planReviewDaysSince: Int? = nil,
         planReviewWeightDeltaKg: Double? = nil,
+        behaviorProfile: BehaviorProfileSnapshot? = nil,
+        todayOpenedActionKeys: Set<String> = [],
+        todayCompletedActionKeys: Set<String> = [],
+        lastActiveWorkoutAt: Date? = nil,
         pendingReminderCandidates: [TraiPulseReminderCandidate] = [],
         pendingReminderCandidateScores: [String: Double] = [:]
     ) {
@@ -174,6 +182,10 @@ struct DailyCoachContext {
         self.planReviewMessage = planReviewMessage
         self.planReviewDaysSince = planReviewDaysSince
         self.planReviewWeightDeltaKg = planReviewWeightDeltaKg
+        self.behaviorProfile = behaviorProfile
+        self.todayOpenedActionKeys = todayOpenedActionKeys
+        self.todayCompletedActionKeys = todayCompletedActionKeys
+        self.lastActiveWorkoutAt = lastActiveWorkoutAt
         self.pendingReminderCandidates = pendingReminderCandidates
         self.pendingReminderCandidateScores = pendingReminderCandidateScores
     }

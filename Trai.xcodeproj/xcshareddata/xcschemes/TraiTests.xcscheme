@@ -34,6 +34,20 @@
                ReferencedContainer = "container:Trai.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "D10000082A00000100D10001"
+               BuildableName = "TraiUITests.xctest"
+               BlueprintName = "TraiUITests"
+               ReferencedContainer = "container:Trai.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -51,6 +65,25 @@
                BlueprintName = "TraiTests"
                ReferencedContainer = "container:Trai.xcodeproj">
             </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "D10000082A00000100D10001"
+               BuildableName = "TraiUITests.xctest"
+               BlueprintName = "TraiUITests"
+               ReferencedContainer = "container:Trai.xcodeproj">
+            </BuildableReference>
+            <MacroExpansion>
+               <BuildableReference
+                  BuildableIdentifier = "primary"
+                  BlueprintIdentifier = "507B71212EFDE03E00DE636E"
+                  BuildableName = "Trai.app"
+                  BlueprintName = "Trai"
+                  ReferencedContainer = "container:Trai.xcodeproj">
+               </BuildableReference>
+            </MacroExpansion>
          </TestableReference>
       </Testables>
    </TestAction>

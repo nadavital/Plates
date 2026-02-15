@@ -29,6 +29,7 @@ struct ProfileView: View {
     // Workout plan management sheets
     @State var showPlanSetupSheet = false
     @State var showPlanEditSheet = false
+    @State private var lastOpenTrackedAt: Date?
 
     // For navigating to Trai tab with plan review
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest = false
@@ -117,6 +118,7 @@ struct ProfileView: View {
             }
             .onAppear {
                 fetchCustomRemindersCount()
+                trackOpenProfileIfNeeded()
             }
         }
     }
@@ -126,6 +128,21 @@ struct ProfileView: View {
             predicate: #Predicate { $0.isEnabled }
         )
         customRemindersCount = (try? modelContext.fetchCount(descriptor)) ?? 0
+    }
+
+    private func trackOpenProfileIfNeeded() {
+        let now = Date()
+        if let lastOpenTrackedAt, now.timeIntervalSince(lastOpenTrackedAt) < 8 * 60 {
+            return
+        }
+        lastOpenTrackedAt = now
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.openProfile,
+            domain: .profile,
+            surface: .profile,
+            outcome: .opened,
+            metadata: ["source": "profile_tab"]
+        )
     }
 
     // MARK: - Header Card

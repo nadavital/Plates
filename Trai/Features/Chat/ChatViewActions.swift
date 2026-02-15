@@ -24,6 +24,14 @@ extension ChatView {
 
         // Save immediately to persist the tap
         try? modelContext.save()
+
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorTracker.suggestionActionKey(from: suggestionType),
+            domain: behaviorDomain(forSuggestionType: suggestionType),
+            surface: .chat,
+            outcome: .suggestedTap,
+            metadata: ["suggestion_type": suggestionType]
+        )
     }
 }
 
@@ -63,6 +71,17 @@ extension ChatView {
         }
 
         modelContext.insert(entry)
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.logFood,
+            domain: .nutrition,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: entry.id,
+            metadata: [
+                "source": "chat_suggestion",
+                "name": meal.name
+            ]
+        )
 
         // Sync to Apple Health if enabled
         if profile?.syncFoodToHealthKit == true {
@@ -88,6 +107,16 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.markMealDismissed(mealId: meal.id)
         }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.logFood,
+            domain: .nutrition,
+            surface: .chat,
+            outcome: .dismissed,
+            metadata: [
+                "source": "chat_suggestion",
+                "name": meal.name
+            ]
+        )
         HapticManager.lightTap()
     }
 }
@@ -132,6 +161,14 @@ extension ChatView {
             message.planUpdateApplied = true
         }
 
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.applyPlanUpdate,
+            domain: .planning,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: message.id
+        )
+
         HapticManager.success()
     }
 
@@ -175,6 +212,13 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.suggestedPlanDismissed = true
         }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.reviewNutritionPlan,
+            domain: .planning,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id
+        )
         HapticManager.lightTap()
     }
 }
@@ -225,6 +269,17 @@ extension ChatView {
         // Save to database
         modelContext.insert(workout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.completeWorkout,
+            domain: .workout,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: workout.id,
+            metadata: [
+                "source": "chat_workout_log",
+                "workout_name": workout.name
+            ]
+        )
 
         // Update message state
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -238,6 +293,14 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.suggestedWorkoutLogDismissed = true
         }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.completeWorkout,
+            domain: .workout,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id,
+            metadata: ["source": "chat_workout_log"]
+        )
         HapticManager.lightTap()
     }
 }
@@ -284,6 +347,17 @@ extension ChatView {
         // Save to database
         modelContext.insert(liveWorkout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: liveWorkout.id,
+            metadata: [
+                "source": "chat_workout_suggestion",
+                "workout_name": liveWorkout.name
+            ]
+        )
 
         // Update message state
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -298,7 +372,37 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.suggestedWorkoutDismissed = true
         }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id,
+            metadata: ["source": "chat_workout_suggestion"]
+        )
         HapticManager.lightTap()
+    }
+}
+
+extension ChatView {
+    private func behaviorDomain(forSuggestionType suggestionType: String) -> BehaviorDomain {
+        let normalized = suggestionType.lowercased()
+        if normalized.contains("workout") || normalized.contains("train") {
+            return .workout
+        }
+        if normalized.contains("weight") {
+            return .body
+        }
+        if normalized.contains("reminder") {
+            return .reminder
+        }
+        if normalized.contains("review") || normalized.contains("plan") {
+            return .planning
+        }
+        if normalized.contains("meal") || normalized.contains("food") || normalized.contains("protein") || normalized.contains("calorie") || normalized.contains("macro") || normalized.contains("log_") {
+            return .nutrition
+        }
+        return .engagement
     }
 }
 
@@ -379,6 +483,14 @@ extension ChatView {
 
         try? modelContext.save()
 
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.editFood,
+            domain: .nutrition,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: edit.entryId
+        )
+
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.foodEditApplied = true
         }
@@ -390,6 +502,13 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.suggestedFoodEditDismissed = true
         }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.editFood,
+            domain: .nutrition,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id
+        )
         HapticManager.lightTap()
     }
 }
@@ -511,6 +630,15 @@ extension ChatView {
         )
 
         modelContext.insert(reminder)
+        try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.createReminder,
+            domain: .reminder,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: reminder.id,
+            metadata: ["title": suggestion.title]
+        )
 
         // Schedule the notification
         Task {
@@ -537,6 +665,13 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.suggestedReminderDismissed = true
         }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.createReminder,
+            domain: .reminder,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id
+        )
         HapticManager.lightTap()
     }
 }

@@ -14,6 +14,7 @@ enum TraiPulsePatternService {
         workouts: [WorkoutSession],
         liveWorkouts: [LiveWorkout],
         suggestionUsage: [SuggestionUsage],
+        behaviorEvents: [BehaviorEvent],
         profile: UserProfile?
     ) -> TraiPulsePatternProfile {
         let calendar = Calendar.current
@@ -25,6 +26,7 @@ enum TraiPulsePatternService {
         let windowFoodEntries = foodEntries.filter { $0.loggedAt >= start && $0.loggedAt <= end }
         let workoutDays = combinedWorkoutDays(workouts: workouts, liveWorkouts: liveWorkouts, calendar: calendar)
         let workoutDatesInWindow = workoutDays.filter { $0 >= start && $0 <= end }
+        let windowBehaviorEvents = behaviorEvents.filter { $0.occurredAt >= start && $0.occurredAt <= end }
 
         var workoutBucketCounts: [TraiPulseTimeWindow: Int] = [:]
         for workoutDate in workoutDatesInWindow {
@@ -50,12 +52,22 @@ enum TraiPulsePatternService {
             proteinGoal: profile?.dailyProteinGoal
         )
 
-        let actionAffinity = buildActionAffinity(from: suggestionUsage)
+        let behaviorActionAffinity = buildActionAffinity(from: windowBehaviorEvents)
+        let legacyActionAffinity = buildActionAffinity(from: suggestionUsage)
+        let actionAffinity = mergeAffinities(
+            primary: behaviorActionAffinity,
+            fallback: legacyActionAffinity,
+            primaryWeight: 0.85
+        )
+
+        let actionSignalStrength = clamp(Double(windowBehaviorEvents.count) / 42.0)
+        let maxActionAffinity = actionAffinity.values.max() ?? 0
 
         let confidence = clamp(
-            (0.45 * adherenceContext.loggingCoverage) +
-            (0.30 * adherenceContext.workoutCoverage) +
-            (0.25 * min(Double(actionAffinity.values.reduce(0.0, +)), 1.0))
+            (0.40 * adherenceContext.loggingCoverage) +
+            (0.25 * adherenceContext.workoutCoverage) +
+            (0.20 * actionSignalStrength) +
+            (0.15 * maxActionAffinity)
         )
 
         return TraiPulsePatternProfile(
@@ -257,6 +269,112 @@ enum TraiPulsePatternService {
         return normalized
     }
 
+    private static func buildActionAffinity(from behaviorEvents: [BehaviorEvent]) -> [String: Double] {
+        guard !behaviorEvents.isEmpty else { return [:] }
+
+        var actionScores: [TraiPulseAction.Kind: Double] = [:]
+        for event in behaviorEvents {
+            guard let kind = actionKind(forBehaviorActionKey: event.actionKey) else { continue }
+            let weight = behaviorOutcomeWeight(event.outcome)
+            guard weight != 0 else { continue }
+            actionScores[kind, default: 0] += weight
+        }
+
+        let followThrough = followThroughRates(from: behaviorEvents)
+        var adjustedScores = actionScores.mapValues { max(0, $0) }
+        for (kind, rate) in followThrough {
+            let multiplier = 0.85 + (rate * 0.45)
+            adjustedScores[kind, default: 0] *= multiplier
+        }
+
+        let total = adjustedScores.values.reduce(0, +)
+        guard total > 0 else { return [:] }
+
+        var normalized: [String: Double] = [:]
+        for (kind, value) in adjustedScores where value > 0 {
+            normalized[kind.rawValue] = clamp(value / total)
+        }
+        return normalized
+    }
+
+    private static func followThroughRates(
+        from behaviorEvents: [BehaviorEvent],
+        horizonMinutes: Int = 90
+    ) -> [TraiPulseAction.Kind: Double] {
+        guard horizonMinutes > 0 else { return [:] }
+
+        var opportunitiesByKind: [TraiPulseAction.Kind: [Date]] = [:]
+        var conversionsByKind: [TraiPulseAction.Kind: [Date]] = [:]
+
+        for event in behaviorEvents {
+            guard let kind = actionKind(forBehaviorActionKey: event.actionKey) else { continue }
+            if isOpportunityOutcome(event.outcome) {
+                opportunitiesByKind[kind, default: []].append(event.occurredAt)
+            }
+            if isConversionOutcome(event.outcome) {
+                conversionsByKind[kind, default: []].append(event.occurredAt)
+            }
+        }
+
+        let horizon = TimeInterval(horizonMinutes * 60)
+        var rates: [TraiPulseAction.Kind: Double] = [:]
+
+        for (kind, opportunities) in opportunitiesByKind {
+            guard opportunities.count >= 2 else { continue }
+            let sortedOpportunities = opportunities.sorted()
+            let sortedConversions = (conversionsByKind[kind] ?? []).sorted()
+            guard !sortedConversions.isEmpty else {
+                rates[kind] = 0
+                continue
+            }
+
+            var conversionIndex = 0
+            var matched = 0
+
+            for opportunity in sortedOpportunities {
+                while conversionIndex < sortedConversions.count && sortedConversions[conversionIndex] < opportunity {
+                    conversionIndex += 1
+                }
+                guard conversionIndex < sortedConversions.count else { break }
+
+                let conversion = sortedConversions[conversionIndex]
+                if conversion.timeIntervalSince(opportunity) <= horizon {
+                    matched += 1
+                    conversionIndex += 1
+                }
+            }
+
+            let rate = Double(matched) / Double(sortedOpportunities.count)
+            rates[kind] = clamp(rate)
+        }
+
+        return rates
+    }
+
+    private static func mergeAffinities(
+        primary: [String: Double],
+        fallback: [String: Double],
+        primaryWeight: Double
+    ) -> [String: Double] {
+        let clampedPrimaryWeight = clamp(primaryWeight)
+        let fallbackWeight = 1 - clampedPrimaryWeight
+
+        var merged: [String: Double] = [:]
+        let keys = Set(primary.keys).union(fallback.keys)
+        for key in keys {
+            let score =
+                (primary[key, default: 0] * clampedPrimaryWeight) +
+                (fallback[key, default: 0] * fallbackWeight)
+            if score > 0 {
+                merged[key] = score
+            }
+        }
+
+        let total = merged.values.reduce(0, +)
+        guard total > 0 else { return [:] }
+        return merged.mapValues { clamp($0 / total) }
+    }
+
     static func learnedWorkoutTimeWindows(from profile: TraiPulsePatternProfile?, maxWindows: Int = 2, minScore: Double = 0.18) -> [String] {
         guard
             let profile,
@@ -328,6 +446,106 @@ enum TraiPulsePatternService {
             return .openProfile
         }
         return .openProfile
+    }
+
+    private static func actionKind(forBehaviorActionKey actionKey: String) -> TraiPulseAction.Kind? {
+        switch actionKey {
+        case BehaviorActionKey.logFood:
+            return .logFood
+        case BehaviorActionKey.logWeight:
+            return .logWeight
+        case BehaviorActionKey.startWorkout:
+            return .startWorkout
+        case BehaviorActionKey.completeReminder:
+            return .completeReminder
+        case BehaviorActionKey.openCalorieDetail:
+            return .openCalorieDetail
+        case BehaviorActionKey.openMacroDetail:
+            return .openMacroDetail
+        case BehaviorActionKey.openWeight:
+            return .openWeight
+        case BehaviorActionKey.openProfile:
+            return .openProfile
+        case BehaviorActionKey.openWorkouts:
+            return .openWorkouts
+        case BehaviorActionKey.openWorkoutPlan:
+            return .openWorkoutPlan
+        case BehaviorActionKey.openRecovery:
+            return .openRecovery
+        case BehaviorActionKey.reviewNutritionPlan:
+            return .reviewNutritionPlan
+        case BehaviorActionKey.reviewWorkoutPlan:
+            return .reviewWorkoutPlan
+        default:
+            break
+        }
+
+        if actionKey.hasPrefix("engagement.pulse_action_tap.") {
+            let suffix = String(actionKey.dropFirst("engagement.pulse_action_tap.".count))
+            return TraiPulseAction.Kind(rawValue: suffix)
+        }
+
+        let normalized = actionKey.lowercased()
+        if normalized.contains("workout") || normalized.contains("train") {
+            return .startWorkout
+        }
+        if normalized.contains("weight") {
+            return .logWeight
+        }
+        if normalized.contains("food") || normalized.contains("meal") || normalized.contains("protein") {
+            return .logFood
+        }
+        if normalized.contains("reminder") {
+            return .completeReminder
+        }
+        if normalized.contains("macro") {
+            return .openMacroDetail
+        }
+        if normalized.contains("calorie") {
+            return .openCalorieDetail
+        }
+        if normalized.contains("plan") {
+            return normalized.contains("workout") ? .reviewWorkoutPlan : .reviewNutritionPlan
+        }
+        if normalized.contains("profile") {
+            return .openProfile
+        }
+        return nil
+    }
+
+    private static func behaviorOutcomeWeight(_ outcome: BehaviorOutcome) -> Double {
+        switch outcome {
+        case .presented:
+            return 0.12
+        case .opened:
+            return 0.35
+        case .suggestedTap:
+            return 0.70
+        case .performed:
+            return 1.0
+        case .completed:
+            return 1.15
+        case .dismissed:
+            return -0.40
+        }
+    }
+
+    private static func isOpportunityOutcome(_ outcome: BehaviorOutcome) -> Bool {
+        switch outcome {
+        case .presented, .opened, .suggestedTap:
+            return true
+        case .performed, .completed, .dismissed:
+            return false
+        }
+    }
+
+    private static func isConversionOutcome(_ outcome: BehaviorOutcome) -> Bool {
+        switch outcome {
+        case .performed, .completed:
+            return true
+        case .presented, .opened, .suggestedTap, .dismissed:
+            return false
+        }
     }
 
     private static func topProteinAnchors(entries: [FoodEntry], proteinGoal: Int?) -> [String] {

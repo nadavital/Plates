@@ -64,6 +64,18 @@ struct LogWeightIntent: AppIntent {
         // Create weight entry
         let entry = WeightEntry(weightKg: weightKg)
         context.insert(entry)
+        BehaviorTracker(modelContext: context).record(
+            actionKey: BehaviorActionKey.logWeight,
+            domain: .body,
+            surface: .intent,
+            outcome: .completed,
+            relatedEntityId: entry.id,
+            metadata: [
+                "source": "app_intent",
+                "unit": displayUnit
+            ],
+            saveImmediately: false
+        )
         try context.save()
 
         // Sync to HealthKit if enabled

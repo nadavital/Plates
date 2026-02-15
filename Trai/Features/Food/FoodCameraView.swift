@@ -96,11 +96,13 @@ struct FoodCameraView: View {
                 }
             }
             .task {
+                guard !AppLaunchArguments.isUITesting else { return }
                 await cameraService.requestPermission()
             }
             .sheet(isPresented: $showingManualEntry) {
                 ManualFoodEntrySheet(sessionId: sessionId, onSave: { entry in
                     modelContext.insert(entry)
+                    recordFoodLogBehavior(entry: entry, source: "manual_entry")
                     HapticManager.success()
                     dismiss()
                 })
@@ -177,6 +179,7 @@ struct FoodCameraView: View {
 
         assignSession(to: entry)
         modelContext.insert(entry)
+        recordFoodLogBehavior(entry: entry, source: entry.inputMethod)
 
         // Save macros to HealthKit
         saveMacrosToHealthKit(entry)
@@ -203,6 +206,7 @@ struct FoodCameraView: View {
 
         assignSession(to: entry)
         modelContext.insert(entry)
+        recordFoodLogBehavior(entry: entry, source: "refined_\(entry.inputMethod)")
 
         // Save macros to HealthKit
         saveMacrosToHealthKit(entry)
@@ -237,6 +241,20 @@ struct FoodCameraView: View {
                 print("Failed to save macros to HealthKit: \(error)")
             }
         }
+    }
+
+    private func recordFoodLogBehavior(entry: FoodEntry, source: String) {
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.logFood,
+            domain: .nutrition,
+            surface: .food,
+            outcome: .completed,
+            relatedEntityId: entry.id,
+            metadata: [
+                "source": source,
+                "name": entry.name
+            ]
+        )
     }
 }
 

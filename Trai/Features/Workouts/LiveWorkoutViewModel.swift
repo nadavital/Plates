@@ -116,6 +116,7 @@ final class LiveWorkoutViewModel {
     var isHeartRateAvailable: Bool { currentHeartRate != nil }
     var isWatchConnected: Bool { healthKitService?.isWatchConnected ?? false }
     var watchSetupErrorMessage: String?
+    var isRetryingWatchSync = false
 
     var watchConnectionHint: String? {
         if let watchSetupErrorMessage {
@@ -359,6 +360,17 @@ final class LiveWorkoutViewModel {
         if workout.modelContext == nil {
             modelContext.insert(workout)
             try? modelContext.save()
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: BehaviorActionKey.startWorkout,
+                domain: .workout,
+                surface: .workouts,
+                outcome: .performed,
+                relatedEntityId: workout.id,
+                metadata: [
+                    "source": "live_workout_setup",
+                    "workout_name": workout.name
+                ]
+            )
         }
 
         refreshEntriesAndMetrics()
@@ -440,20 +452,29 @@ final class LiveWorkoutViewModel {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await service.ensureAuthorization()
+                try await syncWatchData(using: service)
+            } catch {
+                watchSetupErrorMessage = "Health access is disabled. In Health app, allow Trai to read Heart Rate, Active Energy, and Workouts."
+            }
+        }
+    }
 
-                watchSetupErrorMessage = nil
-                service.startHeartRateStreaming(from: workout.startedAt)
-                service.startCalorieStreaming(from: workout.startedAt)
+    func retryWatchSync() {
+        guard !isRetryingWatchSync else { return }
+        guard let service = healthKitService else {
+            watchSetupErrorMessage = "HealthKit is unavailable on this device."
+            return
+        }
 
-                // Seed UI immediately with a recent sample while anchored queries warm up.
-                if let recentHeartRate = await service.fetchRecentHeartRate(),
-                   Date().timeIntervalSince(recentHeartRate.date) <= 120 {
-                    currentHeartRate = recentHeartRate.bpm
-                    lastHeartRateUpdate = recentHeartRate.date
-                }
+        isRetryingWatchSync = true
+        watchSetupErrorMessage = nil
 
-                updateWatchDataFromService()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { isRetryingWatchSync = false }
+
+            do {
+                try await syncWatchData(using: service)
             } catch {
                 watchSetupErrorMessage = "Health access is disabled. In Health app, allow Trai to read Heart Rate, Active Energy, and Workouts."
             }
@@ -494,6 +515,23 @@ final class LiveWorkoutViewModel {
 
     /// Legacy method for backwards compatibility
     func updateHeartRateFromService() {
+        updateWatchDataFromService()
+    }
+
+    private func syncWatchData(using service: HealthKitService) async throws {
+        try await service.ensureAuthorization()
+
+        watchSetupErrorMessage = nil
+        service.startHeartRateStreaming(from: workout.startedAt)
+        service.startCalorieStreaming(from: workout.startedAt)
+
+        // Seed UI immediately with a recent sample while anchored queries warm up.
+        if let recentHeartRate = await service.fetchRecentHeartRate(),
+           Date().timeIntervalSince(recentHeartRate.date) <= 120 {
+            currentHeartRate = recentHeartRate.bpm
+            lastHeartRateUpdate = recentHeartRate.date
+        }
+
         updateWatchDataFromService()
     }
 
@@ -1067,6 +1105,21 @@ final class LiveWorkoutViewModel {
             object: nil,
             userInfo: ["workoutId": workout.id]
         )
+
+        if let modelContext {
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: BehaviorActionKey.completeWorkout,
+                domain: .workout,
+                surface: .workouts,
+                outcome: .completed,
+                relatedEntityId: workout.id,
+                metadata: [
+                    "workout_name": workout.name,
+                    "workout_type": workout.workoutType
+                ],
+                saveImmediately: false
+            )
+        }
 
         save()
     }

@@ -65,6 +65,18 @@ struct LogFoodTextIntent: AppIntent {
             entry.inputMethod = "description"
 
             context.insert(entry)
+            BehaviorTracker(modelContext: context).record(
+                actionKey: BehaviorActionKey.logFood,
+                domain: .nutrition,
+                surface: .intent,
+                outcome: .completed,
+                relatedEntityId: entry.id,
+                metadata: [
+                    "source": "app_intent_text",
+                    "name": analysis.name
+                ],
+                saveImmediately: false
+            )
             try context.save()
 
             // Sync to HealthKit if enabled

@@ -27,6 +27,8 @@ struct DashboardView: View {
     @Query(filter: #Predicate<CoachSignal> { !$0.isResolved }, sort: \CoachSignal.createdAt, order: .reverse)
     private var coachSignals: [CoachSignal]
     @Query private var suggestionUsage: [SuggestionUsage]
+    @Query(sort: \BehaviorEvent.occurredAt, order: .reverse)
+    private var behaviorEvents: [BehaviorEvent]
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
@@ -157,15 +159,33 @@ struct DashboardView: View {
         let hasWorkout = todayTotalWorkoutCount > 0
         let calorieGoal = profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkout || hasActiveLiveWorkout)
         let activeSignals = coachSignals.active(now: .now)
+        let behaviorProfile = BehaviorProfileService.buildProfile(now: .now, events: behaviorEvents)
+        let todayActionState = behaviorActionStateForToday()
         let reminderCompletionRate = todaysReminderCompletionRate
         let missedReminderCount = todaysMissedReminderCount
         let daysSinceLatestWeightLog = daysSinceLastWeightLog
+            ?? behaviorProfile.daysSinceLastAction(BehaviorActionKey.logWeight, now: .now)
         let weightLoggedThisWeek = loggedWeightThisWeek
         let weightLoggedThisWeekDays = inferredWeightLogWeekdays
-        let weightLikelyLogTimes = inferredWeightLogTimes
+        let weightLikelyLogTimes = mergeUniqueStrings(
+            inferredWeightLogTimes,
+            behaviorProfile.likelyTimeLabels(
+                for: BehaviorActionKey.logWeight,
+                maxLabels: 2,
+                minimumEvents: 2
+            )
+        )
         let likelyReminderTimes = todaysReminderItemsAll.map(\.time)
-        let likelyWorkoutTimes = TraiPulsePatternService.learnedWorkoutTimeWindows(from: pulsePatternProfile)
+        let likelyWorkoutTimes = mergeUniqueStrings(
+            TraiPulsePatternService.learnedWorkoutTimeWindows(from: pulsePatternProfile),
+            behaviorProfile.likelyTimeLabels(
+                for: BehaviorActionKey.startWorkout,
+                maxLabels: 2,
+                minimumEvents: 2
+            )
+        )
         let lastActiveWorkoutHour = lastRecentWorkoutHour
+        let lastActiveWorkoutAt = lastRecentWorkoutAt
         let planReviewRecommendation = pendingPlanReviewRecommendation
         let reminderCandidateScores = todaysReminderCandidateScores
 
@@ -198,6 +218,10 @@ struct DashboardView: View {
                 planReviewMessage: pendingPlanReviewMessage,
                 planReviewDaysSince: planReviewRecommendation?.details.daysSinceReview,
                 planReviewWeightDeltaKg: planReviewRecommendation?.details.weightChangeKg,
+                behaviorProfile: behaviorProfile,
+                todayOpenedActionKeys: todayActionState.openedActionKeys,
+                todayCompletedActionKeys: todayActionState.completedActionKeys,
+                lastActiveWorkoutAt: lastActiveWorkoutAt,
                 pendingReminderCandidates: todaysReminderCandidates,
                 pendingReminderCandidateScores: reminderCandidateScores
             )
@@ -221,15 +245,16 @@ struct DashboardView: View {
                                     onAction: handleCoachAction,
                                     onQuestionAnswer: handleCoachQuestionAnswer,
                                     onPlanProposalDecision: handlePlanProposalDecision,
-                                    onQuickChat: handlePulseQuickChat
+                                    onQuickChat: handlePulseQuickChat,
+                                    onPromptPresented: handlePulsePromptPresented
                                 )
                             }
 
                             // Quick action buttons (only on today)
                             QuickActionsCard(
-                                onLogFood: { showingLogFood = true },
+                                onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
                                 onAddWorkout: { startWorkout() },
-                                onLogWeight: { showingLogWeight = true },
+                                onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") },
                                 workoutName: quickAddWorkoutName
                             )
 
@@ -248,7 +273,7 @@ struct DashboardView: View {
                     CalorieProgressCard(
                         consumed: totalCalories,
                         goal: profile?.dailyCalorieGoal ?? 2000,
-                        onTap: { showingCalorieDetail = true }
+                        onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
                     )
 
                     MacroBreakdownCard(
@@ -263,16 +288,16 @@ struct DashboardView: View {
                         fiberGoal: profile?.dailyFiberGoal ?? 30,
                         sugarGoal: profile?.dailySugarGoal ?? 50,
                         enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-                        onTap: { showingMacroDetail = true }
+                        onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
                     )
 
                     DailyFoodTimeline(
                         entries: selectedDayFoodEntries,
                         enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-                        onAddFood: isViewingToday ? { showingLogFood = true } : nil,
+                        onAddFood: isViewingToday ? { openFoodCameraFromDashboard(source: "food_timeline_add") } : nil,
                         onAddToSession: isViewingToday ? { sessionId in
                             sessionIdToAddTo = sessionId
-                            showingLogFood = true
+                            openFoodCameraFromDashboard(source: "food_timeline_add_to_session")
                         } : nil,
                         onEditEntry: { entryToEdit = $0 },
                         onDeleteEntry: deleteFoodEntry
@@ -296,6 +321,11 @@ struct DashboardView: View {
                                 useLbs: !(profile?.usesMetricWeight ?? true)
                             )
                         }
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                trackOpenWeightFromDashboard(source: "weight_trend_card")
+                            }
+                        )
                         .buttonStyle(.plain)
                     }
                     }
@@ -476,6 +506,7 @@ struct DashboardView: View {
             workouts: allWorkouts,
             liveWorkouts: liveWorkouts,
             suggestionUsage: suggestionUsage,
+            behaviorEvents: behaviorEvents,
             profile: profile
         )
     }
@@ -784,11 +815,16 @@ struct DashboardView: View {
         )
     }
 
-    private var lastRecentWorkoutHour: Int? {
+    private var lastRecentWorkoutAt: Date? {
         let referenceDate = Date()
-        let recentWorkoutDate = allWorkouts.map(\.loggedAt) + liveWorkouts.map { $0.completedAt ?? $0.startedAt }
+        let recentWorkoutDate = (allWorkouts.map(\.loggedAt) + liveWorkouts.map { $0.completedAt ?? $0.startedAt })
             .filter { $0 <= referenceDate }
         guard let latest = recentWorkoutDate.max() else { return nil }
+        return latest
+    }
+
+    private var lastRecentWorkoutHour: Int? {
+        guard let latest = lastRecentWorkoutAt else { return nil }
         return Calendar.current.component(.hour, from: latest)
     }
 
@@ -853,6 +889,18 @@ struct DashboardView: View {
             todaysCompletedReminderIds.insert(reminder.id)
         }
 
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.completeReminder,
+            domain: .reminder,
+            surface: .dashboard,
+            outcome: .completed,
+            relatedEntityId: reminder.id,
+            metadata: [
+                "title": reminder.title,
+                "time": reminder.time
+            ]
+        )
+
         HapticManager.success()
     }
 
@@ -880,6 +928,88 @@ struct DashboardView: View {
     private func deleteFoodEntry(_ entry: FoodEntry) {
         modelContext.delete(entry)
         HapticManager.success()
+    }
+
+    private func behaviorActionStateForToday() -> (openedActionKeys: Set<String>, completedActionKeys: Set<String>) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: .now)
+        var opened: Set<String> = []
+        var completed: Set<String> = []
+
+        for event in behaviorEvents {
+            if event.occurredAt < startOfDay {
+                break
+            }
+
+            switch event.outcome {
+            case .opened:
+                opened.insert(event.actionKey)
+            case .performed:
+                opened.insert(event.actionKey)
+                completed.insert(event.actionKey)
+            case .completed:
+                opened.insert(event.actionKey)
+                completed.insert(event.actionKey)
+            case .presented, .suggestedTap, .dismissed:
+                continue
+            }
+        }
+
+        return (opened, completed)
+    }
+
+    private func openFoodCameraFromDashboard(source: String) {
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.logFood,
+            domain: .nutrition,
+            surface: .dashboard,
+            outcome: .opened,
+            metadata: ["source": source]
+        )
+        showingLogFood = true
+    }
+
+    private func openLogWeightFromDashboard(source: String) {
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.logWeight,
+            domain: .body,
+            surface: .dashboard,
+            outcome: .opened,
+            metadata: ["source": source]
+        )
+        showingLogWeight = true
+    }
+
+    private func openCalorieDetailFromDashboard(source: String) {
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.openCalorieDetail,
+            domain: .nutrition,
+            surface: .dashboard,
+            outcome: .opened,
+            metadata: ["source": source]
+        )
+        showingCalorieDetail = true
+    }
+
+    private func openMacroDetailFromDashboard(source: String) {
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.openMacroDetail,
+            domain: .nutrition,
+            surface: .dashboard,
+            outcome: .opened,
+            metadata: ["source": source]
+        )
+        showingMacroDetail = true
+    }
+
+    private func trackOpenWeightFromDashboard(source: String) {
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.openWeight,
+            domain: .body,
+            surface: .dashboard,
+            outcome: .opened,
+            metadata: ["source": source]
+        )
     }
 
     // MARK: - Workout Actions
@@ -940,6 +1070,17 @@ struct DashboardView: View {
         )
         modelContext.insert(workout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .dashboard,
+            outcome: .performed,
+            relatedEntityId: workout.id,
+            metadata: [
+                "type": "template",
+                "template_name": template.name
+            ]
+        )
 
         pendingTemplate = template
         pendingWorkout = workout
@@ -955,6 +1096,14 @@ struct DashboardView: View {
         )
         modelContext.insert(workout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .dashboard,
+            outcome: .performed,
+            relatedEntityId: workout.id,
+            metadata: ["type": "custom"]
+        )
 
         pendingWorkout = workout
         showingWorkoutSheet = true
@@ -986,6 +1135,17 @@ struct DashboardView: View {
         )
         modelContext.insert(workout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .dashboard,
+            outcome: .performed,
+            relatedEntityId: workout.id,
+            metadata: [
+                "type": "recommended",
+                "template_name": template.name
+            ]
+        )
 
         pendingTemplate = template
         pendingWorkout = workout
@@ -994,6 +1154,7 @@ struct DashboardView: View {
     }
 
     private func handleCoachAction(_ action: DailyCoachAction) {
+        recordPulseActionTap(action)
         switch action.kind {
         case .startWorkout:
             trackPulseInteraction("pulse_action_start_workout")
@@ -1003,54 +1164,66 @@ struct DashboardView: View {
             startWorkoutTemplate(action)
         case .logFood:
             trackPulseInteraction("pulse_action_log_food")
+            recordPulseActionExecution(action)
             showingLogFood = true
             HapticManager.selectionChanged()
         case .logFoodCamera:
             trackPulseInteraction("pulse_action_log_food_camera")
+            recordPulseActionExecution(action)
             showingLogFood = true
             HapticManager.selectionChanged()
         case .logWeight:
             trackPulseInteraction("pulse_action_log_weight")
+            recordPulseActionExecution(action)
             showingLogWeight = true
             HapticManager.selectionChanged()
         case .openWeight:
             trackPulseInteraction("pulse_action_open_weight")
+            recordPulseActionExecution(action)
             selectedDate = .now
             showingWeightTracking = true
             HapticManager.selectionChanged()
         case .openCalorieDetail:
             trackPulseInteraction("pulse_action_open_calorie_detail")
+            recordPulseActionExecution(action)
             selectedDate = .now
             showingCalorieDetail = true
             HapticManager.selectionChanged()
         case .openMacroDetail:
             trackPulseInteraction("pulse_action_open_macro_detail")
+            recordPulseActionExecution(action)
             selectedDate = .now
             showingMacroDetail = true
             HapticManager.selectionChanged()
         case .openProfile:
             trackPulseInteraction("pulse_action_open_profile")
+            recordPulseActionExecution(action)
             selectedTabRaw = AppTab.profile.rawValue
             HapticManager.selectionChanged()
         case .openWorkouts:
             trackPulseInteraction("pulse_action_open_workouts")
+            recordPulseActionExecution(action)
             selectedTabRaw = AppTab.workouts.rawValue
             HapticManager.selectionChanged()
         case .openWorkoutPlan:
             trackPulseInteraction("pulse_action_open_workout_plan")
+            recordPulseActionExecution(action)
             selectedTabRaw = AppTab.workouts.rawValue
             HapticManager.selectionChanged()
         case .openRecovery:
             trackPulseInteraction("pulse_action_open_recovery")
+            recordPulseActionExecution(action)
             selectedTabRaw = AppTab.workouts.rawValue
             HapticManager.selectionChanged()
         case .reviewNutritionPlan:
             trackPulseInteraction("pulse_action_review_nutrition_plan")
+            recordPulseActionExecution(action)
             pendingPlanReviewRequest = true
             selectedTabRaw = AppTab.trai.rawValue
             HapticManager.selectionChanged()
         case .reviewWorkoutPlan:
             trackPulseInteraction("pulse_action_review_workout_plan")
+            recordPulseActionExecution(action)
             pendingWorkoutPlanReviewRequest = true
             selectedTabRaw = AppTab.trai.rawValue
             HapticManager.selectionChanged()
@@ -1137,6 +1310,13 @@ struct DashboardView: View {
         savePulseMemoryIfNeeded(interpretation.memoryCandidate)
         pendingPulseSeedPrompt = interpretation.handoffPrompt
         trackPulseInteraction("pulse_question_answered_\(question.id)")
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: "engagement.pulse_question.\(question.id)",
+            domain: .engagement,
+            surface: .dashboard,
+            outcome: .completed,
+            metadata: ["answer": answer]
+        )
         HapticManager.success()
     }
 
@@ -1174,6 +1354,13 @@ struct DashboardView: View {
 
         pendingPulseSeedPrompt = prompt
         trackPulseInteraction("pulse_plan_proposal_\(decision.rawValue)")
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: "planning.pulse_plan_proposal.\(decision.rawValue)",
+            domain: .planning,
+            surface: .dashboard,
+            outcome: decision == .later ? .dismissed : .completed,
+            metadata: ["proposal_id": proposal.id]
+        )
         HapticManager.success()
     }
 
@@ -1182,6 +1369,12 @@ struct DashboardView: View {
         guard !trimmed.isEmpty else { return }
         pendingPulseSeedPrompt = trimmed
         trackPulseInteraction("pulse_quick_chat")
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: "engagement.pulse_quick_chat",
+            domain: .engagement,
+            surface: .dashboard,
+            outcome: .opened
+        )
         selectedTabRaw = AppTab.trai.rawValue
         HapticManager.selectionChanged()
     }
@@ -1262,6 +1455,126 @@ struct DashboardView: View {
         try? modelContext.save()
     }
 
+    private func handlePulsePromptPresented(_ snapshot: TraiPulseContentSnapshot) {
+        switch snapshot.prompt {
+        case .question(let question):
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: "engagement.pulse_question_presented.\(question.id)",
+                domain: .engagement,
+                surface: .dashboard,
+                outcome: .presented,
+                metadata: ["prompt": question.prompt]
+            )
+        case .action(let action):
+            let descriptor = behaviorDescriptor(for: action)
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: descriptor.actionKey,
+                domain: descriptor.domain,
+                surface: .dashboard,
+                outcome: .presented,
+                metadata: pulseTelemetryMetadata(for: action)
+            )
+        case .planProposal(let proposal):
+            BehaviorTracker(modelContext: modelContext).record(
+                actionKey: "planning.pulse_plan_proposal.presented",
+                domain: .planning,
+                surface: .dashboard,
+                outcome: .presented,
+                metadata: ["proposal_id": proposal.id]
+            )
+        case .none:
+            break
+        }
+    }
+
+    private func recordPulseActionTap(_ action: DailyCoachAction) {
+        let descriptor = behaviorDescriptor(for: action)
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: "engagement.pulse_action_tap.\(action.kind.rawValue)",
+            domain: descriptor.domain,
+            surface: .dashboard,
+            outcome: .suggestedTap,
+            metadata: pulseTelemetryMetadata(for: action)
+        )
+    }
+
+    private func recordPulseActionExecution(_ action: DailyCoachAction) {
+        let descriptor = behaviorDescriptor(for: action)
+        var metadata = pulseTelemetryMetadata(for: action)
+        metadata["source"] = "pulse"
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: descriptor.actionKey,
+            domain: descriptor.domain,
+            surface: .dashboard,
+            outcome: .opened,
+            metadata: metadata
+        )
+    }
+
+    private func behaviorDescriptor(for action: DailyCoachAction) -> (actionKey: String, domain: BehaviorDomain) {
+        switch action.kind {
+        case .startWorkout, .startWorkoutTemplate:
+            return (BehaviorActionKey.startWorkout, .workout)
+        case .logFood, .logFoodCamera:
+            return (BehaviorActionKey.logFood, .nutrition)
+        case .logWeight:
+            return (BehaviorActionKey.logWeight, .body)
+        case .openWeight:
+            return (BehaviorActionKey.openWeight, .body)
+        case .openCalorieDetail:
+            return (BehaviorActionKey.openCalorieDetail, .nutrition)
+        case .openMacroDetail:
+            return (BehaviorActionKey.openMacroDetail, .nutrition)
+        case .openProfile:
+            return (BehaviorActionKey.openProfile, .profile)
+        case .openWorkouts:
+            return (BehaviorActionKey.openWorkouts, .workout)
+        case .openWorkoutPlan:
+            return (BehaviorActionKey.openWorkoutPlan, .planning)
+        case .openRecovery:
+            return (BehaviorActionKey.openRecovery, .workout)
+        case .reviewNutritionPlan:
+            return (BehaviorActionKey.reviewNutritionPlan, .planning)
+        case .reviewWorkoutPlan:
+            return (BehaviorActionKey.reviewWorkoutPlan, .planning)
+        case .completeReminder:
+            return (BehaviorActionKey.completeReminder, .reminder)
+        }
+    }
+
+    private func mergeUniqueStrings(_ base: [String], _ extra: [String]) -> [String] {
+        var ordered: [String] = []
+        var seen = Set<String>()
+        for value in base + extra {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                ordered.append(trimmed)
+            }
+        }
+        return ordered
+    }
+
+    private func pulseTelemetryMetadata(for action: DailyCoachAction) -> [String: String] {
+        var metadata: [String: String] = ["title": action.title]
+        let telemetryKeys = [
+            "pulse_recommendation_id",
+            "pulse_policy_version",
+            "pulse_rank_position",
+            "pulse_rank_score",
+            "pulse_reco_origin",
+            "pulse_candidate_set"
+        ]
+        if let actionMetadata = action.metadata {
+            for key in telemetryKeys {
+                if let value = actionMetadata[key], !value.isEmpty {
+                    metadata[key] = value
+                }
+            }
+        }
+        return metadata
+    }
+
     private func savePulseMemoryIfNeeded(_ candidate: TraiPulseMemoryCandidate?) {
         guard let candidate else { return }
 
@@ -1308,6 +1621,7 @@ struct DashboardView: View {
             FoodEntry.self,
             WorkoutSession.self,
             WeightEntry.self,
-            CoachSignal.self
+            CoachSignal.self,
+            BehaviorEvent.self
         ], inMemory: true)
 }

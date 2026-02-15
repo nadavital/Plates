@@ -14,6 +14,7 @@ struct TraiApp: App {
     /// Shared ModelContainer for App Intents and other extension access
     @MainActor static var sharedModelContainer: ModelContainer?
 
+    let isUITesting: Bool
     let modelContainer: ModelContainer
     @State private var notificationService = NotificationService()
     @State private var healthKitService = HealthKitService()
@@ -24,6 +25,9 @@ struct TraiApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        let isUITesting = AppLaunchArguments.isUITesting
+        self.isUITesting = isUITesting
+
         do {
             let schema = Schema([
                 UserProfile.self,
@@ -41,12 +45,13 @@ struct TraiApp: App {
                 WorkoutPlanVersion.self,
                 CustomReminder.self,
                 ReminderCompletion.self,
-                SuggestionUsage.self
+                SuggestionUsage.self,
+                BehaviorEvent.self
             ])
 
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
-                isStoredInMemoryOnly: false,
+                isStoredInMemoryOnly: isUITesting,
                 cloudKitDatabase: .automatic
             )
 
@@ -59,6 +64,9 @@ struct TraiApp: App {
             let container = modelContainer
             Task { @MainActor in
                 TraiApp.sharedModelContainer = container
+                if isUITesting {
+                    seedUITestProfileIfNeeded(modelContainer: container)
+                }
                 migrateExistingWorkoutSets(modelContainer: container)
             }
         } catch {
@@ -68,32 +76,43 @@ struct TraiApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(deepLinkDestination: $deepLinkDestination)
-                .environment(notificationService)
-                .environment(healthKitService)
-                .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
-                .onAppear {
-                    setupNotificationDelegate()
-                    // Clean up any stale Live Activities from previous sessions
-                    Task { @MainActor in
-                        LiveActivityManager.shared.cancelAllActivities()
+            if isUITesting {
+                ContentView(deepLinkDestination: $deepLinkDestination)
+                    .environment(notificationService)
+                    .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
+                    .onOpenURL { url in
+                        handleDeepLink(url)
                     }
-                    // Process any pending widget food logs
-                    processPendingWidgetFoodLogs()
-                    // Update widget data on launch
-                    Task { @MainActor in
-                        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
+            } else {
+                ContentView(deepLinkDestination: $deepLinkDestination)
+                    .environment(notificationService)
+                    .environment(healthKitService)
+                    .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
+                    .onAppear {
+                        setupNotificationDelegate()
+                        // Clean up any stale Live Activities from previous sessions
+                        Task { @MainActor in
+                            LiveActivityManager.shared.cancelAllActivities()
+                        }
+                        // Process any pending widget food logs
+                        processPendingWidgetFoodLogs()
+                        // Update widget data on launch
+                        Task { @MainActor in
+                            WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
+                        }
+                        Task { @MainActor in
+                            await syncRecentWorkoutsFromHealthKit()
+                        }
                     }
-                    Task { @MainActor in
-                        await syncRecentWorkoutsFromHealthKit()
+                    .onOpenURL { url in
+                        handleDeepLink(url)
                     }
-                }
-                .onOpenURL { url in
-                    handleDeepLink(url)
-                }
+            }
         }
         .modelContainer(modelContainer)
         .onChange(of: scenePhase) { _, newPhase in
+            guard !isUITesting else { return }
+
             if newPhase == .background {
                 // Update widget data when app goes to background
                 Task { @MainActor in
@@ -201,6 +220,18 @@ extension TraiApp {
             entry.loggedAt = log.loggedAt
             entry.mealType = log.mealType
             context.insert(entry)
+            BehaviorTracker(modelContext: context).record(
+                actionKey: BehaviorActionKey.logFood,
+                domain: .nutrition,
+                surface: .widget,
+                outcome: .completed,
+                relatedEntityId: entry.id,
+                metadata: [
+                    "source": "widget_pending",
+                    "name": log.name
+                ],
+                saveImmediately: false
+            )
         }
 
         try? context.save()
@@ -214,6 +245,20 @@ extension TraiApp {
 }
 
 // MARK: - Data Migrations
+
+@MainActor
+private func seedUITestProfileIfNeeded(modelContainer: ModelContainer) {
+    let context = modelContainer.mainContext
+    let profileDescriptor = FetchDescriptor<UserProfile>()
+    let existingCount = (try? context.fetchCount(profileDescriptor)) ?? 0
+    guard existingCount == 0 else { return }
+
+    let profile = UserProfile()
+    profile.name = "UI Test User"
+    profile.hasCompletedOnboarding = true
+    context.insert(profile)
+    try? context.save()
+}
 
 /// Fix existing completed workouts that have sets with data but not marked as completed
 @MainActor

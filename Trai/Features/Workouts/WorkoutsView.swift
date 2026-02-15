@@ -54,6 +54,7 @@ struct WorkoutsView: View {
     @State private var showingPersonalRecords = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
+    @State private var lastOpenTrackedAt: Date?
 
     // MARK: - Computed Properties
 
@@ -151,6 +152,9 @@ struct WorkoutsView: View {
                 await syncHealthKit()
                 loadRecoveryAndScores()
             }
+            .onAppear {
+                trackOpenWorkoutsIfNeeded()
+            }
             .task {
                 loadRecoveryAndScores()
             }
@@ -208,6 +212,21 @@ struct WorkoutsView: View {
         }
     }
 
+    private func trackOpenWorkoutsIfNeeded() {
+        let now = Date()
+        if let lastOpenTrackedAt, now.timeIntervalSince(lastOpenTrackedAt) < 8 * 60 {
+            return
+        }
+        lastOpenTrackedAt = now
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.openWorkouts,
+            domain: .workout,
+            surface: .workouts,
+            outcome: .opened,
+            metadata: ["source": "workouts_tab"]
+        )
+    }
+
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
         let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
 
@@ -218,6 +237,17 @@ struct WorkoutsView: View {
         )
         modelContext.insert(workout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .workouts,
+            outcome: .performed,
+            relatedEntityId: workout.id,
+            metadata: [
+                "type": "template",
+                "template_name": template.name
+            ]
+        )
 
         // Store template for suggestions and open the workout sheet
         pendingTemplate = template
@@ -238,6 +268,17 @@ struct WorkoutsView: View {
         )
         modelContext.insert(workout)
         try? modelContext.save()
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.startWorkout,
+            domain: .workout,
+            surface: .workouts,
+            outcome: .performed,
+            relatedEntityId: workout.id,
+            metadata: [
+                "type": "custom",
+                "workout_type": type.rawValue
+            ]
+        )
 
         // Open the workout sheet
         pendingWorkout = workout
