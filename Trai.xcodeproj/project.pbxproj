@@ -20,6 +20,8 @@
 		F20000052A00000100F20001 /* TraiPulsePolicyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */; };
 		F20000072A00000100F20001 /* TraiPulseActionRankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */; };
 		F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */; };
+		F200000B2A00000100F20001 /* TraiPulsePatternServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000C2A00000100F20001 /* TraiPulsePatternServiceTests.swift */; };
+		F200000D2A00000100F20001 /* DailyCoachEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000E2A00000100F20001 /* DailyCoachEngineTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +78,8 @@
 		F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulsePolicyEngineTests.swift; sourceTree = "<group>"; };
 		F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulseActionRankerTests.swift; sourceTree = "<group>"; };
 		F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BehaviorTrackerTests.swift; sourceTree = "<group>"; };
+		F200000C2A00000100F20001 /* TraiPulsePatternServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiPulsePatternServiceTests.swift; sourceTree = "<group>"; };
+		F200000E2A00000100F20001 /* DailyCoachEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DailyCoachEngineTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -195,8 +199,10 @@
 				F20000022A00000100F20001 /* AppRouteTests.swift */,
 				F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */,
 				F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */,
+				F200000E2A00000100F20001 /* DailyCoachEngineTests.swift */,
 				C60829DC4A73FC429F2BCAC0 /* TraiPulseContextAssemblerTests.swift */,
 				F20000082A00000100F20001 /* TraiPulseActionRankerTests.swift */,
+				F200000C2A00000100F20001 /* TraiPulsePatternServiceTests.swift */,
 				F20000062A00000100F20001 /* TraiPulsePolicyEngineTests.swift */,
 			);
 			path = TraiTests;
@@ -390,8 +396,10 @@
 				F20000012A00000100F20001 /* AppRouteTests.swift in Sources */,
 				F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */,
 				F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */,
+				F200000D2A00000100F20001 /* DailyCoachEngineTests.swift in Sources */,
 				090355E73CD8CE91D184469F /* TraiPulseContextAssemblerTests.swift in Sources */,
 				F20000072A00000100F20001 /* TraiPulseActionRankerTests.swift in Sources */,
+				F200000B2A00000100F20001 /* TraiPulsePatternServiceTests.swift in Sources */,
 				F20000052A00000100F20001 /* TraiPulsePolicyEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
