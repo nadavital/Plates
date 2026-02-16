@@ -15,23 +15,29 @@ struct MacroRingItem: View {
     let goal: Double
     let color: Color
 
+    @State private var animatedProgress: Double = 0
+
     private var progress: Double {
         min(current / goal, 1.0)
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: TraiSpacing.sm) {
             ZStack {
                 Circle()
-                    .stroke(color.opacity(0.3), lineWidth: 6)
+                    .stroke(color.opacity(0.15), lineWidth: 5)
 
                 Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .trim(from: 0, to: animatedProgress)
+                    .stroke(
+                        TraiGradient.ring(color),
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                    )
                     .rotationEffect(.degrees(-90))
+                    .shadow(color: color.opacity(0.3), radius: 3, y: 1)
 
                 Text("\(Int(current))g")
-                    .font(.caption)
+                    .font(.traiLabel())
                     .bold()
             }
             .frame(width: 60, height: 60)
@@ -39,6 +45,16 @@ struct MacroRingItem: View {
             Text(name)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+        .onAppear {
+            withAnimation(TraiAnimation.bouncy) {
+                animatedProgress = progress
+            }
+        }
+        .onChange(of: progress) { _, newValue in
+            withAnimation(TraiAnimation.bouncy) {
+                animatedProgress = newValue
+            }
         }
     }
 }
@@ -52,30 +68,50 @@ struct QuickActionButton: View {
     let color: Color
     let action: () -> Void
 
+    @State private var isPressed = false
+
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(color)
+        Button {
+            HapticManager.lightTap()
+            action()
+        } label: {
+            VStack(spacing: TraiSpacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            TraiGradient.actionVibrant(
+                                color,
+                                color.opacity(0.7)
+                            )
+                        )
+                        .frame(width: 40, height: 40)
+                        .shadow(color: color.opacity(0.3), radius: 6, y: 3)
 
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
+                    Image(systemName: icon)
+                        .font(.body)
+                        .bold()
+                        .foregroundStyle(.white)
+                }
 
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                VStack(spacing: 2) {
+                    Text(title)
+                        .font(.traiLabel())
+                        .foregroundStyle(.primary)
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(color.opacity(0.1))
-            .clipShape(.rect(cornerRadius: 12))
+            .padding(.vertical, 14)
+            .background(color.opacity(0.08))
+            .clipShape(.rect(cornerRadius: TraiRadius.medium))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle(scale: 0.93))
     }
 }
 

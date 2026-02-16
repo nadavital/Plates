@@ -198,6 +198,7 @@ struct WorkoutsView: View {
                 }
             }
         }
+        .traiBackground()
     }
 
     // MARK: - Actions

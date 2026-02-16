@@ -288,16 +288,13 @@ struct FoodCameraSuggestionCard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
+                    .buttonStyle(.traiPrimary)
                 }
             }
         }
-        .padding(14)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(tint: .green)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: TraiRadius.medium)
                 .stroke(Color.green.opacity(0.3), lineWidth: 1)
         )
     }
@@ -378,9 +375,7 @@ struct FoodRefinementInput: View {
                 .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
             }
         }
-        .padding(14)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(glow: .food)
     }
 }
 
@@ -404,9 +399,7 @@ struct FoodCameraErrorCard: View {
             Button("Try Again", action: onRetry)
                 .buttonStyle(.bordered)
         }
-        .padding()
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 }

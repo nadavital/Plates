@@ -27,6 +27,7 @@ struct WorkoutSummarySheet: View {
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var showConfetti = false
+    @State private var showCelebration = false
     @State private var selectedExercise: IdentifiableExerciseName?
 
     /// Whether to use metric (kg) based on user profile
@@ -38,15 +39,21 @@ struct WorkoutSummarySheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Success icon
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundStyle(.green)
-                        .symbolEffect(.bounce, value: showConfetti)
+                    // Success icon with celebration pulse
+                    ZStack {
+                        TraiCelebrationPulse(isActive: showCelebration, color: .green)
+                            .frame(width: 80, height: 80)
+
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 64))
+                            .foregroundStyle(.green)
+                            .symbolEffect(.bounce, value: showConfetti)
+                    }
 
                     Text("Workout Complete!")
                         .font(.title)
                         .bold()
+                        .traiGradientText()
 
                     // PRs achieved (if any)
                     if !achievedPRs.isEmpty {
@@ -90,9 +97,7 @@ struct WorkoutSummarySheet: View {
                             icon: "square.stack.3d.up.fill"
                         )
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(.rect(cornerRadius: 16))
+                    .traiCard()
 
                     // Exercises completed with full detail
                     if let entries = workout.entries, !entries.isEmpty {
@@ -107,9 +112,7 @@ struct WorkoutSummarySheet: View {
                                 }
                             }
                         }
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(.rect(cornerRadius: 16))
+                        .traiCard()
                     }
                 }
                 .padding()
@@ -121,11 +124,12 @@ struct WorkoutSummarySheet: View {
                     Button("Done", systemImage: "checkmark", action: onDismiss)
                 }
             }
-            .onAppear {
+            .task {
                 withAnimation {
                     showConfetti = true
                 }
-                HapticManager.success()
+                try? await Task.sleep(for: .milliseconds(300))
+                showCelebration = true
             }
             .sheet(item: $selectedExercise) { exercise in
                 exercisePRSheet(for: exercise.name)
@@ -139,6 +143,7 @@ struct WorkoutSummarySheet: View {
                     .ignoresSafeArea()
             }
         }
+        .traiBackground()
     }
 
     /// Build the PR detail sheet for a given exercise name
@@ -189,6 +194,7 @@ struct WorkoutSummaryContent: View {
 
     @Query private var profiles: [UserProfile]
     @State private var showConfetti = false
+    @State private var showCelebration = false
 
     /// Whether to use metric (kg) based on user profile
     private var usesMetric: Bool {
@@ -198,15 +204,21 @@ struct WorkoutSummaryContent: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Success icon
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: showConfetti)
+                // Success icon with celebration pulse
+                ZStack {
+                    TraiCelebrationPulse(isActive: showCelebration, color: .green)
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 64))
+                        .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: showConfetti)
+                }
 
                 Text("Workout Complete!")
                     .font(.title)
                     .bold()
+                    .traiGradientText()
 
                 // PRs achieved (if any)
                 if !achievedPRs.isEmpty {
@@ -250,9 +262,7 @@ struct WorkoutSummaryContent: View {
                         icon: "square.stack.3d.up.fill"
                     )
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(.rect(cornerRadius: 16))
+                .traiCard()
 
                 // Exercises completed with full detail
                 if let entries = workout.entries, !entries.isEmpty {
@@ -265,9 +275,7 @@ struct WorkoutSummaryContent: View {
                             ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
                         }
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(.rect(cornerRadius: 16))
+                    .traiCard()
                 }
             }
             .padding()
@@ -279,11 +287,12 @@ struct WorkoutSummaryContent: View {
                     .ignoresSafeArea()
             }
         }
-        .onAppear {
+        .task {
             withAnimation {
                 showConfetti = true
             }
-            HapticManager.success()
+            try? await Task.sleep(for: .milliseconds(300))
+            showCelebration = true
         }
     }
 }
@@ -400,6 +409,7 @@ struct SummaryStatRow: View {
 
             Text(value)
                 .bold()
+                .contentTransition(.numericText())
         }
     }
 }

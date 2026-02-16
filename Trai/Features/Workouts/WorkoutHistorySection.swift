@@ -76,9 +76,7 @@ struct WorkoutHistorySection: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
         .sheet(isPresented: $showAllWorkouts) {
             AllWorkoutsSheet(
                 workoutsByDate: workoutsByDate,

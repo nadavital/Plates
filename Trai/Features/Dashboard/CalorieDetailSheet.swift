@@ -60,9 +60,7 @@ struct CalorieDetailSheet: View {
                             .frame(height: 40)
                         StatItem(title: "Goal", value: "\(goal)", unit: "kcal", color: .secondary)
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(.rect(cornerRadius: 16))
+                    .traiCard()
 
                     // 7-Day Trend Chart
                     if !historicalEntries.isEmpty && showTrends {
@@ -111,6 +109,7 @@ struct CalorieDetailSheet: View {
                 }
             }
         }
+        .traiBackground()
     }
 }
 
@@ -262,9 +261,7 @@ private struct FoodCalorieRow: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(12)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .traiCard()
         }
         .buttonStyle(.plain)
     }
@@ -292,8 +289,7 @@ private struct EmptyStateView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 }
 

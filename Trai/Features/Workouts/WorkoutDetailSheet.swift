@@ -94,9 +94,7 @@ struct WorkoutDetailSheet: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 
     // MARK: - Stats Section
@@ -176,8 +174,7 @@ struct WorkoutDetailSheet: View {
 
                 DetailRow(label: "Logged", value: workout.loggedAt.formatted(date: .abbreviated, time: .shortened))
             }
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .traiCard()
         }
     }
 
@@ -259,9 +256,7 @@ struct WorkoutDetailSheet: View {
                     .clipShape(.rect(cornerRadius: 10))
                 }
             }
-            .padding(4)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .traiCard()
         }
     }
 
@@ -275,10 +270,8 @@ struct WorkoutDetailSheet: View {
             Text(notes)
                 .font(.body)
                 .foregroundStyle(.secondary)
-                .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(.rect(cornerRadius: 12))
+                .traiCard()
         }
     }
 
@@ -341,9 +334,7 @@ struct WorkoutStatCard: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 12))
+        .traiCard()
     }
 }
 

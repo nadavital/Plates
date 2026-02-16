@@ -8,12 +8,12 @@
 import SwiftUI
 
 enum PulseTheme {
-    static let cardRadius: CGFloat = 16
+    static let cardRadius: CGFloat = TraiRadius.medium
     static let chipRadius: CGFloat = 14
     static let chipPaddingH: CGFloat = 13
-    static let chipPaddingV: CGFloat = 8
-    static let sectionSpacing: CGFloat = 12
-    static let elementSpacing: CGFloat = 8
+    static let chipPaddingV: CGFloat = TraiSpacing.sm
+    static let sectionSpacing: CGFloat = TraiSpacing.sm + TraiSpacing.xs
+    static let elementSpacing: CGFloat = TraiSpacing.sm
 
     static var accent: Color { .accentColor }
 

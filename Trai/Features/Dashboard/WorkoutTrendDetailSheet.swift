@@ -117,6 +117,7 @@ struct WorkoutTrendDetailSheet: View {
                 }
             }
         }
+        .traiBackground()
     }
 
     // MARK: - Week Summary Card

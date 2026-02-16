@@ -141,10 +141,7 @@ extension ProfileView {
             }
         }
         .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-        )
+        .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
     }
 
     // MARK: - Workout Plan Card
@@ -252,10 +249,7 @@ extension ProfileView {
                 }
             }
             .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(.ultraThinMaterial)
-            )
+            .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
         } else {
             // No plan - show create CTA
             VStack(spacing: 16) {
@@ -309,10 +303,7 @@ extension ProfileView {
                 .buttonStyle(.plain)
             }
             .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(.ultraThinMaterial)
-            )
+            .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
         }
     }
 
@@ -383,10 +374,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-            )
+            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
         }
         .buttonStyle(.plain)
     }
@@ -422,10 +410,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-            )
+            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
         }
         .buttonStyle(.plain)
     }
@@ -474,10 +459,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-            )
+            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
         }
         .buttonStyle(.plain)
     }
@@ -513,10 +495,7 @@ extension ProfileView {
                     .foregroundStyle(.tertiary)
             }
             .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-            )
+            .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
         }
         .buttonStyle(.plain)
     }

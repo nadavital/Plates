@@ -70,11 +70,7 @@ struct TodaysRemindersCard: View {
             }
             .animation(.easeInOut(duration: 0.3), value: reminders.map(\.id))
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-        )
+        .traiCard(glow: .reminders)
     }
 
     private func completeWithAnimation(_ reminder: ReminderItem) {
@@ -101,11 +97,14 @@ private struct ReminderRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Complete button with animated checkmark
+            // Complete button with animated checkmark and celebration pulse
             Button {
                 onComplete()
             } label: {
                 ZStack {
+                    TraiCelebrationPulse(isActive: isCompleting, color: .green)
+                        .frame(width: 32, height: 32)
+
                     Image(systemName: "circle")
                         .font(.title3)
                         .foregroundStyle(.secondary)

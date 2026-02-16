@@ -32,11 +32,7 @@ struct StatCard: View {
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-        )
+        .traiCard()
     }
 }
 
@@ -66,14 +62,10 @@ struct SetGoalCard: View {
                 .foregroundStyle(.green)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.green.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [6]))
-                    )
+            .traiCard(tint: .green)
+            .overlay(
+                RoundedRectangle(cornerRadius: TraiRadius.medium)
+                    .stroke(Color.green.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [6]))
             )
         }
         .buttonStyle(.plain)

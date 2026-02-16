@@ -263,24 +263,6 @@
 			productReference = 507B71222EFDE03E00DE636E /* Trai.app */;
 			productType = "com.apple.product-type.application";
 		};
-		FC994245983587BA3218A0DE /* TraiTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 3F9346387A9047254285043D /* Build configuration list for PBXNativeTarget "TraiTests" */;
-			buildPhases = (
-				6D43421B999D4EF7C5BE7BAB /* Sources */,
-				219D9E9A84CE8EA01E63B82C /* Frameworks */,
-				F3DEBD99679C88464AD081C9 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				3295DD2F2076AA7B70BA4523 /* PBXTargetDependency */,
-			);
-			name = TraiTests;
-			productName = TraiTests;
-			productReference = 7888F9EC3466C3F845899CD8 /* TraiTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 		D10000082A00000100D10001 /* TraiUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D100000E2A00000100D10001 /* Build configuration list for PBXNativeTarget "TraiUITests" */;
@@ -298,6 +280,24 @@
 			productName = TraiUITests;
 			productReference = D10000042A00000100D10001 /* TraiUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		FC994245983587BA3218A0DE /* TraiTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3F9346387A9047254285043D /* Build configuration list for PBXNativeTarget "TraiTests" */;
+			buildPhases = (
+				6D43421B999D4EF7C5BE7BAB /* Sources */,
+				219D9E9A84CE8EA01E63B82C /* Frameworks */,
+				F3DEBD99679C88464AD081C9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3295DD2F2076AA7B70BA4523 /* PBXTargetDependency */,
+			);
+			name = TraiTests;
+			productName = TraiTests;
+			productReference = 7888F9EC3466C3F845899CD8 /* TraiTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -358,14 +358,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		F3DEBD99679C88464AD081C9 /* Resources */ = {
+		D10000092A00000100D10001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D10000092A00000100D10001 /* Resources */ = {
+		F3DEBD99679C88464AD081C9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -716,23 +716,6 @@
 			};
 			name = Release;
 		};
-		D9A4AFEAFF33339F073B38DB /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGNING_ALLOWED = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
-				PRODUCT_BUNDLE_IDENTIFIER = Nadav.Trai.TraiTests;
-				PRODUCT_MODULE_NAME = TraiTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Trai.app/Trai";
-			};
-			name = Debug;
-		};
 		D100000C2A00000100D10001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -761,6 +744,23 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
+		};
+		D9A4AFEAFF33339F073B38DB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				PRODUCT_BUNDLE_IDENTIFIER = Nadav.Trai.TraiTests;
+				PRODUCT_MODULE_NAME = TraiTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Trai.app/Trai";
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 

@@ -23,22 +23,19 @@ struct GreetingCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: TraiSpacing.sm) {
             Text("\(greeting), \(name)!")
-                .font(.title2)
-                .bold()
+                .font(.traiBold(24))
 
             HStack {
                 Image(systemName: goal.iconName)
                 Text("Goal: \(goal.displayName)")
             }
-            .font(.subheadline)
+            .font(.traiLabel())
             .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 }
 
@@ -57,19 +54,23 @@ struct CalorieProgressCard: View {
         max(goal - consumed, 0)
     }
 
+    private var progressColor: Color {
+        progress < 0.8 ? .green : progress < 1.0 ? .teal : .blue
+    }
+
     var body: some View {
         Button {
             onTap?()
             HapticManager.selectionChanged()
         } label: {
-            VStack(spacing: 16) {
+            VStack(spacing: TraiSpacing.md) {
                 HStack {
                     Text("Calories")
-                        .font(.headline)
+                        .font(.traiHeadline())
                     Spacer()
-                    HStack(spacing: 4) {
+                    HStack(spacing: TraiSpacing.xs) {
                         Text("\(consumed) / \(goal)")
-                            .font(.subheadline)
+                            .font(.traiLabel())
                             .foregroundStyle(.secondary)
                         if onTap != nil {
                             Image(systemName: "chevron.right")
@@ -79,39 +80,44 @@ struct CalorieProgressCard: View {
                     }
                 }
 
-                ProgressView(value: progress)
-                    .tint(progress < 0.8 ? .green : progress < 1.0 ? .teal : .blue)
+                // Gradient progress bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(progressColor.opacity(0.15))
+
+                        Capsule()
+                            .fill(TraiGradient.progress(progressColor))
+                            .frame(width: max(geometry.size.width * progress, 4))
+                            .shadow(color: progressColor.opacity(0.3), radius: 4, y: 1)
+                    }
+                }
+                .frame(height: 8)
 
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("\(consumed)")
-                            .font(.title)
-                            .bold()
+                        TraiAnimatedNumber(value: consumed, font: .traiBold(28))
                         Text("consumed")
-                            .font(.caption)
+                            .font(.traiLabel(11))
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     VStack(alignment: .trailing) {
-                        Text("\(remaining)")
-                            .font(.title)
-                            .bold()
-                            .foregroundStyle(.green)
+                        TraiAnimatedNumber(value: remaining, font: .traiBold(28), color: progressColor)
                         Text("remaining")
-                            .font(.caption)
+                            .font(.traiLabel(11))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 16))
+            .traiCard(glow: .nutrition)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle())
     }
 }
+
 
 // MARK: - Macro Breakdown Card
 
@@ -163,10 +169,10 @@ struct MacroBreakdownCard: View {
             onTap?()
             HapticManager.selectionChanged()
         } label: {
-            VStack(spacing: 16) {
+            VStack(spacing: TraiSpacing.md) {
                 HStack {
                     Text("Macros")
-                        .font(.headline)
+                        .font(.traiHeadline())
                     Spacer()
                     if onTap != nil {
                         Image(systemName: "chevron.right")
@@ -178,7 +184,7 @@ struct MacroBreakdownCard: View {
                 if orderedEnabledMacros.isEmpty {
                     emptyStateView
                 } else {
-                    HStack(spacing: 16) {
+                    HStack(spacing: TraiSpacing.md) {
                         ForEach(orderedEnabledMacros) { macro in
                             MacroRingItem(
                                 name: macro.displayName,
@@ -190,11 +196,9 @@ struct MacroBreakdownCard: View {
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 16))
+            .traiCard(glow: .macros)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle())
     }
 
     private var emptyStateView: some View {
@@ -222,10 +226,10 @@ struct TodaysActivityCard: View {
     var isLoading: Bool = false
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: TraiSpacing.md) {
             HStack {
                 Text("Today's Activity")
-                    .font(.headline)
+                    .font(.traiHeadline())
                 Spacer()
                 if isLoading {
                     ProgressView()
@@ -234,14 +238,12 @@ struct TodaysActivityCard: View {
             }
 
             if isLoading && steps == 0 && activeCalories == 0 {
-                // Loading state
-                HStack(spacing: 16) {
+                HStack(spacing: TraiSpacing.md) {
                     ForEach(0..<4, id: \.self) { _ in
                         ActivityMetricPlaceholder()
                     }
                 }
             } else {
-                // Activity metrics grid
                 HStack(spacing: 0) {
                     ActivityMetricItem(
                         icon: "figure.walk",
@@ -282,9 +284,7 @@ struct TodaysActivityCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(glow: .activity)
     }
 
     private func formatSteps(_ steps: Int) -> String {
@@ -305,14 +305,16 @@ private struct ActivityMetricItem: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: TraiSpacing.sm) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
+                .shadow(color: color.opacity(0.3), radius: 3, y: 1)
 
             Text(value)
-                .font(.headline)
+                .font(.traiBold(17))
                 .monospacedDigit()
+                .contentTransition(.numericText())
 
             Text(label)
                 .font(.caption2)
@@ -365,42 +367,48 @@ struct WeightTrendCard: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: TraiSpacing.xs) {
                 Text("Current Weight")
-                    .font(.headline)
+                    .font(.traiHeadline())
 
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: TraiSpacing.xs) {
                     Text(displayWeight, format: .number.precision(.fractionLength(1)))
-                        .font(.title)
-                        .bold()
+                        .font(.traiBold(28))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: displayWeight))
+                        .animation(TraiAnimation.standard, value: displayWeight)
 
                     Text(weightUnit)
-                        .font(.subheadline)
+                        .font(.traiLabel())
                         .foregroundStyle(.secondary)
                 }
 
                 if let target = displayTarget {
                     Text("Target: \(target, format: .number.precision(.fractionLength(1))) \(weightUnit)")
-                        .font(.caption)
+                        .font(.traiLabel(11))
                         .foregroundStyle(.secondary)
                 }
             }
 
             Spacer()
 
-            VStack(spacing: 8) {
-                Image(systemName: "scalemass.fill")
-                    .font(.title)
-                    .foregroundStyle(.tint)
+            VStack(spacing: TraiSpacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.12))
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: "scalemass.fill")
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                }
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(glow: .body)
     }
 }
 
@@ -413,11 +421,11 @@ struct QuickActionsCard: View {
     var workoutName: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: TraiSpacing.sm + TraiSpacing.xs) {
             Text("Quick Actions")
-                .font(.headline)
+                .font(.traiHeadline())
 
-            HStack(spacing: 12) {
+            HStack(spacing: TraiSpacing.sm + TraiSpacing.xs) {
                 QuickActionButton(
                     title: "Log Food",
                     icon: "plus.circle.fill",
@@ -439,9 +447,7 @@ struct QuickActionsCard: View {
                 )
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard(glow: .quickActions)
     }
 }
 
@@ -477,15 +483,14 @@ struct WorkoutTrendCard: View {
             onTap?()
             HapticManager.selectionChanged()
         } label: {
-            VStack(spacing: 12) {
-                // Header
+            VStack(spacing: TraiSpacing.sm + TraiSpacing.xs) {
                 HStack {
                     Text("Workout Trends")
-                        .font(.headline)
+                        .font(.traiHeadline())
                     Spacer()
-                    HStack(spacing: 4) {
+                    HStack(spacing: TraiSpacing.xs) {
                         Text("7 days")
-                            .font(.caption)
+                            .font(.traiLabel(11))
                             .foregroundStyle(.secondary)
                         if onTap != nil {
                             Image(systemName: "chevron.right")
@@ -495,16 +500,24 @@ struct WorkoutTrendCard: View {
                     }
                 }
 
-                // Mini bar chart showing workout days
-                HStack(spacing: 4) {
+                // Mini bar chart with gradient fills
+                HStack(spacing: TraiSpacing.xs) {
                     ForEach(last7DaysData) { day in
-                        VStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(day.workoutCount > 0 ? Color.orange : Color.secondary.opacity(0.2))
+                        VStack(spacing: TraiSpacing.xs) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(
+                                    day.workoutCount > 0
+                                        ? AnyShapeStyle(TraiGradient.action(.orange))
+                                        : AnyShapeStyle(Color.secondary.opacity(0.15))
+                                )
                                 .frame(height: day.workoutCount > 0 ? 24 : 8)
+                                .shadow(
+                                    color: day.workoutCount > 0 ? Color.orange.opacity(0.25) : .clear,
+                                    radius: 3, y: 1
+                                )
 
                             Text(day.date, format: .dateTime.weekday(.narrow))
-                                .font(.system(size: 9))
+                                .font(.system(size: 9, weight: .medium, design: .rounded))
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity)
@@ -512,7 +525,6 @@ struct WorkoutTrendCard: View {
                 }
                 .frame(height: 40)
 
-                // Stats row
                 HStack(spacing: 0) {
                     TrendStatItem(
                         value: "\(weeklyWorkoutCount)",
@@ -537,11 +549,9 @@ struct WorkoutTrendCard: View {
                     )
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 16))
+            .traiCard(glow: .trends)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle())
     }
 
     private func formatVolume(_ volume: Double) -> String {
@@ -560,7 +570,7 @@ private struct TrendStatItem: View {
     var body: some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.headline)
+                .font(.traiBold(17))
                 .foregroundStyle(color)
                 .monospacedDigit()
 

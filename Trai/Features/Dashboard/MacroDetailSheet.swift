@@ -110,6 +110,7 @@ struct MacroDetailSheet: View {
                 }
             }
         }
+        .traiBackground()
     }
 
     private var emptyMacrosView: some View {
@@ -153,9 +154,7 @@ private struct MacroRingsDisplay: View {
                 )
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 }
 
@@ -277,9 +276,7 @@ private struct CalorieContributionCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 }
 
@@ -346,9 +343,7 @@ private struct MacrosByFoodSection: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 }
 
@@ -472,9 +467,7 @@ private struct MacroTrendsSection: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
     }
 
     private func metricFor(_ macro: MacroType) -> NutritionTrendChart.NutritionMetric {

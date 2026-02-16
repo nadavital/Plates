@@ -77,14 +77,6 @@ struct ProfileView: View {
                 }
                 .padding()
             }
-            .background(
-                LinearGradient(
-                    colors: [Color(.systemBackground), Color.accentColor.opacity(0.05)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-            )
             .navigationTitle("Profile")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -121,6 +113,7 @@ struct ProfileView: View {
                 trackOpenProfileIfNeeded()
             }
         }
+        .traiBackground()
     }
 
     private func fetchCustomRemindersCount() {
@@ -204,10 +197,7 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(.ultraThinMaterial)
-        )
+        .background(RoundedRectangle(cornerRadius: 24).fill(.ultraThinMaterial).shadow(color: .black.opacity(0.06), radius: 8, y: 4))
     }
 
 }

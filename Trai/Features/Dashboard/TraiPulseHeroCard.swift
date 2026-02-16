@@ -207,16 +207,15 @@ struct TraiPulseHeroCard: View {
     }
 
     private var headerRow: some View {
-        HStack(spacing: 8) {
-            TraiLensIcon(size: 20, palette: .energy)
+        HStack(spacing: TraiSpacing.sm) {
+            TraiLensIcon(size: 22, palette: .energy)
 
             Text("Trai Pulse")
-                .font(.headline)
-                .fontWeight(.semibold)
+                .font(.traiBold(18))
 
             if isLoadingPulse {
                 Text("Updating")
-                    .font(.caption)
+                    .font(.traiLabel(11))
                     .foregroundStyle(.secondary)
             }
 
@@ -225,15 +224,14 @@ struct TraiPulseHeroCard: View {
     }
 
     private func messageBlock(_ content: TraiPulseContentSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: TraiSpacing.xs) {
             Text(content.title)
-                .font(.caption)
+                .font(.traiLabel(11))
                 .foregroundStyle(PulseTheme.surfaceTint(content.surfaceType))
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(content.message)
-                .font(.subheadline)
-                .fontWeight(.semibold)
+                .font(.traiHeadline(15))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -301,22 +299,34 @@ struct TraiPulseHeroCard: View {
 
     private func actionButton(_ action: DailyCoachAction, style: TraiPulseSurfaceType, compact: Bool) -> some View {
         Button {
+            HapticManager.lightTap()
             onAction(action)
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: actionIconName(for: action))
-                    .font(.subheadline)
-                    .foregroundStyle(PulseTheme.surfaceTint(style))
+                ZStack {
+                    Circle()
+                        .fill(
+                            TraiGradient.actionVibrant(
+                                PulseTheme.surfaceTint(style),
+                                PulseTheme.surfaceTint(style).opacity(0.7)
+                            )
+                        )
+                        .frame(width: 30, height: 30)
+
+                    Image(systemName: actionIconName(for: action))
+                        .font(.caption)
+                        .bold()
+                        .foregroundStyle(.white)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(action.title)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .font(.traiHeadline(14))
                         .lineLimit(compact ? 2 : nil)
                         .fixedSize(horizontal: false, vertical: true)
                     if !compact, let subtitle = action.subtitle {
                         Text(subtitle)
-                            .font(.caption)
+                            .font(.traiLabel(11))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -328,47 +338,61 @@ struct TraiPulseHeroCard: View {
             .padding(.vertical, 10)
             .background(
                 Capsule()
-                    .fill(PulseTheme.surfaceTint(style).opacity(0.12))
+                    .fill(PulseTheme.surfaceTint(style).opacity(0.10))
             )
             .overlay(
                 Capsule()
-                    .stroke(PulseTheme.surfaceTint(style).opacity(0.30), lineWidth: 1)
+                    .stroke(PulseTheme.surfaceTint(style).opacity(0.25), lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle(scale: 0.96))
     }
 
     private func quickChatButton(prompt: String, compact: Bool) -> some View {
         Button {
+            HapticManager.lightTap()
             if let onQuickChat {
                 onQuickChat(prompt)
             }
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "circle.hexagongrid.circle")
-                    .font(.subheadline)
+            HStack(spacing: TraiSpacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            TraiGradient.actionVibrant(
+                                .accentColor,
+                                .accentColor.opacity(0.7)
+                            )
+                        )
+                        .frame(width: 30, height: 30)
+
+                    Image(systemName: "circle.hexagongrid.circle")
+                        .font(.caption)
+                        .bold()
+                        .foregroundStyle(.white)
+                }
+
                 Text("Chat with Trai")
-                    .fontWeight(.semibold)
+                    .font(.traiHeadline(14))
                     .lineLimit(compact ? 2 : 1)
                 if !compact {
                     Spacer(minLength: 0)
                 }
             }
-            .font(.subheadline)
             .foregroundStyle(Color.accentColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(
                 Capsule()
-                    .fill(Color.accentColor.opacity(0.14))
+                    .fill(Color.accentColor.opacity(0.10))
             )
             .overlay(
                 Capsule()
-                    .stroke(Color.accentColor.opacity(0.32), lineWidth: 1)
+                    .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle(scale: 0.96))
     }
 
     private func actionPrompt(for content: TraiPulseContentSnapshot) -> DailyCoachAction? {

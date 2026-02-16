@@ -187,7 +187,7 @@ struct WorkoutBottomBar: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.traiSecondary)
         }
         .padding()
         .background(.ultraThinMaterial)

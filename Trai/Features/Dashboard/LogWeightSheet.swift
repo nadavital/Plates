@@ -148,6 +148,7 @@ struct LogWeightSheet: View {
                 isWeightFocused = true
             }
         }
+        .traiBackground()
     }
 
     private func initializeWeight() {

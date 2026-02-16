@@ -108,6 +108,7 @@ struct WeightTrackingView: View {
                 await syncHealthKit()
             }
         }
+        .traiBackground()
     }
 
     private func syncHealthKit() async {

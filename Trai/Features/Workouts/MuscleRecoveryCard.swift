@@ -74,9 +74,7 @@ struct MuscleRecoveryCard: View {
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 16))
+            .traiCard()
         }
         .buttonStyle(.plain)
     }

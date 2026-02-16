@@ -229,8 +229,13 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { scrollProxy in
-                ScrollView {
+            ZStack(alignment: .top) {
+                if isViewingToday, profile != nil {
+                    DashboardPulseTopGradient()
+                }
+
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
                     VStack(spacing: 18) {
                         // Date Navigation
                         DateNavigationBar(
@@ -257,6 +262,7 @@ struct DashboardView: View {
                                 onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") },
                                 workoutName: quickAddWorkoutName
                             )
+                            .traiEntrance(index: 0)
 
                             // Today's reminders
                             if !todaysReminderItems.isEmpty {
@@ -267,6 +273,7 @@ struct DashboardView: View {
                                     onViewAll: { /* Already viewing on dashboard */ }
                                 )
                                 .id("reminders-section")
+                                .traiEntrance(index: 1)
                             }
                         }
 
@@ -275,6 +282,7 @@ struct DashboardView: View {
                         goal: profile?.dailyCalorieGoal ?? 2000,
                         onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
                     )
+                    .traiEntrance(index: 2)
 
                     MacroBreakdownCard(
                         protein: totalProtein,
@@ -290,6 +298,7 @@ struct DashboardView: View {
                         enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                         onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
                     )
+                    .traiEntrance(index: 3)
 
                     DailyFoodTimeline(
                         entries: selectedDayFoodEntries,
@@ -302,6 +311,7 @@ struct DashboardView: View {
                         onEditEntry: { entryToEdit = $0 },
                         onDeleteEntry: deleteFoodEntry
                     )
+                    .traiEntrance(index: 4)
 
                     TodaysActivityCard(
                         steps: todaySteps,
@@ -310,6 +320,7 @@ struct DashboardView: View {
                         workoutCount: todayTotalWorkoutCount,
                         isLoading: isLoadingActivity
                     )
+                    .traiEntrance(index: 5)
 
                     if isViewingToday, let latestWeight = weightEntries.first {
                         NavigationLink {
@@ -327,14 +338,10 @@ struct DashboardView: View {
                             }
                         )
                         .buttonStyle(.plain)
+                        .traiEntrance(index: 6)
                     }
                     }
                     .padding()
-                }
-                .background(alignment: .top) {
-                    if isViewingToday, profile != nil {
-                        DashboardPulseTopGradient()
-                    }
                 }
                 .onChange(of: showRemindersBinding) { _, isShowing in
                     // Scroll to reminders section when triggered by notification
@@ -456,6 +463,7 @@ struct DashboardView: View {
             }
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
+            }
             }
         }
     }

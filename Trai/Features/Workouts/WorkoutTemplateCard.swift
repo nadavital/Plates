@@ -126,17 +126,9 @@ struct WorkoutTemplateCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.traiPrimary)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
-        .overlay {
-            if isRecommended {
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.orange.opacity(0.4), lineWidth: 2)
-            }
-        }
+        .traiCard(glow: .workout)
     }
 }
 
@@ -196,12 +188,6 @@ struct CompactTemplateCard: View {
             .padding()
             .background(Color(.secondarySystemBackground))
             .clipShape(.rect(cornerRadius: 12))
-            .overlay {
-                if isRecommended {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.orange.opacity(0.4), lineWidth: 1.5)
-                }
-            }
         }
         .buttonStyle(.plain)
     }

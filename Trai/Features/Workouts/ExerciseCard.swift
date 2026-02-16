@@ -187,9 +187,7 @@ struct ExerciseCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .traiCard()
         .confirmationDialog(
             "Remove \(entry.exerciseName)?",
             isPresented: $showDeleteConfirmation,

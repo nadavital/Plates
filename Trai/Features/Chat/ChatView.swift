@@ -271,6 +271,7 @@ struct ChatView: View {
                 viewingAppliedPlan: $viewingAppliedPlan
             )
         }
+        .traiBackground()
     }
 
     private var isInputFocusedBinding: Binding<Bool> {

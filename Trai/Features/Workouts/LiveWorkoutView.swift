@@ -171,6 +171,7 @@ struct LiveWorkoutView: View {
                 Text("Enable Live Activities in Settings to see workout progress on your Lock Screen and Dynamic Island.")
             }
         }
+        .traiBackground()
     }
 
     // MARK: - Workout Content
