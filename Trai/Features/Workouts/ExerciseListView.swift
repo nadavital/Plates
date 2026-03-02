@@ -42,6 +42,7 @@ struct ExerciseListView: View {
     @State private var lastCapturedImageData: Data?
     @State private var usageSummaryCache: UsageSummary = .empty
     @State private var usageSummaryFingerprint: UsageSummaryFingerprint?
+    @State private var pendingCustomExerciseCreation: PendingCustomExerciseCreation?
 
     // MARK: - Initializers
 
@@ -88,6 +89,13 @@ struct ExerciseListView: View {
     private struct UsageSummaryFingerprint: Equatable {
         let historyCount: Int
         let newestPerformedAt: Date?
+    }
+
+    private struct PendingCustomExerciseCreation {
+        let name: String
+        let muscleGroup: Exercise.MuscleGroup?
+        let category: Exercise.Category
+        let secondaryMuscles: [String]?
     }
 
     private var targetMusclePriority: [Exercise.MuscleGroup: Int] {
@@ -393,7 +401,12 @@ struct ExerciseListView: View {
                 AddCustomExerciseSheet(
                     initialName: searchText,
                     onSave: { name, muscleGroup, category, secondaryMuscles in
-                        addCustomExercise(name: name, muscleGroup: muscleGroup, category: category, secondaryMuscles: secondaryMuscles)
+                        queueCustomExerciseCreation(
+                            name: name,
+                            muscleGroup: muscleGroup,
+                            category: category,
+                            secondaryMuscles: secondaryMuscles
+                        )
                     }
                 )
             }
@@ -475,6 +488,16 @@ struct ExerciseListView: View {
             .onChange(of: showingCamera) { _, isShowing in
                 guard !isShowing else { return }
                 presentPendingEquipmentResultIfNeeded()
+            }
+            .onChange(of: showingAddCustom) { _, isShowing in
+                guard !isShowing, let pendingCustomExerciseCreation else { return }
+                self.pendingCustomExerciseCreation = nil
+                addCustomExercise(
+                    name: pendingCustomExerciseCreation.name,
+                    muscleGroup: pendingCustomExerciseCreation.muscleGroup,
+                    category: pendingCustomExerciseCreation.category,
+                    secondaryMuscles: pendingCustomExerciseCreation.secondaryMuscles
+                )
             }
             .onDisappear {
                 equipmentResultPresentationTask?.cancel()
@@ -638,6 +661,33 @@ struct ExerciseListView: View {
             selectedExercise = exercise
         }
         dismiss()
+    }
+
+    private func queueCustomExerciseCreation(
+        name: String,
+        muscleGroup: Exercise.MuscleGroup?,
+        category: Exercise.Category,
+        secondaryMuscles: [String]?
+    ) {
+        let request = PendingCustomExerciseCreation(
+            name: name,
+            muscleGroup: muscleGroup,
+            category: category,
+            secondaryMuscles: secondaryMuscles
+        )
+
+        guard showingAddCustom else {
+            addCustomExercise(
+                name: request.name,
+                muscleGroup: request.muscleGroup,
+                category: request.category,
+                secondaryMuscles: request.secondaryMuscles
+            )
+            return
+        }
+
+        pendingCustomExerciseCreation = request
+        showingAddCustom = false
     }
 
     private func loadDefaultExercises() {

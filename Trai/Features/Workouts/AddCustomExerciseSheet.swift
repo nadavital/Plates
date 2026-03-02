@@ -62,7 +62,6 @@ struct AddCustomExerciseSheet: View {
                     Button("Add", systemImage: "checkmark") {
                         onSave(exerciseName, selectedMuscleGroup, selectedCategory, analysisResult?.secondaryMuscles)
                         HapticManager.success()
-                        dismiss()
                     }
                     .labelStyle(.iconOnly)
                     .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -77,6 +76,8 @@ struct AddCustomExerciseSheet: View {
                 }
             }
         }
+        .tint(Color("AccentColor"))
+        .accentColor(Color("AccentColor"))
     }
 
     // MARK: - Name Input Card

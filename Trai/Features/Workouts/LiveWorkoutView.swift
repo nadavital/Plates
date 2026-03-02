@@ -118,7 +118,6 @@ struct LiveWorkoutView: View {
                     targetMuscleGroups: viewModel.workout.muscleGroups.map { $0.toExerciseMuscleGroup }
                 ) { exercise in
                     viewModel.addExercise(exercise)
-                    showingExerciseList = false
                 }
             }
             .sheet(isPresented: $showingExerciseReplacement) {
@@ -129,7 +128,6 @@ struct LiveWorkoutView: View {
                         viewModel.replaceExercise(entry, with: exercise)
                     }
                     entryToReplace = nil
-                    showingExerciseReplacement = false
                 }
             }
             .sheet(isPresented: $showingChat) {
