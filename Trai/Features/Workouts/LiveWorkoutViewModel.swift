@@ -35,6 +35,7 @@ final class LiveWorkoutViewModel {
     private var lastLiveActivityIntentInteractionAt: Date?
     private var lastPublishedWatchPayload: LiveWorkoutUpdatePolicy.WatchPayload?
     private var backgroundFlushObserver: NSObjectProtocol?
+    private var isSetupActive = false
 
     // Timer state - use date calculation for accuracy
     private(set) var pausedDuration: TimeInterval = 0
@@ -375,6 +376,11 @@ final class LiveWorkoutViewModel {
         self.healthKitService = healthKitService
         usesMetricWeightPreference = getUserUsesMetricWeight()
         volumePRModePreference = getUserVolumePRMode()
+        guard !isSetupActive else {
+            refreshEntriesAndMetrics()
+            return
+        }
+        isSetupActive = true
         configurePersistenceCoordinatorIfNeeded()
         registerBackgroundFlushObserverIfNeeded()
 
@@ -410,9 +416,25 @@ final class LiveWorkoutViewModel {
     }
     
     private func setupLiveActivityObservers() {
+        seedStaleLiveActivityIntentTimestampsIfNeeded()
         // Poll App Group intents with adaptive intervals:
         // slower while app is foregrounded, faster during intent interactions/background.
         scheduleNextLiveActivityIntentPoll()
+    }
+
+    private func seedStaleLiveActivityIntentTimestampsIfNeeded() {
+        guard let defaults = UserDefaults(suiteName: LiveActivityIntentKeys.suiteName) else { return }
+
+        let workoutStartTimestamp = workout.startedAt.timeIntervalSince1970
+        let addSetTimestamp = defaults.double(forKey: LiveActivityIntentKeys.addSetTimestamp)
+        if addSetTimestamp > 0, addSetTimestamp < workoutStartTimestamp {
+            lastAddSetTimestamp = addSetTimestamp
+        }
+
+        let togglePauseTimestamp = defaults.double(forKey: LiveActivityIntentKeys.togglePauseTimestamp)
+        if togglePauseTimestamp > 0, togglePauseTimestamp < workoutStartTimestamp {
+            lastTogglePauseTimestamp = togglePauseTimestamp
+        }
     }
 
     private func scheduleNextLiveActivityIntentPoll() {
@@ -438,6 +460,7 @@ final class LiveWorkoutViewModel {
             lastAddSetTimestamp = addSetTimestamp
             lastLiveActivityIntentInteractionAt = Date()
             handleAddSetFromLiveActivity()
+            defaults.removeObject(forKey: LiveActivityIntentKeys.addSetTimestamp)
         }
         
         // Check for "Toggle Pause" action
@@ -446,6 +469,7 @@ final class LiveWorkoutViewModel {
             lastTogglePauseTimestamp = togglePauseTimestamp
             lastLiveActivityIntentInteractionAt = Date()
             handleTogglePauseFromLiveActivity()
+            defaults.removeObject(forKey: LiveActivityIntentKeys.togglePauseTimestamp)
         }
     }
 
@@ -863,6 +887,9 @@ final class LiveWorkoutViewModel {
     }
 
     func stopTimer() {
+        guard isSetupActive else { return }
+        isSetupActive = false
+
         // Finalize any active pause
         if let pauseStart = pauseStartTime {
             pausedDuration += Date().timeIntervalSince(pauseStart)
@@ -1444,6 +1471,7 @@ final class LiveWorkoutViewModel {
     }
 
     private func startLiveActivityUpdates() {
+        liveActivityUpdateTimer?.invalidate()
         // Update every 5 seconds to avoid constant re-renders (improves typing performance)
         // The Live Activity timer display is not critical for real-time accuracy
         liveActivityUpdateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in

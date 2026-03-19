@@ -67,6 +67,8 @@ struct ChatView: View {
     var behaviorEvents: [BehaviorEvent]
 
     @Environment(\.modelContext) var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.appTabSelection) private var appTabSelection
     @Environment(HealthKitService.self) var healthKitService: HealthKitService?
     @State var geminiService = GeminiService()
     @State var recoveryService = MuscleRecoveryService.shared
@@ -309,6 +311,10 @@ struct ChatView: View {
         isChatTabVisible
     }
 
+    private var isTraiTabSelected: Bool {
+        appTabSelection.wrappedValue == .trai
+    }
+
     private var smartStarterFoodRefreshFingerprint: String {
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let todayEntries = allFoodEntries.filter { $0.loggedAt >= startOfDay }
@@ -459,14 +465,23 @@ struct ChatView: View {
             )
         }
         .onDisappear {
-            isChatTabVisible = false
-            tabActivationPolicy.deactivate()
-            messageCacheRebuildTask?.cancel()
-            fullHistoryHydrationTask?.cancel()
-            deferredRecommendationTask?.cancel()
-            startupHydrationTask?.cancel()
-            deferredActivationWorkTask?.cancel()
-            suppressAutomaticMessageCacheRebuild = false
+            handleChatTabDeactivation()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                guard isTraiTabSelected else { return }
+                handleChatTabAppear()
+            } else {
+                handleChatTabDeactivation()
+            }
+        }
+        .onChange(of: appTabSelection.wrappedValue) { _, selectedTab in
+            if selectedTab == .trai {
+                guard scenePhase == .active else { return }
+                handleChatTabAppear()
+            } else {
+                handleChatTabDeactivation()
+            }
         }
         .onChange(of: smartStarterFoodRefreshFingerprint) { _, _ in
             guard isChatTabActive else { return }
@@ -768,7 +783,7 @@ struct ChatView: View {
         suppressAutomaticMessageCacheRebuild = false
         tabActivationPolicy.activate()
         isChatTabVisible = true
-        rebuildSessionMessages(previewLimit: Self.initialSessionPreviewMessageLimit)
+        refreshSessionForActivation(previewLimit: Self.initialSessionPreviewMessageLimit)
         scheduleFullMessageHistoryHydrationIfNeeded()
 
         let shouldScheduleActivationWork = shouldRunFullActivationWork
@@ -785,6 +800,23 @@ struct ChatView: View {
                 "scheduledActivation": shouldScheduleActivationWork ? 1 : 0
             ]
         )
+    }
+
+    private func handleChatTabDeactivation() {
+        guard isChatTabVisible || tabActivationPolicy.activeSince != nil else { return }
+        isChatTabVisible = false
+        tabActivationPolicy.deactivate()
+        messageCacheRebuildTask?.cancel()
+        fullHistoryHydrationTask?.cancel()
+        deferredRecommendationTask?.cancel()
+        startupHydrationTask?.cancel()
+        deferredActivationWorkTask?.cancel()
+        suppressAutomaticMessageCacheRebuild = false
+    }
+
+    private func refreshSessionForActivation(previewLimit: Int? = nil) {
+        checkSessionTimeout()
+        rebuildSessionMessages(previewLimit: previewLimit)
     }
 
     private func scheduleFullMessageHistoryHydrationIfNeeded() {

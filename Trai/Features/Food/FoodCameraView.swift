@@ -9,16 +9,33 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 
+@MainActor
+final class FoodCameraPresentation: Identifiable {
+    let id = UUID()
+    let sessionId: UUID?
+    let cameraService = CameraService()
+
+    init(sessionId: UUID? = nil) {
+        self.sessionId = sessionId
+    }
+
+    deinit {
+        Task { @MainActor [cameraService] in
+            cameraService.stopSession()
+        }
+    }
+}
+
 struct FoodCameraView: View {
     /// Session ID to add this food entry to (for grouping related entries)
     var sessionId: UUID?
+    let cameraService: CameraService
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Query private var profiles: [UserProfile]
 
-    @State private var cameraService = CameraService()
     @State private var capturedImage: UIImage?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var foodDescription = ""
@@ -39,12 +56,18 @@ struct FoodCameraView: View {
         capturedImage != nil || isAnalyzingTextOnly
     }
 
+    init(sessionId: UUID? = nil, cameraService: CameraService) {
+        self.sessionId = sessionId
+        self.cameraService = cameraService
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 // Camera viewfinder - always present to stay "warm"
                 FoodCameraViewfinder(
                     cameraService: cameraService,
+                    isCameraAuthorized: cameraService.isAuthorized,
                     isCameraReady: cameraService.isSessionReady,
                     isCapturingPhoto: isCapturingPhoto,
                     description: $foodDescription,
@@ -105,6 +128,7 @@ struct FoodCameraView: View {
             }
             .task {
                 guard !AppLaunchArguments.isUITesting else { return }
+                guard !cameraService.isAuthorized || !cameraService.isSessionReady else { return }
                 await cameraService.requestPermission()
             }
             .sheet(isPresented: $showingManualEntry) {
@@ -286,5 +310,5 @@ struct FoodCameraView: View {
 }
 
 #Preview {
-    FoodCameraView()
+    FoodCameraView(cameraService: CameraService())
 }

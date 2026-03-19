@@ -380,6 +380,7 @@ struct LiveWorkoutView: View {
     }
 
     private func startHeartRateUpdates() {
+        heartRateTimer?.invalidate()
         // Poll every 2 seconds for a snappier live-data UI without per-sample view churn.
         heartRateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
             Task { @MainActor in

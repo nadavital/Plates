@@ -227,7 +227,8 @@ struct MainTabView: View {
     @State private var showingReminders = false
 
     // App Intent / Deep link triggered states
-    @State private var showingFoodCamera = false
+    @State private var foodCameraPresentation: FoodCameraPresentation?
+    @State private var isPreparingFoodCamera = false
     @State private var showingLogWeight = false
     @State private var intentTriggeredWorkout: LiveWorkout?
     @State private var workoutTemplateService = WorkoutTemplateService()
@@ -330,8 +331,11 @@ struct MainTabView: View {
         } message: {
             Text("Are you sure you want to end this workout?")
         }
-        .fullScreenCover(isPresented: $showingFoodCamera) {
-            FoodCameraView()
+        .fullScreenCover(item: $foodCameraPresentation) { presentation in
+            FoodCameraView(
+                sessionId: presentation.sessionId,
+                cameraService: presentation.cameraService
+            )
         }
         .sheet(isPresented: $showingLogWeight) {
             LogWeightSheet()
@@ -419,7 +423,14 @@ struct MainTabView: View {
 
         switch destination {
         case .logFood:
-            showingFoodCamera = true
+            guard foodCameraPresentation == nil, !isPreparingFoodCamera else { return }
+            isPreparingFoodCamera = true
+            Task { @MainActor in
+                let presentation = FoodCameraPresentation()
+                await presentation.cameraService.requestPermission()
+                foodCameraPresentation = presentation
+                isPreparingFoodCamera = false
+            }
         case .logWeight:
             showingLogWeight = true
         case .workout(let templateName):

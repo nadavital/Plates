@@ -9,11 +9,14 @@ import SwiftUI
 import SwiftData
 import WidgetKit
 import BackgroundTasks
+import UIKit
 
 @main
 struct TraiApp: App {
     /// Shared ModelContainer for App Intents and other extension access
     @MainActor static var sharedModelContainer: ModelContainer?
+    @UIApplicationDelegateAdaptor(HomeScreenQuickActionApplicationDelegate.self)
+    private var quickActionDelegate
 
     let isUITesting: Bool
     let isRunningTests: Bool
@@ -563,6 +566,122 @@ extension TraiApp {
 
         // Refresh widgets with new data
         WidgetDataProvider.shared.updateWidgetData(modelContext: context)
+    }
+}
+
+private enum HomeScreenQuickAction: String, CaseIterable {
+    case logFood = "Nadav.Trai.quickaction.logFood"
+    case logWeight = "Nadav.Trai.quickaction.logWeight"
+    case workout = "Nadav.Trai.quickaction.workout"
+    case chat = "Nadav.Trai.quickaction.chat"
+
+    var title: String {
+        switch self {
+        case .logFood:
+            return "Log Food"
+        case .logWeight:
+            return "Log Weight"
+        case .workout:
+            return "Start Workout"
+        case .chat:
+            return "Trai"
+        }
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .logFood:
+            return "fork.knife"
+        case .logWeight:
+            return "scalemass.fill"
+        case .workout:
+            return "figure.run"
+        case .chat:
+            return "circle.hexagongrid.circle"
+        }
+    }
+
+    var route: AppRoute {
+        switch self {
+        case .logFood:
+            return .logFood
+        case .logWeight:
+            return .logWeight
+        case .workout:
+            return .workout(templateName: nil)
+        case .chat:
+            return .chat
+        }
+    }
+
+    var shortcutItem: UIApplicationShortcutItem {
+        UIApplicationShortcutItem(
+            type: rawValue,
+            localizedTitle: title,
+            localizedSubtitle: nil,
+            icon: UIApplicationShortcutIcon(systemImageName: systemImageName),
+            userInfo: nil
+        )
+    }
+
+    @MainActor
+    static func registerAll() {
+        UIApplication.shared.shortcutItems = allCases.map(\.shortcutItem)
+    }
+
+    static func handle(_ shortcutItem: UIApplicationShortcutItem) -> Bool {
+        guard let action = Self(rawValue: shortcutItem.type) else { return false }
+        PendingAppRouteStore.setPendingRoute(action.route)
+        return true
+    }
+}
+
+private final class HomeScreenQuickActionApplicationDelegate: NSObject, UIApplicationDelegate {
+    @MainActor
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        HomeScreenQuickAction.registerAll()
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(
+            name: nil,
+            sessionRole: connectingSceneSession.role
+        )
+        configuration.delegateClass = HomeScreenQuickActionSceneDelegate.self
+        return configuration
+    }
+}
+
+private final class HomeScreenQuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
+    func scene(
+        _ scene: UIScene,
+        willConnectTo session: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        if let shortcutItem = connectionOptions.shortcutItem {
+            _ = HomeScreenQuickAction.handle(shortcutItem)
+        }
+    }
+
+    @MainActor
+    func sceneWillResignActive(_ scene: UIScene) {
+        HomeScreenQuickAction.registerAll()
+    }
+
+    func windowScene(
+        _ windowScene: UIWindowScene,
+        performActionFor shortcutItem: UIApplicationShortcutItem,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        completionHandler(HomeScreenQuickAction.handle(shortcutItem))
     }
 }
 

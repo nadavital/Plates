@@ -68,13 +68,13 @@ struct DashboardView: View {
     private let reminderCompletionHistoryCapPerWindow = 180
 
     // Sheet presentation state
-    @State private var showingLogFood = false
+    @State private var foodCameraPresentation: FoodCameraPresentation?
+    @State private var isPreparingFoodCamera = false
     @State private var showingLogWeight = false
     @State private var showingWeightTracking = false
     @State private var showingCalorieDetail = false
     @State private var showingMacroDetail = false
     @State private var entryToEdit: FoodEntry?
-    @State private var sessionIdToAddTo: UUID?
 
     // Workout sheet state
     @State private var showingWorkoutSheet = false
@@ -463,8 +463,7 @@ struct DashboardView: View {
                                 enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                                 onAddFood: isViewingToday ? { openFoodCameraFromDashboard(source: "food_timeline_add") } : nil,
                                 onAddToSession: isViewingToday ? { sessionId in
-                                    sessionIdToAddTo = sessionId
-                                    openFoodCameraFromDashboard(source: "food_timeline_add_to_session")
+                                    openFoodCameraFromDashboard(source: "food_timeline_add_to_session", sessionId: sessionId)
                                 } : nil,
                                 onEditEntry: { entryToEdit = $0 },
                                 onDeleteEntry: deleteFoodEntry
@@ -626,11 +625,11 @@ struct DashboardView: View {
             .refreshable {
                 await refreshHealthData()
             }
-            .fullScreenCover(isPresented: $showingLogFood) {
-                FoodCameraView(sessionId: sessionIdToAddTo)
-                    .onDisappear {
-                        sessionIdToAddTo = nil
-                    }
+            .fullScreenCover(item: $foodCameraPresentation) { presentation in
+                FoodCameraView(
+                    sessionId: presentation.sessionId,
+                    cameraService: presentation.cameraService
+                )
             }
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
@@ -657,7 +656,7 @@ struct DashboardView: View {
                         showingCalorieDetail = false
                         Task {
                             try? await Task.sleep(for: .milliseconds(300))
-                            showingLogFood = true
+                            presentFoodCamera()
                         }
                     } : nil,
                     onEditEntry: { entry in
@@ -684,7 +683,7 @@ struct DashboardView: View {
                         showingMacroDetail = false
                         Task {
                             try? await Task.sleep(for: .milliseconds(300))
-                            showingLogFood = true
+                            presentFoodCamera()
                         }
                     } : nil,
                     onEditEntry: { entry in
@@ -1444,7 +1443,7 @@ struct DashboardView: View {
         return (opened, completed)
     }
 
-    private func openFoodCameraFromDashboard(source: String) {
+    private func openFoodCameraFromDashboard(source: String, sessionId: UUID? = nil) {
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.logFood,
             domain: .nutrition,
@@ -1452,7 +1451,19 @@ struct DashboardView: View {
             outcome: .opened,
             metadata: ["source": source]
         )
-        showingLogFood = true
+        presentFoodCamera(sessionId: sessionId)
+    }
+
+    private func presentFoodCamera(sessionId: UUID? = nil) {
+        guard foodCameraPresentation == nil, !isPreparingFoodCamera else { return }
+        isPreparingFoodCamera = true
+
+        Task { @MainActor in
+            let presentation = FoodCameraPresentation(sessionId: sessionId)
+            await presentation.cameraService.requestPermission()
+            foodCameraPresentation = presentation
+            isPreparingFoodCamera = false
+        }
     }
 
     private func openLogWeightFromDashboard(source: String) {
