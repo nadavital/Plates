@@ -37,6 +37,14 @@ extension OnboardingView {
         planError = nil
 
         Task { @MainActor in
+            if !(monetizationService?.canAccessAIFeatures ?? true) {
+                let fallbackPlan = NutritionPlan.createDefault(from: request)
+                self.generatedPlan = fallbackPlan
+                self.populateAdjustedValues(from: fallbackPlan)
+                self.isGeneratingPlan = false
+                return
+            }
+
             do {
                 let plan = try await geminiService.generateNutritionPlan(request: request)
                 self.generatedPlan = plan

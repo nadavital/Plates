@@ -251,59 +251,68 @@ extension GeminiService {
                 "generationConfig": buildGenerationConfig(thinkingLevel: .low)
             ]
 
-            let url = URL(string: "\(baseURL)/models/\(model):streamGenerateContent?alt=sse&key=\(Secrets.geminiAPIKey)")!
+            let requestTicket = try beginAIRequest(for: .agentToolFollowUp)
 
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+            do {
+                let url = try serviceURL(action: "streamGenerateContent", streaming: true)
 
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                try await configureRequest(&request)
+                request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                log("❌ Follow-up streaming request failed (iteration \(iteration))", type: .error)
-                break
-            }
+                let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
-            currentParts = []
-            var receivedAnyContent = false
-
-            for try await line in bytes.lines {
-                guard line.hasPrefix("data: ") else { continue }
-                let jsonString = String(line.dropFirst(6))
-
-                guard let data = jsonString.data(using: .utf8),
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let candidates = json["candidates"] as? [[String: Any]],
-                      let firstCandidate = candidates.first else {
-                    continue
+                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                    cancelAIRequest(requestTicket)
+                    log("❌ Follow-up streaming request failed (iteration \(iteration))", type: .error)
+                    break
                 }
 
-                guard let content = firstCandidate["content"] as? [String: Any],
-                      let parts = content["parts"] as? [[String: Any]] else {
-                    continue
-                }
+                currentParts = []
+                var receivedAnyContent = false
 
-                receivedAnyContent = true
+                for try await line in bytes.lines {
+                    guard line.hasPrefix("data: ") else { continue }
+                    let jsonString = String(line.dropFirst(6))
 
-                for part in parts {
-                    currentParts.append(part)
-
-                    if let text = part["text"] as? String {
-                        result.text += text
+                    guard let data = jsonString.data(using: .utf8),
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let candidates = json["candidates"] as? [[String: Any]],
+                          let firstCandidate = candidates.first else {
+                        continue
                     }
 
-                    if let functionCall = part["functionCall"] as? [String: Any],
-                       let functionName = functionCall["name"] as? String {
-                        log("⏭️ Ignoring follow-up function call: \(functionName)", type: .debug)
+                    guard let content = firstCandidate["content"] as? [String: Any],
+                          let parts = content["parts"] as? [[String: Any]] else {
+                        continue
+                    }
+
+                    receivedAnyContent = true
+
+                    for part in parts {
+                        currentParts.append(part)
+
+                        if let text = part["text"] as? String {
+                            result.text += text
+                        }
+
+                        if let functionCall = part["functionCall"] as? [String: Any],
+                           let functionName = functionCall["name"] as? String {
+                            log("⏭️ Ignoring follow-up function call: \(functionName)", type: .debug)
+                        }
                     }
                 }
-            }
 
-            result.accumulatedParts = currentParts
+                completeAIRequest(requestTicket)
+                result.accumulatedParts = currentParts
 
-            if !receivedAnyContent {
-                log("⚠️ No response at iteration \(iteration)", type: .info)
+                if !receivedAnyContent {
+                    log("⚠️ No response at iteration \(iteration)", type: .info)
+                }
+            } catch {
+                cancelAIRequest(requestTicket)
+                throw error
             }
         }
 
@@ -354,140 +363,150 @@ extension GeminiService {
             "generationConfig": buildGenerationConfig(thinkingLevel: .low)
         ]
 
-        let url = URL(string: "\(baseURL)/models/\(model):streamGenerateContent?alt=sse&key=\(Secrets.geminiAPIKey)")!
+        let requestTicket = try beginAIRequest(for: .agentToolFollowUp)
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        do {
+            let url = try serviceURL(action: "streamGenerateContent", streaming: true)
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            try await configureRequest(&request)
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            log("❌ Parallel function response request failed", type: .error)
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                cancelAIRequest(requestTicket)
+                log("❌ Parallel function response request failed", type: .error)
+                return result
+            }
+
+            var additionalFunctionResults: [GeminiFunctionExecutor.FunctionResult] = []
+
+            for try await line in bytes.lines {
+                guard line.hasPrefix("data: ") else { continue }
+                let jsonString = String(line.dropFirst(6))
+
+                guard let data = jsonString.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let candidates = json["candidates"] as? [[String: Any]],
+                      let firstCandidate = candidates.first else {
+                    continue
+                }
+
+                guard let content = firstCandidate["content"] as? [String: Any],
+                      let parts = content["parts"] as? [[String: Any]] else {
+                    continue
+                }
+
+                for part in parts {
+                    result.accumulatedParts.append(part)
+
+                    if let text = part["text"] as? String {
+                        result.text += text
+                        if let onTextChunk {
+                            onTextChunk(accumulatedPreviousText + result.text)
+                        }
+                    }
+
+                    if let functionCall = part["functionCall"] as? [String: Any],
+                       let functionName = functionCall["name"] as? String {
+                        // Allow multiple food suggestions but stop chain for other types
+                        let hasNonFoodSuggestion = result.planUpdate != nil || result.suggestedFoodEdit != nil
+                        if hasNonFoodSuggestion && functionName != "suggest_food_log" {
+                            log("⏭️ Skipping \(functionName) - already have suggestion", type: .info)
+                            continue
+                        }
+
+                        let args = functionCall["args"] as? [String: Any] ?? [:]
+                        let argsPreview = args.keys.joined(separator: ", ")
+                        log("🔗 Chain[\(depth)]: \(functionName)(\(argsPreview))", type: .info)
+
+                        let call = GeminiFunctionExecutor.FunctionCall(name: functionName, arguments: args)
+                        let execResult = executor.execute(call)
+
+                        if functionName == "save_memory", let content = args["content"] as? String {
+                            result.savedMemories.append(content)
+                        }
+
+                        switch execResult {
+                        case .suggestedFood(let food):
+                            result.suggestedFoods.append(food)
+                            log("🍽️ Got food suggestion (\(result.suggestedFoods.count) total)", type: .info)
+
+                        case .suggestedPlanUpdate(let update):
+                            result.planUpdate = update
+                            log("📊 Got plan update - stopping chain", type: .info)
+
+                        case .suggestedFoodEdit(let edit):
+                            result.suggestedFoodEdit = edit
+                            log("✏️ Got edit suggestion - stopping chain", type: .info)
+
+                        case .dataResponse(let nextFuncResult):
+                            additionalFunctionResults.append(nextFuncResult)
+
+                        case .suggestedWorkout(let suggestion):
+                            log("💪 Got workout suggestion - stopping chain", type: .info)
+                            // Workout suggestions handled in WorkoutsView
+                            _ = suggestion
+
+                        case .suggestedWorkoutStart(let workout):
+                            result.suggestedWorkout = workout
+                            log("🏋️ Got workout start suggestion - stopping chain", type: .info)
+
+                        case .suggestedWorkoutLog(let workoutLog):
+                            result.suggestedWorkoutLog = workoutLog
+                            log("📝 Got workout log suggestion - stopping chain", type: .info)
+
+                        case .startedLiveWorkout(let workout):
+                            log("🏋️ Started workout (legacy) - stopping chain", type: .info)
+                            // User should navigate to workout view
+                            _ = workout
+
+                        case .suggestedReminder(let reminder):
+                            result.suggestedReminder = reminder
+                            log("⏰ Got reminder suggestion - stopping chain", type: .info)
+
+                        case .noAction:
+                            break
+                        }
+                    }
+                }
+            }
+
+            completeAIRequest(requestTicket)
+
+            let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
+            if !additionalFunctionResults.isEmpty && !hasSuggestion {
+                let chainedResult = try await sendParallelFunctionResults(
+                    functionResults: additionalFunctionResults,
+                    previousContents: contents,
+                    originalParts: result.accumulatedParts,
+                    executor: executor,
+                    previousText: accumulatedPreviousText + result.text,
+                    onTextChunk: onTextChunk,
+                    depth: depth + 1
+                )
+                if !chainedResult.text.isEmpty {
+                    result.text += chainedResult.text
+                }
+                result.suggestedFoods.append(contentsOf: chainedResult.suggestedFoods)
+                if let plan = chainedResult.planUpdate {
+                    result.planUpdate = plan
+                }
+                if let edit = chainedResult.suggestedFoodEdit {
+                    result.suggestedFoodEdit = edit
+                }
+                if let reminder = chainedResult.suggestedReminder {
+                    result.suggestedReminder = reminder
+                }
+                result.savedMemories.append(contentsOf: chainedResult.savedMemories)
+            }
+
             return result
+        } catch {
+            cancelAIRequest(requestTicket)
+            throw error
         }
-
-        var additionalFunctionResults: [GeminiFunctionExecutor.FunctionResult] = []
-
-        for try await line in bytes.lines {
-            guard line.hasPrefix("data: ") else { continue }
-            let jsonString = String(line.dropFirst(6))
-
-            guard let data = jsonString.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let candidates = json["candidates"] as? [[String: Any]],
-                  let firstCandidate = candidates.first else {
-                continue
-            }
-
-            guard let content = firstCandidate["content"] as? [String: Any],
-                  let parts = content["parts"] as? [[String: Any]] else {
-                continue
-            }
-
-            for part in parts {
-                result.accumulatedParts.append(part)
-
-                if let text = part["text"] as? String {
-                    result.text += text
-                    if let onTextChunk {
-                        onTextChunk(accumulatedPreviousText + result.text)
-                    }
-                }
-
-                if let functionCall = part["functionCall"] as? [String: Any],
-                   let functionName = functionCall["name"] as? String {
-                    // Allow multiple food suggestions but stop chain for other types
-                    let hasNonFoodSuggestion = result.planUpdate != nil || result.suggestedFoodEdit != nil
-                    if hasNonFoodSuggestion && functionName != "suggest_food_log" {
-                        log("⏭️ Skipping \(functionName) - already have suggestion", type: .info)
-                        continue
-                    }
-
-                    let args = functionCall["args"] as? [String: Any] ?? [:]
-                    let argsPreview = args.keys.joined(separator: ", ")
-                    log("🔗 Chain[\(depth)]: \(functionName)(\(argsPreview))", type: .info)
-
-                    let call = GeminiFunctionExecutor.FunctionCall(name: functionName, arguments: args)
-                    let execResult = executor.execute(call)
-
-                    if functionName == "save_memory", let content = args["content"] as? String {
-                        result.savedMemories.append(content)
-                    }
-
-                    switch execResult {
-                    case .suggestedFood(let food):
-                        result.suggestedFoods.append(food)
-                        log("🍽️ Got food suggestion (\(result.suggestedFoods.count) total)", type: .info)
-
-                    case .suggestedPlanUpdate(let update):
-                        result.planUpdate = update
-                        log("📊 Got plan update - stopping chain", type: .info)
-
-                    case .suggestedFoodEdit(let edit):
-                        result.suggestedFoodEdit = edit
-                        log("✏️ Got edit suggestion - stopping chain", type: .info)
-
-                    case .dataResponse(let nextFuncResult):
-                        additionalFunctionResults.append(nextFuncResult)
-
-                    case .suggestedWorkout(let suggestion):
-                        log("💪 Got workout suggestion - stopping chain", type: .info)
-                        // Workout suggestions handled in WorkoutsView
-                        _ = suggestion
-
-                    case .suggestedWorkoutStart(let workout):
-                        result.suggestedWorkout = workout
-                        log("🏋️ Got workout start suggestion - stopping chain", type: .info)
-
-                    case .suggestedWorkoutLog(let workoutLog):
-                        result.suggestedWorkoutLog = workoutLog
-                        log("📝 Got workout log suggestion - stopping chain", type: .info)
-
-                    case .startedLiveWorkout(let workout):
-                        log("🏋️ Started workout (legacy) - stopping chain", type: .info)
-                        // User should navigate to workout view
-                        _ = workout
-
-                    case .suggestedReminder(let reminder):
-                        result.suggestedReminder = reminder
-                        log("⏰ Got reminder suggestion - stopping chain", type: .info)
-
-                    case .noAction:
-                        break
-                    }
-                }
-            }
-        }
-
-        let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
-        if !additionalFunctionResults.isEmpty && !hasSuggestion {
-            let chainedResult = try await sendParallelFunctionResults(
-                functionResults: additionalFunctionResults,
-                previousContents: contents,
-                originalParts: result.accumulatedParts,
-                executor: executor,
-                previousText: accumulatedPreviousText + result.text,
-                onTextChunk: onTextChunk,
-                depth: depth + 1
-            )
-            if !chainedResult.text.isEmpty {
-                result.text += chainedResult.text
-            }
-            result.suggestedFoods.append(contentsOf: chainedResult.suggestedFoods)
-            if let plan = chainedResult.planUpdate {
-                result.planUpdate = plan
-            }
-            if let edit = chainedResult.suggestedFoodEdit {
-                result.suggestedFoodEdit = edit
-            }
-            if let reminder = chainedResult.suggestedReminder {
-                result.suggestedReminder = reminder
-            }
-            result.savedMemories.append(contentsOf: chainedResult.savedMemories)
-        }
-
-        return result
     }
 }

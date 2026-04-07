@@ -235,12 +235,18 @@ extension ChatView {
                 aiMessage.content = latestStreamedText
             }
             handleChatResult(result, aiMessage: aiMessage)
-        } catch is CancellationError {
-            // User cancelled - don't show error, keep partial content
-            aiMessage.wasManuallyStopped = true
         } catch {
-            aiMessage.content = ""
-            aiMessage.errorMessage = error.localizedDescription
+            if error.isUserCancelledRequest {
+                // User cancelled - don't show an error bubble, just keep whatever streamed so far.
+                aiMessage.wasManuallyStopped = true
+                aiMessage.errorMessage = nil
+                if !latestStreamedText.isEmpty {
+                    aiMessage.content = latestStreamedText
+                }
+            } else {
+                aiMessage.content = ""
+                aiMessage.errorMessage = error.aiUserFacingMessage ?? error.localizedDescription
+            }
         }
 
         isLoading = false

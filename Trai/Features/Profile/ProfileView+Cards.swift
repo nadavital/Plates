@@ -84,11 +84,18 @@ extension ProfileView {
             HStack(spacing: 12) {
                 // Review with Trai button
                 Button {
-                    pendingPlanReviewRequest = true
-                    onSelectTab?(.trai)
+                    if canAccessAIFeatures {
+                        pendingPlanReviewRequest = true
+                        onSelectTab?(.trai)
+                    } else {
+                        proUpsellCoordinator?.present(source: .nutritionPlan)
+                    }
                     HapticManager.lightTap()
                 } label: {
-                    traiReviewButtonLabel()
+                    aiActionButtonLabel(
+                        isUnlocked: canAccessAIFeatures,
+                        unlockedTitle: "Review with Trai"
+                    )
                 }
                 .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
 
@@ -222,11 +229,18 @@ extension ProfileView {
 
                 HStack(spacing: 12) {
                     Button {
-                        pendingWorkoutPlanReviewRequest = true
-                        onSelectTab?(.trai)
+                        if canAccessAIFeatures {
+                            pendingWorkoutPlanReviewRequest = true
+                            onSelectTab?(.trai)
+                        } else {
+                            proUpsellCoordinator?.present(source: .workoutPlan)
+                        }
                         HapticManager.lightTap()
                     } label: {
-                        traiReviewButtonLabel()
+                        aiActionButtonLabel(
+                            isUnlocked: canAccessAIFeatures,
+                            unlockedTitle: "Review with Trai"
+                        )
                     }
                     .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
 
@@ -265,10 +279,14 @@ extension ProfileView {
 
                 // Create plan prompt
                 Button {
-                    showPlanSetupSheet = true
+                    if canAccessAIFeatures {
+                        showPlanSetupSheet = true
+                    } else {
+                        proUpsellCoordinator?.present(source: .workoutPlan)
+                    }
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "circle.hexagongrid.circle")
                             .font(.title2)
                             .foregroundStyle(Color.accentColor)
 
@@ -284,6 +302,15 @@ extension ProfileView {
                         }
 
                         Spacer()
+
+                        if !canAccessAIFeatures {
+                            Text("PRO")
+                                .font(.traiLabel(11))
+                                .foregroundStyle(TraiColors.ember)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(TraiColors.ember.opacity(0.10), in: Capsule())
+                        }
 
                         Image(systemName: "chevron.right")
                             .font(.caption)
@@ -495,17 +522,30 @@ extension ProfileView {
     // MARK: - Helpers
 
     @ViewBuilder
-    private func traiReviewButtonLabel() -> some View {
+    private func aiActionButtonLabel(isUnlocked: Bool, unlockedTitle: String) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 6) {
                 Image(systemName: "circle.hexagongrid.circle")
-                Text("Review with Trai")
+                Text(unlockedTitle)
+                if !isUnlocked {
+                    Text("PRO")
+                        .font(.traiLabel(10))
+                        .foregroundStyle(TraiColors.ember)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(TraiColors.ember.opacity(0.10), in: Capsule())
+                }
             }
             .frame(maxWidth: .infinity)
 
             HStack(spacing: 6) {
                 Image(systemName: "circle.hexagongrid.circle")
                 Text("Review")
+                if !isUnlocked {
+                    Text("PRO")
+                        .font(.traiLabel(10))
+                        .foregroundStyle(TraiColors.ember)
+                }
             }
             .frame(maxWidth: .infinity)
         }

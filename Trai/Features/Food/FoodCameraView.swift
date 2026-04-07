@@ -26,36 +26,81 @@ struct FoodCameraView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @Query private var profiles: [UserProfile]
 
     @State private var draft: FoodLogDraft?
+    @State private var showingManualEntry = false
+    @State private var pendingManualEntry: FoodEntry?
 
     private var enabledMacros: Set<MacroType> {
         profiles.first?.enabledMacros ?? MacroType.defaultEnabled
     }
 
+    private var canAccessFoodAI: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var requiresAuthenticatedAccountForFoodAI: Bool {
+        monetizationService?.aiTransportMode == .backendProxy &&
+        accountSessionService?.isAuthenticated != true
+    }
+
     var body: some View {
-        NavigationStack {
-            if draft == nil {
-                FoodLogCaptureStepView(
-                    sessionId: sessionId,
-                    onDraftReady: { draft in
-                        self.draft = draft
-                    },
-                    onManualEntrySaved: saveManualEntry,
-                    onCancel: { dismiss() }
-                )
+        Group {
+            if requiresAuthenticatedAccountForFoodAI {
+                AccountSetupView(context: .aiFeatures)
+            } else if !canAccessFoodAI {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
             } else {
-                FoodLogReviewStepView(
-                    draft: draftBinding,
-                    enabledMacros: enabledMacros,
-                    onRetake: { draft = nil },
-                    onFinish: { dismiss() }
-                )
+                NavigationStack {
+                    if draft == nil {
+                        FoodLogCaptureStepView(
+                            sessionId: sessionId,
+                            onDraftReady: { draft in
+                                self.draft = draft
+                            },
+                            onManualEntryRequested: { showingManualEntry = true },
+                            onCancel: { dismiss() }
+                        )
+                    } else {
+                        FoodLogReviewStepView(
+                            draft: draftBinding,
+                            enabledMacros: enabledMacros,
+                            onRetake: { draft = nil },
+                            onFinish: { dismiss() }
+                        )
+                    }
+                }
             }
         }
-        .tint(Color("AccentColor"))
-        .accentColor(Color("AccentColor"))
+        .sheet(isPresented: $showingManualEntry) {
+            ManualFoodEntrySheet(sessionId: sessionId) { entry in
+                pendingManualEntry = entry
+                showingManualEntry = false
+            }
+        }
+        .onChange(of: showingManualEntry) { _, isShowing in
+            guard !isShowing else { return }
+
+            if let pendingManualEntry {
+                self.pendingManualEntry = nil
+                saveManualEntry(pendingManualEntry)
+            } else if !canAccessFoodAI {
+                dismiss()
+            }
+        }
+        .task(id: canAccessFoodAI) {
+            if !canAccessFoodAI && !requiresAuthenticatedAccountForFoodAI && !showingManualEntry {
+                showingManualEntry = true
+            }
+        }
+        .tint(TraiColors.brandAccent)
+        .accentColor(TraiColors.brandAccent)
+        .proUpsellPresenter()
     }
 
     private var draftBinding: Binding<FoodLogDraft> {
@@ -77,7 +122,7 @@ struct FoodCameraView: View {
 private struct FoodLogCaptureStepView: View {
     let sessionId: UUID?
     let onDraftReady: (FoodLogDraft) -> Void
-    let onManualEntrySaved: (FoodEntry) -> Void
+    let onManualEntryRequested: () -> Void
     let onCancel: () -> Void
 
     @Environment(\.openURL) private var openURL
@@ -87,8 +132,6 @@ private struct FoodLogCaptureStepView: View {
     @State private var foodDescription = ""
     @State private var isCapturingPhoto = false
     @State private var showingCameraPermissionAlert = false
-    @State private var showingManualEntry = false
-    @State private var pendingManualEntry: FoodEntry?
 
     var body: some View {
         FoodCameraViewfinder(
@@ -96,7 +139,7 @@ private struct FoodLogCaptureStepView: View {
             isCapturingPhoto: isCapturingPhoto,
             description: $foodDescription,
             onCapture: capturePhoto,
-            onManualEntry: { showingManualEntry = true },
+            onManualEntry: onManualEntryRequested,
             onSubmitDescription: submitTextDescription,
             selectedPhotoItem: $selectedPhotoItem
         )
@@ -144,17 +187,6 @@ private struct FoodLogCaptureStepView: View {
                     showingCameraPermissionAlert = false
                 }
             }
-        }
-        .sheet(isPresented: $showingManualEntry) {
-            ManualFoodEntrySheet(sessionId: sessionId) { entry in
-                pendingManualEntry = entry
-                showingManualEntry = false
-            }
-        }
-        .onChange(of: showingManualEntry) { _, isShowing in
-            guard !isShowing, let pendingManualEntry else { return }
-            self.pendingManualEntry = nil
-            onManualEntrySaved(pendingManualEntry)
         }
         .alert("Camera Access Needed", isPresented: $showingCameraPermissionAlert) {
             Button("Open Settings") {
@@ -217,6 +249,8 @@ private struct FoodLogReviewStepView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     @State private var geminiService = GeminiService()
     @State private var isAnalyzing = false
@@ -297,6 +331,10 @@ private struct FoodLogReviewStepView: View {
     private func analyzeFood() {
         guard !isAnalyzing else { return }
         guard draft.image != nil || !trimmedDescription.isEmpty else { return }
+        guard monetizationService?.canAccessAIFeatures ?? true else {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
+            return
+        }
 
         isAnalyzing = true
         analysisErrorMessage = nil
@@ -322,6 +360,10 @@ private struct FoodLogReviewStepView: View {
 
     private func refineFood(_ correction: String) {
         guard !isLoadingRefinement, let currentSuggestion else { return }
+        guard monetizationService?.canAccessAIFeatures ?? true else {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
+            return
+        }
 
         isLoadingRefinement = true
         refinementErrorMessage = nil

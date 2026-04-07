@@ -22,20 +22,21 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .coachChat) {
+            let contents = buildChatContents(
+                message: message,
+                context: context,
+                conversationHistory: conversationHistory,
+                tone: tone
+            )
 
-        let contents = buildChatContents(
-            message: message,
-            context: context,
-            conversationHistory: conversationHistory,
-            tone: tone
-        )
+            let requestBody: [String: Any] = [
+                "contents": contents,
+                "generationConfig": buildGenerationConfig(thinkingLevel: .low)
+            ]
 
-        let requestBody: [String: Any] = [
-            "contents": contents,
-            "generationConfig": buildGenerationConfig(thinkingLevel: .low)
-        ]
-
-        return try await makeRequest(body: requestBody)
+            return try await makeRequest(body: requestBody)
+        }
     }
 
     /// Chat with streaming response - calls onChunk with each text chunk as it arrives
@@ -49,20 +50,21 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        try await performAIRequest(for: .coachChat) {
+            let contents = buildChatContents(
+                message: message,
+                context: context,
+                conversationHistory: conversationHistory,
+                tone: tone
+            )
 
-        let contents = buildChatContents(
-            message: message,
-            context: context,
-            conversationHistory: conversationHistory,
-            tone: tone
-        )
+            let requestBody: [String: Any] = [
+                "contents": contents,
+                "generationConfig": buildGenerationConfig(thinkingLevel: .low)
+            ]
 
-        let requestBody: [String: Any] = [
-            "contents": contents,
-            "generationConfig": buildGenerationConfig(thinkingLevel: .low)
-        ]
-
-        try await makeStreamingRequest(body: requestBody, onChunk: onChunk)
+            try await makeStreamingRequest(body: requestBody, onChunk: onChunk)
+        }
     }
 
     /// Chat with structured output - can suggest meals from text descriptions
@@ -76,34 +78,35 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .coachChat) {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
+            let currentDateTime = dateFormatter.string(from: Date())
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
-        let currentDateTime = dateFormatter.string(from: Date())
+            let historyString = conversationHistory.suffix(6)
+                .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
+                .joined(separator: "\n")
 
-        let historyString = conversationHistory.suffix(6)
-            .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
-            .joined(separator: "\n")
-
-        let prompt = GeminiPromptBuilder.buildTextChatPrompt(
-            userMessage: message,
-            context: context,
-            currentDateTime: currentDateTime,
-            conversationHistory: historyString,
-            pendingSuggestion: pendingSuggestion,
-            tone: tone
-        )
-
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]],
-            "generationConfig": buildGenerationConfig(
-                thinkingLevel: .medium,
-                jsonSchema: GeminiPromptBuilder.chatImageAnalysisSchema
+            let prompt = GeminiPromptBuilder.buildTextChatPrompt(
+                userMessage: message,
+                context: context,
+                currentDateTime: currentDateTime,
+                conversationHistory: historyString,
+                pendingSuggestion: pendingSuggestion,
+                tone: tone
             )
-        ]
 
-        let responseText = try await makeRequest(body: requestBody)
-        return try parseChatFoodAnalysis(from: responseText)
+            let requestBody: [String: Any] = [
+                "contents": [["parts": [["text": prompt]]]],
+                "generationConfig": buildGenerationConfig(
+                    thinkingLevel: .medium,
+                    jsonSchema: GeminiPromptBuilder.chatImageAnalysisSchema
+                )
+            ]
+
+            let responseText = try await makeRequest(body: requestBody)
+            return try parseChatFoodAnalysis(from: responseText)
+        }
     }
 
     func buildChatContents(
@@ -146,14 +149,15 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .nutritionAdvice) {
+            let prompt = GeminiPromptBuilder.buildNutritionAdvicePrompt(meals: todaysMeals, profile: profile)
 
-        let prompt = GeminiPromptBuilder.buildNutritionAdvicePrompt(meals: todaysMeals, profile: profile)
+            let requestBody: [String: Any] = [
+                "contents": [["parts": [["text": prompt]]]],
+                "generationConfig": buildGenerationConfig(thinkingLevel: .medium)
+            ]
 
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]],
-            "generationConfig": buildGenerationConfig(thinkingLevel: .medium)
-        ]
-
-        return try await makeRequest(body: requestBody)
+            return try await makeRequest(body: requestBody)
+        }
     }
 }

@@ -47,6 +47,7 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(NotificationService.self) private var notificationService: NotificationService?
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @State private var recoveryService = MuscleRecoveryService.shared
     @State private var workoutTemplateService = WorkoutTemplateService()
@@ -108,6 +109,10 @@ struct DashboardView: View {
     }
     private static var dashboardHeavyRefreshMinimumDwellMilliseconds: Int {
         AppLaunchArguments.shouldAggressivelyDeferHeavyTabWork ? 1600 : 320
+    }
+
+    private var canAccessAIFeatures: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
     }
 
     init(
@@ -421,7 +426,10 @@ struct DashboardView: View {
                                 )
                                 .traiEntrance(index: 0)
 
-                                ChatWithTraiCard(action: { openTraiChatFromDashboard() })
+                                ChatWithTraiCard(
+                                    isUnlocked: canAccessAIFeatures,
+                                    action: { openTraiChatFromDashboard() }
+                                )
                                     .traiEntrance(index: 1)
 
                                 // Today's reminders

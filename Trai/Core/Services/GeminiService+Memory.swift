@@ -36,6 +36,7 @@ extension GeminiService {
     func parseNotesIntoMemories(notes: String, context: String = "onboarding") async throws -> [ParsedMemory] {
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedNotes.isEmpty else { return [] }
+        let requestTicket = try beginAIRequest(for: .memoryExtraction)
 
         log("Parsing notes into memories: \"\(trimmedNotes.prefix(100))...\"", type: .info)
 
@@ -125,34 +126,39 @@ extension GeminiService {
             )
         ]
 
-        let response = try await makeRequest(body: body)
-        logResponse(response)
+        do {
+            let response = try await makeRequest(body: body)
+            logResponse(response)
 
-        // Parse the JSON response
-        guard let data = response.data(using: .utf8),
-              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let memoriesArray = json["memories"] as? [[String: Any]] else {
-            log("Failed to parse memories response", type: .error)
-            return []
-        }
-
-        // Convert to ParsedMemory objects
-        let memories = memoriesArray.compactMap { dict -> ParsedMemory? in
-            guard let content = dict["content"] as? String,
-                  let category = dict["category"] as? String,
-                  let topic = dict["topic"] as? String,
-                  let importance = dict["importance"] as? Int else {
-                return nil
+            guard let data = response.data(using: .utf8),
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let memoriesArray = json["memories"] as? [[String: Any]] else {
+                cancelAIRequest(requestTicket)
+                log("Failed to parse memories response", type: .error)
+                return []
             }
-            return ParsedMemory(
-                content: content,
-                category: category,
-                topic: topic,
-                importance: importance
-            )
-        }
 
-        log("Parsed \(memories.count) memories from notes", type: .info)
-        return memories
+            let memories = memoriesArray.compactMap { dict -> ParsedMemory? in
+                guard let content = dict["content"] as? String,
+                      let category = dict["category"] as? String,
+                      let topic = dict["topic"] as? String,
+                      let importance = dict["importance"] as? Int else {
+                    return nil
+                }
+                return ParsedMemory(
+                    content: content,
+                    category: category,
+                    topic: topic,
+                    importance: importance
+                )
+            }
+
+            completeAIRequest(requestTicket)
+            log("Parsed \(memories.count) memories from notes", type: .info)
+            return memories
+        } catch {
+            cancelAIRequest(requestTicket)
+            throw error
+        }
     }
 }

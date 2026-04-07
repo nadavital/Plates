@@ -25,89 +25,97 @@ extension GeminiService {
     ) async throws -> ChatFunctionResult {
         isLoading = true
         defer { isLoading = false }
+        let requestTicket = try beginAIRequest(for: .agentCoachChat)
 
-        let systemPrompt = buildFunctionCallingSystemPrompt(context: context)
-        var contents: [[String: Any]] = []
+        do {
+            let systemPrompt = buildFunctionCallingSystemPrompt(context: context)
+            var contents: [[String: Any]] = []
 
-        // Add system prompt
-        contents.append([
-            "role": "user",
-            "parts": [["text": systemPrompt]]
-        ])
-        contents.append([
-            "role": "model",
-            "parts": [["text": context.coachTone.primingReply]]
-        ])
-
-        // Add conversation history
-        for msg in conversationHistory.suffix(10) {
-            let parts: [[String: Any]] = [["text": msg.content]]
+            // Add system prompt
             contents.append([
-                "role": msg.isFromUser ? "user" : "model",
-                "parts": parts
+                "role": "user",
+                "parts": [["text": systemPrompt]]
             ])
-        }
-
-        // Build user message with optional image
-        var userParts: [[String: Any]] = []
-        if let imageData {
-            userParts.append([
-                "inline_data": [
-                    "mime_type": "image/jpeg",
-                    "data": imageData.base64EncodedString()
-                ]
+            contents.append([
+                "role": "model",
+                "parts": [["text": context.coachTone.primingReply]]
             ])
-            log("📸 Image attached to message", type: .info)
+
+            // Add conversation history
+            for msg in conversationHistory.suffix(10) {
+                let parts: [[String: Any]] = [["text": msg.content]]
+                contents.append([
+                    "role": msg.isFromUser ? "user" : "model",
+                    "parts": parts
+                ])
+            }
+
+            // Build user message with optional image
+            var userParts: [[String: Any]] = []
+            if let imageData {
+                userParts.append([
+                    "inline_data": [
+                        "mime_type": "image/jpeg",
+                        "data": imageData.base64EncodedString()
+                    ]
+                ])
+                log("📸 Image attached to message", type: .info)
+            }
+            userParts.append(["text": message.isEmpty ? "What is this?" : message])
+
+            contents.append([
+                "role": "user",
+                "parts": userParts
+            ])
+
+            // Build request with function declarations
+            var config = buildGenerationConfig(thinkingLevel: .medium)
+            if imageData != nil {
+                config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
+            }
+
+            let requestBody: [String: Any] = [
+                "contents": contents,
+                "tools": [["function_declarations": GeminiFunctionDeclarations.chatFunctions]],
+                "generationConfig": config
+            ]
+
+            // Use streaming API
+            let url = try serviceURL(action: "streamGenerateContent", streaming: true)
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            try await configureRequest(&request)
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+            let startTime = Date()
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw GeminiError.invalidResponse
+            }
+
+            guard httpResponse.statusCode == 200 else {
+                log("❌ API Error: status \(httpResponse.statusCode)", type: .error)
+                throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: "Streaming request failed")
+            }
+
+            let result = try await parseStreamingFunctionResponse(
+                bytes: bytes,
+                startTime: startTime,
+                userMessage: message,
+                context: context,
+                modelContext: modelContext,
+                contents: contents,
+                onTextChunk: onTextChunk,
+                onFunctionCall: onFunctionCall
+            )
+            completeAIRequest(requestTicket)
+            return result
+        } catch {
+            cancelAIRequest(requestTicket)
+            throw error
         }
-        userParts.append(["text": message.isEmpty ? "What is this?" : message])
-
-        contents.append([
-            "role": "user",
-            "parts": userParts
-        ])
-
-        // Build request with function declarations
-        var config = buildGenerationConfig(thinkingLevel: .medium)
-        if imageData != nil {
-            config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
-        }
-
-        let requestBody: [String: Any] = [
-            "contents": contents,
-            "tools": [["function_declarations": GeminiFunctionDeclarations.chatFunctions]],
-            "generationConfig": config
-        ]
-
-        // Use streaming API
-        let url = URL(string: "\(baseURL)/models/\(model):streamGenerateContent?alt=sse&key=\(Secrets.geminiAPIKey)")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-
-        let startTime = Date()
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GeminiError.invalidResponse
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            log("❌ API Error: status \(httpResponse.statusCode)", type: .error)
-            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: "Streaming request failed")
-        }
-
-        return try await parseStreamingFunctionResponse(
-            bytes: bytes,
-            startTime: startTime,
-            userMessage: message,
-            context: context,
-            modelContext: modelContext,
-            contents: contents,
-            onTextChunk: onTextChunk,
-            onFunctionCall: onFunctionCall
-        )
     }
 
     // MARK: - Response Parser

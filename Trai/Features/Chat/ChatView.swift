@@ -70,6 +70,8 @@ struct ChatView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(HealthKitService.self) var healthKitService: HealthKitService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @State var geminiService = GeminiService()
     @State var recoveryService = MuscleRecoveryService.shared
     @State var isLoading = false
@@ -138,6 +140,15 @@ struct ChatView: View {
         let newestTimestamp: Date?
         let oldestMessageId: UUID?
         let oldestTimestamp: Date?
+    }
+
+    private var canAccessTraiChat: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var requiresAuthenticatedAccountForTraiChat: Bool {
+        monetizationService?.aiTransportMode == .backendProxy &&
+        accountSessionService?.isAuthenticated != true
     }
 
     init(workoutContext: GeminiService.WorkoutContext? = nil) {
@@ -407,67 +418,77 @@ struct ChatView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ChatRootView(
-                content: chatContentAnyView,
-                inputBar: chatInputBarAnyView,
-                isInputFocused: isInputFocusedBinding,
-                messageCount: currentSessionMessages.count,
-                lastMessageId: currentSessionMessages.last?.id,
-                selectedPhotoItem: selectedPhotoItem,
-                onPhotoSelected: handleSelectedPhotoItem,
-                onAppear: {
-                    handleChatTabAppear()
-                },
-                onSessionIdChange: {
-                    rebuildSessionMessages()
-                },
-                onTemporaryChange: {
-                    rebuildSessionMessages()
-                },
-                onTemporaryMessagesChange: {
-                    rebuildSessionMessages()
-                },
-                onAllMessagesChange: {
-                    if suppressAutomaticMessageCacheRebuild {
-                        rebuildSessionMessages(preferLiveQueryData: true)
-                        return
-                    }
-                    scheduleMessageCacheRebuild()
-                },
-                currentSessionIdString: currentSessionIdString,
-                isTemporarySession: isTemporarySession,
-                temporaryMessagesCount: temporaryMessages.count,
-                allMessagesFingerprint: allMessagesWindowFingerprint,
-                chatSessions: chatSessions,
-                onToggleTemporaryMode: {
-                    toggleTemporaryMode()
-                    HapticManager.lightTap()
-                },
-                onSelectSession: switchToSession,
-                onClearHistory: clearAllChats,
-                onNewChat: { startNewSession() },
-                showingCamera: $showingCamera,
-                onCameraImage: { image in selectedImage = image },
-                enlargedImage: $enlargedImage,
-                editingMealSuggestion: $editingMealSuggestion,
-                enabledMacrosValue: enabledMacrosValue,
-                onAcceptMeal: { meal, message in acceptMealSuggestion(meal, for: message) },
-                editingPlanSuggestion: $editingPlanSuggestion,
-                currentCalories: profile?.dailyCalorieGoal ?? 2000,
-                currentProtein: profile?.dailyProteinGoal ?? 150,
-                currentCarbs: profile?.dailyCarbsGoal ?? 200,
-                currentFat: profile?.dailyFatGoal ?? 65,
-                onAcceptPlan: { plan, message in acceptPlanSuggestion(plan, for: message) },
-                viewingFoodEntry: viewingFoodEntry,
-                viewingLoggedMealId: $viewingLoggedMealId,
-                viewingAppliedPlan: $viewingAppliedPlan
-            )
+        Group {
+            if requiresAuthenticatedAccountForTraiChat {
+                AccountSetupView(context: .aiFeatures, showsDismissButton: false)
+            } else if canAccessTraiChat {
+                NavigationStack {
+                    ChatRootView(
+                        content: chatContentAnyView,
+                        inputBar: chatInputBarAnyView,
+                        isInputFocused: isInputFocusedBinding,
+                        messageCount: currentSessionMessages.count,
+                        lastMessageId: currentSessionMessages.last?.id,
+                        selectedPhotoItem: selectedPhotoItem,
+                        onPhotoSelected: handleSelectedPhotoItem,
+                        onAppear: {
+                            handleChatTabAppear()
+                        },
+                        onSessionIdChange: {
+                            rebuildSessionMessages()
+                        },
+                        onTemporaryChange: {
+                            rebuildSessionMessages()
+                        },
+                        onTemporaryMessagesChange: {
+                            rebuildSessionMessages()
+                        },
+                        onAllMessagesChange: {
+                            if suppressAutomaticMessageCacheRebuild {
+                                rebuildSessionMessages(preferLiveQueryData: true)
+                                return
+                            }
+                            scheduleMessageCacheRebuild()
+                        },
+                        currentSessionIdString: currentSessionIdString,
+                        isTemporarySession: isTemporarySession,
+                        temporaryMessagesCount: temporaryMessages.count,
+                        allMessagesFingerprint: allMessagesWindowFingerprint,
+                        chatSessions: chatSessions,
+                        onToggleTemporaryMode: {
+                            toggleTemporaryMode()
+                            HapticManager.lightTap()
+                        },
+                        onSelectSession: switchToSession,
+                        onClearHistory: clearAllChats,
+                        onNewChat: { startNewSession() },
+                        showingCamera: $showingCamera,
+                        onCameraImage: { image in selectedImage = image },
+                        enlargedImage: $enlargedImage,
+                        editingMealSuggestion: $editingMealSuggestion,
+                        enabledMacrosValue: enabledMacrosValue,
+                        onAcceptMeal: { meal, message in acceptMealSuggestion(meal, for: message) },
+                        editingPlanSuggestion: $editingPlanSuggestion,
+                        currentCalories: profile?.dailyCalorieGoal ?? 2000,
+                        currentProtein: profile?.dailyProteinGoal ?? 150,
+                        currentCarbs: profile?.dailyCarbsGoal ?? 200,
+                        currentFat: profile?.dailyFatGoal ?? 65,
+                        onAcceptPlan: { plan, message in acceptPlanSuggestion(plan, for: message) },
+                        viewingFoodEntry: viewingFoodEntry,
+                        viewingLoggedMealId: $viewingLoggedMealId,
+                        viewingAppliedPlan: $viewingAppliedPlan
+                    )
+                }
+            } else {
+                ProUpsellView(source: .chat, showsDismissButton: false)
+            }
         }
         .onDisappear {
+            guard canAccessTraiChat else { return }
             handleChatTabDeactivation()
         }
         .onChange(of: scenePhase) { _, newPhase in
+            guard canAccessTraiChat else { return }
             if newPhase == .active {
                 guard isTraiTabSelected else { return }
                 handleChatTabAppear()
@@ -476,6 +497,7 @@ struct ChatView: View {
             }
         }
         .onChange(of: appTabSelection.wrappedValue) { _, selectedTab in
+            guard canAccessTraiChat else { return }
             if selectedTab == .trai {
                 guard scenePhase == .active else { return }
                 handleChatTabAppear()
@@ -484,15 +506,15 @@ struct ChatView: View {
             }
         }
         .onChange(of: smartStarterFoodRefreshFingerprint) { _, _ in
-            guard isChatTabActive else { return }
+            guard isChatTabActive, canAccessTraiChat else { return }
             refreshSmartStarterCache()
         }
         .onChange(of: recentWorkouts.count) {
-            guard isChatTabActive else { return }
+            guard isChatTabActive, canAccessTraiChat else { return }
             refreshSmartStarterCache()
         }
         .onChange(of: liveWorkouts.count) {
-            guard isChatTabActive else { return }
+            guard isChatTabActive, canAccessTraiChat else { return }
             refreshSmartStarterCache()
         }
         .traiBackground()

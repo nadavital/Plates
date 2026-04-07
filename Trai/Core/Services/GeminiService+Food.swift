@@ -21,35 +21,36 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .foodPhotoAnalysis) {
+            var parts: [[String: Any]] = []
 
-        var parts: [[String: Any]] = []
+            let prompt = GeminiPromptBuilder.buildFoodAnalysisPrompt(description: description)
+            parts.append(["text": prompt])
 
-        let prompt = GeminiPromptBuilder.buildFoodAnalysisPrompt(description: description)
-        parts.append(["text": prompt])
+            if let imageData {
+                let base64Image = imageData.base64EncodedString()
+                parts.append([
+                    "inline_data": [
+                        "mime_type": "image/jpeg",
+                        "data": base64Image
+                    ]
+                ])
+            }
 
-        if let imageData {
-            let base64Image = imageData.base64EncodedString()
-            parts.append([
-                "inline_data": [
-                    "mime_type": "image/jpeg",
-                    "data": base64Image
-                ]
-            ])
+            var config = buildGenerationConfig(
+                thinkingLevel: .medium,
+                jsonSchema: GeminiPromptBuilder.foodAnalysisSchema
+            )
+            config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
+
+            let requestBody: [String: Any] = [
+                "contents": [["parts": parts]],
+                "generationConfig": config
+            ]
+
+            let responseText = try await makeRequest(body: requestBody)
+            return try parseFoodAnalysis(from: responseText)
         }
-
-        var config = buildGenerationConfig(
-            thinkingLevel: .medium,
-            jsonSchema: GeminiPromptBuilder.foodAnalysisSchema
-        )
-        config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
-
-        let requestBody: [String: Any] = [
-            "contents": [["parts": parts]],
-            "generationConfig": config
-        ]
-
-        let responseText = try await makeRequest(body: requestBody)
-        return try parseFoodAnalysis(from: responseText)
     }
 
     /// Analyze food image in chat context - returns message and optionally logs meal
@@ -62,45 +63,46 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .foodPhotoAnalysis) {
+            var parts: [[String: Any]] = []
 
-        var parts: [[String: Any]] = []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
+            let currentDateTime = dateFormatter.string(from: Date())
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
-        let currentDateTime = dateFormatter.string(from: Date())
+            let prompt = GeminiPromptBuilder.buildImageChatPrompt(
+                userMessage: userMessage,
+                context: context,
+                currentDateTime: currentDateTime,
+                tone: tone
+            )
 
-        let prompt = GeminiPromptBuilder.buildImageChatPrompt(
-            userMessage: userMessage,
-            context: context,
-            currentDateTime: currentDateTime,
-            tone: tone
-        )
+            parts.append(["text": prompt])
 
-        parts.append(["text": prompt])
+            if let imageData {
+                let base64Image = imageData.base64EncodedString()
+                parts.append([
+                    "inline_data": [
+                        "mime_type": "image/jpeg",
+                        "data": base64Image
+                    ]
+                ])
+            }
 
-        if let imageData {
-            let base64Image = imageData.base64EncodedString()
-            parts.append([
-                "inline_data": [
-                    "mime_type": "image/jpeg",
-                    "data": base64Image
-                ]
-            ])
+            var config = buildGenerationConfig(
+                thinkingLevel: .medium,
+                jsonSchema: GeminiPromptBuilder.chatImageAnalysisSchema
+            )
+            config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
+
+            let requestBody: [String: Any] = [
+                "contents": [["parts": parts]],
+                "generationConfig": config
+            ]
+
+            let responseText = try await makeRequest(body: requestBody)
+            return try parseChatFoodAnalysis(from: responseText)
         }
-
-        var config = buildGenerationConfig(
-            thinkingLevel: .medium,
-            jsonSchema: GeminiPromptBuilder.chatImageAnalysisSchema
-        )
-        config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
-
-        let requestBody: [String: Any] = [
-            "contents": [["parts": parts]],
-            "generationConfig": config
-        ]
-
-        let responseText = try await makeRequest(body: requestBody)
-        return try parseChatFoodAnalysis(from: responseText)
     }
 
     // MARK: - Food Refinement
@@ -114,67 +116,68 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .foodRefinement) {
+            var parts: [[String: Any]] = []
 
-        var parts: [[String: Any]] = []
+            let fiberStr = currentSuggestion.fiberGrams.map { "- Fiber: \(Int($0))g" } ?? ""
+            let prompt = """
+            The user is correcting a food analysis. Here's the current estimate:
+            - Name: \(currentSuggestion.name)
+            - Calories: \(currentSuggestion.calories) kcal
+            - Protein: \(Int(currentSuggestion.proteinGrams))g
+            - Carbs: \(Int(currentSuggestion.carbsGrams))g
+            - Fat: \(Int(currentSuggestion.fatGrams))g
+            \(fiberStr)
+            \(currentSuggestion.servingSize.map { "- Serving: \($0)" } ?? "")
 
-        let fiberStr = currentSuggestion.fiberGrams.map { "- Fiber: \(Int($0))g" } ?? ""
-        let prompt = """
-        The user is correcting a food analysis. Here's the current estimate:
-        - Name: \(currentSuggestion.name)
-        - Calories: \(currentSuggestion.calories) kcal
-        - Protein: \(Int(currentSuggestion.proteinGrams))g
-        - Carbs: \(Int(currentSuggestion.carbsGrams))g
-        - Fat: \(Int(currentSuggestion.fatGrams))g
-        \(fiberStr)
-        \(currentSuggestion.servingSize.map { "- Serving: \($0)" } ?? "")
+            User's correction: "\(correction)"
 
-        User's correction: "\(correction)"
+            Please provide an UPDATED food analysis based on their correction. If they say it's a different food, update all values accordingly. If they mention adjusting a specific value, update just that. Keep unmentioned values reasonable for the (potentially new) food. Include fiber if relevant.
+            """
 
-        Please provide an UPDATED food analysis based on their correction. If they say it's a different food, update all values accordingly. If they mention adjusting a specific value, update just that. Keep unmentioned values reasonable for the (potentially new) food. Include fiber if relevant.
-        """
+            parts.append(["text": prompt])
 
-        parts.append(["text": prompt])
+            if let imageData {
+                let base64Image = imageData.base64EncodedString()
+                parts.append([
+                    "inline_data": [
+                        "mime_type": "image/jpeg",
+                        "data": base64Image
+                    ]
+                ])
+            }
 
-        if let imageData {
-            let base64Image = imageData.base64EncodedString()
-            parts.append([
-                "inline_data": [
-                    "mime_type": "image/jpeg",
-                    "data": base64Image
-                ]
-            ])
+            let schema: [String: Any] = [
+                "type": "object",
+                "properties": [
+                    "name": ["type": "string", "description": "Updated name of the food"],
+                    "calories": ["type": "integer", "description": "Updated calories"],
+                    "proteinGrams": ["type": "number", "description": "Updated protein in grams"],
+                    "carbsGrams": ["type": "number", "description": "Updated carbs in grams"],
+                    "fatGrams": ["type": "number", "description": "Updated fat in grams"],
+                    "fiberGrams": ["type": "number", "description": "Updated fiber in grams", "nullable": true],
+                    "servingSize": ["type": "string", "description": "Updated serving size", "nullable": true],
+                    "emoji": ["type": "string", "description": "Updated emoji for this food"]
+                ],
+                "required": ["name", "calories", "proteinGrams", "carbsGrams", "fatGrams", "emoji"]
+            ]
+
+            var config = buildGenerationConfig(
+                thinkingLevel: .low,
+                jsonSchema: schema
+            )
+            if imageData != nil {
+                config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
+            }
+
+            let requestBody: [String: Any] = [
+                "contents": [["parts": parts]],
+                "generationConfig": config
+            ]
+
+            let responseText = try await makeRequest(body: requestBody)
+            return try parseRefinedFoodAnalysis(from: responseText)
         }
-
-        let schema: [String: Any] = [
-            "type": "object",
-            "properties": [
-                "name": ["type": "string", "description": "Updated name of the food"],
-                "calories": ["type": "integer", "description": "Updated calories"],
-                "proteinGrams": ["type": "number", "description": "Updated protein in grams"],
-                "carbsGrams": ["type": "number", "description": "Updated carbs in grams"],
-                "fatGrams": ["type": "number", "description": "Updated fat in grams"],
-                "fiberGrams": ["type": "number", "description": "Updated fiber in grams", "nullable": true],
-                "servingSize": ["type": "string", "description": "Updated serving size", "nullable": true],
-                "emoji": ["type": "string", "description": "Updated emoji for this food"]
-            ],
-            "required": ["name", "calories", "proteinGrams", "carbsGrams", "fatGrams", "emoji"]
-        ]
-
-        var config = buildGenerationConfig(
-            thinkingLevel: .low,
-            jsonSchema: schema
-        )
-        if imageData != nil {
-            config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
-        }
-
-        let requestBody: [String: Any] = [
-            "contents": [["parts": parts]],
-            "generationConfig": config
-        ]
-
-        let responseText = try await makeRequest(body: requestBody)
-        return try parseRefinedFoodAnalysis(from: responseText)
     }
 
     private func parseRefinedFoodAnalysis(from text: String) throws -> SuggestedFoodEntry {
@@ -346,18 +349,19 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .coachChat) {
+            let prompt = GeminiPromptBuilder.buildWorkoutSuggestionPrompt(
+                history: history,
+                goal: goal,
+                availableTime: availableTime
+            )
 
-        let prompt = GeminiPromptBuilder.buildWorkoutSuggestionPrompt(
-            history: history,
-            goal: goal,
-            availableTime: availableTime
-        )
+            let requestBody: [String: Any] = [
+                "contents": [["parts": [["text": prompt]]]],
+                "generationConfig": buildGenerationConfig(thinkingLevel: .medium)
+            ]
 
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]],
-            "generationConfig": buildGenerationConfig(thinkingLevel: .medium)
-        ]
-
-        return try await makeRequest(body: requestBody)
+            return try await makeRequest(body: requestBody)
+        }
     }
 }

@@ -337,6 +337,8 @@ enum GeminiError: LocalizedError {
     case invalidResponse
     case apiError(statusCode: Int, message: String)
     case parsingError
+    case accessDenied(String)
+    case quotaExceeded(String)
 
     var errorDescription: String? {
         switch self {
@@ -348,6 +350,45 @@ enum GeminiError: LocalizedError {
             return "API Error (\(statusCode)): \(message)"
         case .parsingError:
             return "Failed to parse AI response"
+        case .accessDenied(let message):
+            return message
+        case .quotaExceeded(let message):
+            return message
         }
+    }
+}
+
+extension Error {
+    var isUserCancelledRequest: Bool {
+        if self is CancellationError {
+            return true
+        }
+
+        if let urlError = self as? URLError, urlError.code == .cancelled {
+            return true
+        }
+
+        let nsError = self as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    var aiUserFacingMessage: String? {
+        switch self {
+        case let geminiError as GeminiError:
+            switch geminiError {
+            case .accessDenied(let message), .quotaExceeded(let message):
+                return message
+            default:
+                return nil
+            }
+        case let backendError as BackendClientError:
+            return backendError.localizedDescription
+        default:
+            return nil
+        }
+    }
+
+    func aiUserFacingMessage(fallback: String) -> String {
+        aiUserFacingMessage ?? fallback
     }
 }

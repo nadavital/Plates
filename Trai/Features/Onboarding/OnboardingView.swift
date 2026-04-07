@@ -10,6 +10,8 @@ import SwiftData
 
 struct OnboardingView: View {
     @Environment(\.modelContext) var modelContext
+    @Environment(MonetizationService.self) var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @State var currentStep = 0
     @State var navigationDirection: NavigationDirection = .forward
 
@@ -205,6 +207,10 @@ struct OnboardingView: View {
                     hasWorkoutPlan: generatedWorkoutPlan != nil,
                     workoutPlan: generatedWorkoutPlan,
                     onCreatePlan: {
+                        guard monetizationService?.canAccessAIFeatures ?? true else {
+                            proUpsellCoordinator?.present(source: .workoutPlan, style: .fullScreenCover)
+                            return
+                        }
                         navigationDirection = .forward
                         withAnimation(.smooth(duration: 0.4)) {
                             showingWorkoutSetup = true

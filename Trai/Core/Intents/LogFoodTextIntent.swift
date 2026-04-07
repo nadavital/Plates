@@ -33,6 +33,12 @@ struct LogFoodTextIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        await BillingService.shared.refreshAccessStateForImmediateUse()
+
+        guard MonetizationService.shared.canAccessAIFeatures else {
+            return .result(dialog: "AI food logging is available with Trai Pro. Open the app to subscribe or log food manually.")
+        }
+
         guard let container = TraiApp.sharedModelContainer else {
             return .result(dialog: "Unable to access app data. Please open Trai first.")
         }
@@ -89,7 +95,9 @@ struct LogFoodTextIntent: AppIntent {
 
             return .result(dialog: "Logged \(analysis.name): \(analysis.calories) calories")
         } catch {
-            return .result(dialog: "Couldn't analyze food. Try being more specific.")
+            return .result(dialog: IntentDialog(stringLiteral: error.aiUserFacingMessage(
+                fallback: "Couldn't analyze food. Try being more specific."
+            )))
         }
     }
 }
@@ -99,71 +107,73 @@ struct LogFoodTextIntent: AppIntent {
 extension GeminiService {
     /// Analyze a text food description and return nutrition info
     func analyzeFoodDescription(_ description: String) async throws -> FoodAnalysisResult {
-        let prompt = """
-        Analyze this food description and estimate nutrition facts:
-        "\(description)"
+        try await performAIRequest(for: .foodPhotoAnalysis) {
+            let prompt = """
+            Analyze this food description and estimate nutrition facts:
+            "\(description)"
 
-        Return a JSON object with:
-        - name: string (cleaned up food name)
-        - calories: integer
-        - protein: number (grams)
-        - carbs: number (grams)
-        - fat: number (grams)
-        - fiber: number (grams, optional)
-        - sugar: number (grams, optional)
-        - servingSize: number
-        - servingUnit: string
-        - emoji: string (single relevant food emoji)
+            Return a JSON object with:
+            - name: string (cleaned up food name)
+            - calories: integer
+            - protein: number (grams)
+            - carbs: number (grams)
+            - fat: number (grams)
+            - fiber: number (grams, optional)
+            - sugar: number (grams, optional)
+            - servingSize: number
+            - servingUnit: string
+            - emoji: string (single relevant food emoji)
 
-        Be reasonable with estimates based on typical serving sizes.
-        """
+            Be reasonable with estimates based on typical serving sizes.
+            """
 
-        let schema: [String: Any] = [
-            "type": "object",
-            "properties": [
-                "name": ["type": "string"],
-                "calories": ["type": "integer"],
-                "protein": ["type": "number"],
-                "carbs": ["type": "number"],
-                "fat": ["type": "number"],
-                "fiber": ["type": "number"],
-                "sugar": ["type": "number"],
-                "servingSize": ["type": "number"],
-                "servingUnit": ["type": "string"],
-                "emoji": ["type": "string"]
-            ],
-            "required": ["name", "calories", "protein", "carbs", "fat", "servingSize", "servingUnit", "emoji"]
-        ]
+            let schema: [String: Any] = [
+                "type": "object",
+                "properties": [
+                    "name": ["type": "string"],
+                    "calories": ["type": "integer"],
+                    "protein": ["type": "number"],
+                    "carbs": ["type": "number"],
+                    "fat": ["type": "number"],
+                    "fiber": ["type": "number"],
+                    "sugar": ["type": "number"],
+                    "servingSize": ["type": "number"],
+                    "servingUnit": ["type": "string"],
+                    "emoji": ["type": "string"]
+                ],
+                "required": ["name", "calories", "protein", "carbs", "fat", "servingSize", "servingUnit", "emoji"]
+            ]
 
-        let body: [String: Any] = [
-            "contents": [
-                ["parts": [["text": prompt]]]
-            ],
-            "generationConfig": buildGenerationConfig(
-                thinkingLevel: .low,
-                jsonSchema: schema
+            let body: [String: Any] = [
+                "contents": [
+                    ["parts": [["text": prompt]]]
+                ],
+                "generationConfig": buildGenerationConfig(
+                    thinkingLevel: .low,
+                    jsonSchema: schema
+                )
+            ]
+
+            let response = try await makeRequest(body: body)
+
+            guard let data = response.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw GeminiError.invalidResponse
+            }
+
+            return FoodAnalysisResult(
+                name: json["name"] as? String ?? description,
+                calories: json["calories"] as? Int ?? 0,
+                protein: json["protein"] as? Double ?? 0,
+                carbs: json["carbs"] as? Double ?? 0,
+                fat: json["fat"] as? Double ?? 0,
+                fiber: json["fiber"] as? Double,
+                sugar: json["sugar"] as? Double,
+                servingSize: json["servingSize"] as? Double ?? 1,
+                servingUnit: json["servingUnit"] as? String ?? "serving",
+                emoji: json["emoji"] as? String
             )
-        ]
-
-        let response = try await makeRequest(body: body)
-
-        guard let data = response.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw GeminiError.invalidResponse
         }
-
-        return FoodAnalysisResult(
-            name: json["name"] as? String ?? description,
-            calories: json["calories"] as? Int ?? 0,
-            protein: json["protein"] as? Double ?? 0,
-            carbs: json["carbs"] as? Double ?? 0,
-            fat: json["fat"] as? Double ?? 0,
-            fiber: json["fiber"] as? Double,
-            sugar: json["sugar"] as? Double,
-            servingSize: json["servingSize"] as? Double ?? 1,
-            servingUnit: json["servingUnit"] as? String ?? "serving",
-            emoji: json["emoji"] as? String
-        )
     }
 
     struct FoodAnalysisResult {

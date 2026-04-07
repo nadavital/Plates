@@ -117,6 +117,7 @@ struct QuickActionButton: View {
 }
 
 struct ChatWithTraiCard: View {
+    let isUnlocked: Bool
     let action: () -> Void
 
     var body: some View {
@@ -141,8 +142,32 @@ struct ChatWithTraiCard: View {
                         .foregroundStyle(.white)
                 }
 
-                Text("Chat with Trai")
-                    .font(.traiHeadline(14))
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        Text("Chat with Trai")
+                            .font(.traiHeadline(14))
+
+                        if !isUnlocked {
+                            Text("PRO")
+                                .font(.traiLabel(10))
+                                .foregroundStyle(TraiColors.ember)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(TraiColors.ember.opacity(0.10), in: Capsule())
+                        }
+                    }
+
+                    HStack(spacing: 6) {
+                        Text("Chat")
+                            .font(.traiHeadline(14))
+
+                        if !isUnlocked {
+                            Text("PRO")
+                                .font(.traiLabel(10))
+                                .foregroundStyle(TraiColors.ember)
+                        }
+                    }
+                }
 
                 Spacer(minLength: 0)
             }

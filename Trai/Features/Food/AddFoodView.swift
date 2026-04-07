@@ -13,6 +13,8 @@ struct AddFoodView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     @State private var geminiService = GeminiService()
 
@@ -342,6 +344,11 @@ struct AddFoodView: View {
     }
 
     private func analyzeFood() async {
+        if !(monetizationService?.canAccessAIFeatures ?? true) {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
+            return
+        }
+
         isAnalyzing = true
         errorMessage = nil
 

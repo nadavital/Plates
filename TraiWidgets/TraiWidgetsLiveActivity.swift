@@ -608,9 +608,20 @@ extension TraiWorkoutAttributes.ContentState {
     }
 }
 
-#Preview("Notification", as: .content, using: TraiWorkoutAttributes.preview) {
-    TraiWidgetsLiveActivity()
-} contentStates: {
-    TraiWorkoutAttributes.ContentState.active
-    TraiWorkoutAttributes.ContentState.paused
+#if DEBUG
+struct TraiWidgetsLiveActivity_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            if #available(iOSApplicationExtension 16.2, *) {
+                TraiWorkoutAttributes.preview
+                    .previewContext(TraiWorkoutAttributes.ContentState.active, viewKind: .content)
+                    .previewDisplayName("Notification")
+
+                TraiWorkoutAttributes.preview
+                    .previewContext(TraiWorkoutAttributes.ContentState.paused, viewKind: .content)
+                    .previewDisplayName("Paused")
+            }
+        }
+    }
 }
+#endif

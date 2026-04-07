@@ -11,6 +11,8 @@ import SwiftUI
 
 struct AddCustomExerciseSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     let initialName: String
     let onSave: (String, Exercise.MuscleGroup?, Exercise.Category, [String]?) -> Void
@@ -26,6 +28,10 @@ struct AddCustomExerciseSheet: View {
     @State private var hasAnalyzed = false
 
     @FocusState private var isNameFocused: Bool
+
+    private var canAccessExerciseAI: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
 
     var body: some View {
         NavigationStack {
@@ -69,15 +75,16 @@ struct AddCustomExerciseSheet: View {
             }
             .onAppear {
                 exerciseName = initialName
-                if !initialName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if canAccessExerciseAI && !initialName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Task { await analyzeExercise() }
                 } else {
                     isNameFocused = true
                 }
             }
         }
-        .tint(Color("AccentColor"))
-        .accentColor(Color("AccentColor"))
+        .tint(TraiColors.brandAccent)
+        .accentColor(TraiColors.brandAccent)
+        .proUpsellPresenter()
     }
 
     // MARK: - Name Input Card
@@ -105,9 +112,16 @@ struct AddCustomExerciseSheet: View {
 
     private var aiAnalysisCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Trai Analysis", icon: "sparkles")
+            if !canAccessExerciseAI {
+                ProUpsellInlineCard(
+                    source: .exerciseAnalysis,
+                    actionTitle: "Unlock Trai Pro"
+                ) {
+                    proUpsellCoordinator?.present(source: .exerciseAnalysis)
+                }
+            } else if isAnalyzing {
+                sectionHeader("Trai Analysis", icon: "sparkles")
 
-            if isAnalyzing {
                 HStack(spacing: 10) {
                     ProgressView()
                     Text("Analyzing exercise...")
@@ -116,8 +130,10 @@ struct AddCustomExerciseSheet: View {
                     Spacer()
                 }
                 .padding(12)
-                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else if let analysis = analysisResult {
+                sectionHeader("Trai Analysis", icon: "sparkles")
+
                 VStack(alignment: .leading, spacing: 10) {
                     Text(analysis.description)
                         .font(.traiHeadline(15))
@@ -140,15 +156,17 @@ struct AddCustomExerciseSheet: View {
                     }
                 }
                 .padding(12)
-                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else {
+                sectionHeader("Trai Analysis", icon: "sparkles")
+
                 Button {
                     Task { await analyzeExercise() }
                 } label: {
                     Label("Analyze with AI", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true))
+                .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true))
                 .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -217,6 +235,10 @@ struct AddCustomExerciseSheet: View {
     private func analyzeExercise() async {
         let name = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
+        guard canAccessExerciseAI else {
+            proUpsellCoordinator?.present(source: .exerciseAnalysis)
+            return
+        }
 
         isAnalyzing = true
         defer { isAnalyzing = false }

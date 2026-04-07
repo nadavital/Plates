@@ -11,6 +11,8 @@ import SwiftData
 struct WorkoutPlanChatFlow: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
 
     @Query private var profiles: [UserProfile]
     private var userProfile: UserProfile? { profiles.first }
@@ -63,10 +65,23 @@ struct WorkoutPlanChatFlow: View {
         currentQuestionIndex >= visibleQuestions.count - 1
     }
 
+    private var canAccessWorkoutAI: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var requiresAuthenticatedAccountForWorkoutAI: Bool {
+        monetizationService?.aiTransportMode == .backendProxy &&
+        accountSessionService?.isAuthenticated != true
+    }
+
     // MARK: - Body
 
     var body: some View {
-        if embedded {
+        if requiresAuthenticatedAccountForWorkoutAI {
+            AccountSetupView(context: .aiFeatures, showsDismissButton: !embedded)
+        } else if !canAccessWorkoutAI {
+            ProUpsellView(source: .workoutPlan, showsDismissButton: !embedded)
+        } else if embedded {
             mainContent
         } else {
             NavigationStack {

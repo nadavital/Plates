@@ -1,0 +1,10 @@
+{
+  "name": "trai-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.mjs",
+    "start": "node src/server.mjs",
+    "verify:apple": "node scripts/check_apple_verification.mjs"
+  }
+}

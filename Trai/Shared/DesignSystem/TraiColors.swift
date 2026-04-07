@@ -8,6 +8,10 @@
 import SwiftUI
 
 enum TraiColors {
+    /// Shared app accent from the asset catalog. Use this explicitly in sheet flows
+    /// where `.accentColor` can briefly fall back to the system default during presentation.
+    static let brandAccent = Color("AccentColor")
+
     /// Deep Red — the anchor tone
     static let ember = Color(red: 0.85, green: 0.25, blue: 0.20)
 

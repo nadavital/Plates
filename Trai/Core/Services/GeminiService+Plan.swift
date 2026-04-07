@@ -32,6 +32,7 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        let requestTicket = try beginAIRequest(for: .nutritionPlanGeneration)
 
         log("🎯 Starting nutrition plan generation for: \(request.name)", type: .info)
         log("📊 User data - Age: \(request.age), Gender: \(request.gender.rawValue), Weight: \(request.weightKg)kg, Height: \(request.heightCm)cm", type: .info)
@@ -41,15 +42,20 @@ extension GeminiService {
         logPrompt(prompt)
 
         do {
-            let plan = try await executePlanGenerationPipeline(
+            let plan: NutritionPlan = try await executePlanGenerationPipeline(
                 prompt: prompt,
                 schema: GeminiPromptBuilder.nutritionPlanSchema,
-                fallback: { NutritionPlan.createDefault(from: request) },
                 decodeFailureLabel: "nutrition plan"
             )
+            completeAIRequest(requestTicket)
             log("✅ Successfully parsed nutrition plan - Calories: \(plan.dailyTargets.calories)", type: .info)
             return plan
+        } catch GeminiError.parsingError {
+            cancelAIRequest(requestTicket)
+            log("Falling back to default nutrition plan after parse failure", type: .error)
+            return NutritionPlan.createDefault(from: request)
         } catch {
+            cancelAIRequest(requestTicket)
             log("Failed to generate plan: \(error.localizedDescription)", type: .error)
             throw error
         }
@@ -67,33 +73,34 @@ extension GeminiService {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
+        return try await performAIRequest(for: .nutritionPlanRefinement) {
+            log("💬 Plan refinement request: \(userMessage)", type: .info)
 
-        log("💬 Plan refinement request: \(userMessage)", type: .info)
-
-        let prompt = GeminiPromptBuilder.buildPlanRefinementPrompt(
-            currentPlan: currentPlan,
-            request: request,
-            userMessage: userMessage,
-            conversationHistory: conversationHistory
-        )
-        logPrompt(prompt)
-
-        do {
-            let envelope: PlanPipelineRefinementEnvelope<NutritionPlan> = try await executePlanRefinementPipeline(
-                prompt: prompt,
-                schema: GeminiPromptBuilder.planRefinementSchema
+            let prompt = GeminiPromptBuilder.buildPlanRefinementPrompt(
+                currentPlan: currentPlan,
+                request: request,
+                userMessage: userMessage,
+                conversationHistory: conversationHistory
             )
+            logPrompt(prompt)
 
-            let responseType = PlanRefinementResponse.ResponseType(rawValue: envelope.responseType) ?? .message
-            return PlanRefinementResponse(
-                responseType: responseType,
-                message: envelope.message,
-                proposedPlan: envelope.proposedPlan,
-                updatedPlan: envelope.updatedPlan
-            )
-        } catch {
-            log("Failed to refine plan: \(error.localizedDescription)", type: .error)
-            throw error
+            do {
+                let envelope: PlanPipelineRefinementEnvelope<NutritionPlan> = try await executePlanRefinementPipeline(
+                    prompt: prompt,
+                    schema: GeminiPromptBuilder.planRefinementSchema
+                )
+
+                let responseType = PlanRefinementResponse.ResponseType(rawValue: envelope.responseType) ?? .message
+                return PlanRefinementResponse(
+                    responseType: responseType,
+                    message: envelope.message,
+                    proposedPlan: envelope.proposedPlan,
+                    updatedPlan: envelope.updatedPlan
+                )
+            } catch {
+                log("Failed to refine plan: \(error.localizedDescription)", type: .error)
+                throw error
+            }
         }
     }
 }

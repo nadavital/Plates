@@ -15,6 +15,8 @@ private enum ExerciseSelectionPerformanceConfig {
 struct ExerciseListView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
 
     // Selection callback
@@ -274,6 +276,10 @@ struct ExerciseListView: View {
         return selectedMuscleGroup ?? targetMuscleGroups.first
     }
 
+    private var canAccessExerciseAI: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -311,7 +317,11 @@ struct ExerciseListView: View {
                             .foregroundStyle(.primary)
 
                             Button {
-                                showingCamera = true
+                                if canAccessExerciseAI {
+                                    showingCamera = true
+                                } else {
+                                    proUpsellCoordinator?.present(source: .exerciseAnalysis)
+                                }
                             } label: {
                                 HStack {
                                     Image(systemName: "camera.fill")
@@ -509,6 +519,11 @@ struct ExerciseListView: View {
     // MARK: - Photo Analysis
 
     private func analyzeEquipmentPhoto(_ imageData: Data) async {
+        guard canAccessExerciseAI else {
+            proUpsellCoordinator?.present(source: .exerciseAnalysis)
+            return
+        }
+
         isAnalyzingPhoto = true
         defer { isAnalyzingPhoto = false }
 

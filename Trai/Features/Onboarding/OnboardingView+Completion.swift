@@ -86,8 +86,6 @@ extension OnboardingView {
 
     /// Parse user notes using AI to create properly categorized memories
     func parseAndCreateMemories() async {
-        let geminiService = GeminiService()
-
         // Combine all notes with context
         var allNotes: [(notes: String, context: String)] = []
 
@@ -103,6 +101,15 @@ extension OnboardingView {
 
         // If no notes to parse, return early
         guard !allNotes.isEmpty else { return }
+
+        guard monetizationService?.canAccessAIFeatures ?? true else {
+            for (notes, context) in allNotes {
+                createSimpleMemory(content: notes, context: context)
+            }
+            return
+        }
+
+        let geminiService = GeminiService()
 
         // Parse each set of notes
         for (notes, context) in allNotes {

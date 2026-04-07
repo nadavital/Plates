@@ -22,6 +22,12 @@ struct AskTraiIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        await BillingService.shared.refreshAccessStateForImmediateUse()
+
+        guard MonetizationService.shared.canAccessAIFeatures else {
+            return .result(dialog: "Ask Trai is available with Trai Pro. Open the app to start your subscription.")
+        }
+
         guard let container = TraiApp.sharedModelContainer else {
             return .result(dialog: "Unable to access Trai. Please open the app first.")
         }
@@ -54,7 +60,9 @@ struct AskTraiIntent: AppIntent {
             let shortResponse = response.prefix(500)
             return .result(dialog: "\(shortResponse)")
         } catch {
-            return .result(dialog: "Sorry, I couldn't process that question. Please try again.")
+            return .result(dialog: IntentDialog(stringLiteral: error.aiUserFacingMessage(
+                fallback: "Sorry, I couldn't process that question. Please try again."
+            )))
         }
     }
 
@@ -85,26 +93,28 @@ extension GeminiService {
         userContext: String,
         tone: TraiCoachTone = .sharedPreference
     ) async throws -> String {
-        let prompt = """
-        You are Trai, a fitness and nutrition coach. Answer this question concisely (2-3 sentences max) for a voice response.
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-        Never refer to yourself as an AI or assistant.
+        try await performAIRequest(for: .coachChat) {
+            let prompt = """
+            You are Trai, a fitness and nutrition coach. Answer this question concisely (2-3 sentences max) for a voice response.
+            Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
+            Never refer to yourself as an AI or assistant.
 
-        User context:
-        \(userContext)
+            User context:
+            \(userContext)
 
-        Question: \(question)
+            Question: \(question)
 
-        Give a helpful response. Be specific if you have data, otherwise give general advice.
-        """
+            Give a helpful response. Be specific if you have data, otherwise give general advice.
+            """
 
-        let body: [String: Any] = [
-            "contents": [
-                ["parts": [["text": prompt]]]
-            ],
-            "generationConfig": buildGenerationConfig(thinkingLevel: .low, maxTokens: 500)
-        ]
+            let body: [String: Any] = [
+                "contents": [
+                    ["parts": [["text": prompt]]]
+                ],
+                "generationConfig": buildGenerationConfig(thinkingLevel: .low, maxTokens: 500)
+            ]
 
-        return try await makeRequest(body: body)
+            return try await makeRequest(body: body)
+        }
     }
 }

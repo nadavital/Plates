@@ -11,6 +11,8 @@ import SwiftData
 struct ManualFoodEntrySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @Query private var profiles: [UserProfile]
 
     let sessionId: UUID?
@@ -39,10 +41,19 @@ struct ManualFoodEntrySheet: View {
         !name.isEmpty && Int(caloriesText) != nil
     }
 
+    private var shouldShowUpgradeRow: Bool {
+        !(monetizationService?.canAccessAIFeatures ?? true)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    if shouldShowUpgradeRow {
+                        upgradeRow
+                            .traiCard(cornerRadius: 16)
+                    }
+
                     VStack(alignment: .leading, spacing: 10) {
                         sectionTitle("Name", icon: "fork.knife")
                         TextField("Food name", text: $name)
@@ -101,6 +112,15 @@ struct ManualFoodEntrySheet: View {
                     .disabled(!isValid)
                 }
             }
+        }
+        .proUpsellPresenter()
+        .tint(TraiColors.brandAccent)
+        .accentColor(TraiColors.brandAccent)
+    }
+
+    private var upgradeRow: some View {
+        ProUpsellInlineCard(source: .foodAnalysis) {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
         }
     }
 

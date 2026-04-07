@@ -19,7 +19,6 @@ extension GeminiService {
     func executePlanGenerationPipeline<Plan: Decodable>(
         prompt: String,
         schema: [String: Any],
-        fallback: () -> Plan,
         decodeFailureLabel: String
     ) async throws -> Plan {
         let requestBody: [String: Any] = [
@@ -32,9 +31,8 @@ extension GeminiService {
 
         let responseText = try await makeRequest(body: requestBody)
         logResponse(responseText)
-        return parsePlanPayload(
+        return try parsePlanPayload(
             from: responseText,
-            fallback: fallback,
             decodeFailureLabel: decodeFailureLabel
         )
     }
@@ -71,9 +69,8 @@ extension GeminiService {
 
     private func parsePlanPayload<Plan: Decodable>(
         from text: String,
-        fallback: () -> Plan,
         decodeFailureLabel: String
-    ) -> Plan {
+    ) throws -> Plan {
         let cleanText = cleanJSONResponse(text)
 
         log("📋 Cleaned JSON:", type: .debug)
@@ -82,8 +79,8 @@ extension GeminiService {
         }
 
         guard let data = cleanText.data(using: .utf8) else {
-            log("⚠️ Failed to convert response to UTF8 data, using fallback \(decodeFailureLabel)", type: .error)
-            return fallback()
+            log("⚠️ Failed to convert response to UTF8 data for \(decodeFailureLabel)", type: .error)
+            throw GeminiError.parsingError
         }
 
         do {
@@ -93,7 +90,7 @@ extension GeminiService {
             if let decodingError = decodingError as? DecodingError {
                 logPlanPipelineDecodingError(decodingError)
             }
-            return fallback()
+            throw GeminiError.parsingError
         }
     }
 

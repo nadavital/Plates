@@ -6,6 +6,9 @@
 import SwiftUI
 
 struct PlanReviewStepView: View {
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
+
     @Binding var plan: NutritionPlan?
     let planRequest: PlanGenerationRequest?
     let isLoading: Bool
@@ -244,12 +247,16 @@ struct PlanReviewStepView: View {
         VStack(spacing: 0) {
             Button {
                 HapticManager.lightTap()
-                showChat = true
+                if monetizationService?.canAccessAIFeatures ?? true {
+                    showChat = true
+                } else {
+                    proUpsellCoordinator?.present(source: .nutritionPlan)
+                }
             } label: {
                 HStack(spacing: 8) {
                     TraiLensIcon(size: 16, palette: .energy)
 
-                    Text("Ask About Your Plan")
+                    Text((monetizationService?.canAccessAIFeatures ?? true) ? "Ask About Your Plan" : "Unlock AI Plan Coaching")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)

@@ -82,6 +82,16 @@ struct SettingsView: View {
                 Text("Trai guidance will adapt to this tone while still learning from your behavior.")
             }
 
+            Section {
+                NavigationLink {
+                    DeveloperSettingsView()
+                } label: {
+                    Label("Developer Settings", systemImage: "hammer")
+                }
+            } footer: {
+                Text("Backend, billing, account, and testing controls live here while the app is still in local development.")
+            }
+
             // MARK: - Nutrition Plan Section
             Section {
                 Button {
@@ -269,6 +279,7 @@ struct SettingsView: View {
             set: { coachToneRaw = $0.rawValue }
         )
     }
+
 }
 
 // MARK: - Macro Toggle Row
