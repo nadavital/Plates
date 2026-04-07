@@ -10,6 +10,9 @@ final class BillingService {
         static let syncState = "billing.syncState.v1"
         static let lastSyncedAt = "billing.lastSyncedAt.v1"
         static let availableProducts = "billing.availableProducts.v1"
+        #if DEBUG
+        static let debugPlanOverride = "billing.debugPlanOverride.v1"
+        #endif
     }
 
     @ObservationIgnored
@@ -41,6 +44,9 @@ final class BillingService {
         }
     }
     private(set) var lastStoreKitRefreshAt: Date?
+    #if DEBUG
+    private(set) var debugPlanOverride: SubscriptionPlan?
+    #endif
 
     private init(
         defaults: UserDefaults = .standard,
@@ -69,6 +75,15 @@ final class BillingService {
         } else {
             self.availableProducts = Self.defaultProducts
         }
+
+        #if DEBUG
+        if let rawDebugPlanOverride = defaults.string(forKey: DefaultsKey.debugPlanOverride),
+           let debugPlanOverride = SubscriptionPlan(rawValue: rawDebugPlanOverride) {
+            self.debugPlanOverride = debugPlanOverride
+        } else {
+            self.debugPlanOverride = nil
+        }
+        #endif
 
         startTransactionObservationIfNeeded()
     }
@@ -329,10 +344,11 @@ final class BillingService {
 
     func applyRemotePayload(_ payload: BillingSyncPayload) {
         accountService.applyRemoteAccountSnapshot(payload.accountSnapshot)
-        monetizationService.applyRemoteState(
+        applyResolvedMonetizationState(
             entitlementSnapshot: payload.entitlementSnapshot,
             quotaSnapshot: payload.quotaSnapshot,
-            transportMode: payload.transportMode
+            transportMode: payload.transportMode,
+            now: payload.syncedAt
         )
 
         availableProducts = Self.normalizedProducts(payload.availableProducts)
@@ -352,10 +368,11 @@ final class BillingService {
         lastStoreKitRefreshAt = nil
         storeProductsByID = [:]
 
-        monetizationService.applyRemoteState(
+        applyResolvedMonetizationState(
             entitlementSnapshot: Self.localFallbackEntitlement(now: now),
             quotaSnapshot: Self.localFallbackQuotaSnapshot(now: now),
-            transportMode: .directGemini
+            transportMode: .directGemini,
+            now: now
         )
 
         persistProducts()
@@ -375,10 +392,11 @@ final class BillingService {
         lastSyncedAt = nil
         lastStoreKitErrorMessage = nil
 
-        monetizationService.applyRemoteState(
+        applyResolvedMonetizationState(
             entitlementSnapshot: Self.localFallbackEntitlement(now: now),
             quotaSnapshot: Self.localFallbackQuotaSnapshot(now: now),
-            transportMode: .directGemini
+            transportMode: .directGemini,
+            now: now
         )
 
         persistSyncState()
@@ -420,7 +438,7 @@ final class BillingService {
     }
 
     func setDebugTransportMode(_ transportMode: AITransportMode) {
-        monetizationService.applyRemoteState(
+        applyResolvedMonetizationState(
             entitlementSnapshot: monetizationService.entitlementSnapshot,
             quotaSnapshot: monetizationService.quotaSnapshot,
             transportMode: transportMode
@@ -432,6 +450,9 @@ final class BillingService {
         status: SubscriptionStatus = .active,
         transportMode: AITransportMode? = nil
     ) {
+        debugPlanOverride = plan
+        persistDebugPlanOverride()
+
         let now = Date()
         let payload = BillingSyncPayload(
             accountSnapshot: accountService.currentSnapshot,
@@ -517,7 +538,7 @@ final class BillingService {
         let renewalDate = transactions.compactMap(\.expirationDate).max()
         let now = Date()
 
-        monetizationService.applyRemoteState(
+        applyResolvedMonetizationState(
             entitlementSnapshot: EntitlementSnapshot(
                 plan: highestPlan,
                 status: .active,
@@ -526,7 +547,8 @@ final class BillingService {
                 lastValidatedAt: now
             ),
             quotaSnapshot: nil,
-            transportMode: monetizationService.aiTransportMode
+            transportMode: monetizationService.aiTransportMode,
+            now: now
         )
 
         if !matchedProducts.isEmpty {
@@ -558,6 +580,50 @@ final class BillingService {
             reason: reason
         )
     }
+
+    private func applyResolvedMonetizationState(
+        entitlementSnapshot: EntitlementSnapshot,
+        quotaSnapshot: AIQuotaSnapshot? = nil,
+        transportMode: AITransportMode? = nil,
+        now: Date = Date()
+    ) {
+        monetizationService.applyRemoteState(
+            entitlementSnapshot: resolvedEntitlementSnapshot(
+                entitlementSnapshot,
+                now: now
+            ),
+            quotaSnapshot: quotaSnapshot,
+            transportMode: transportMode
+        )
+    }
+
+    private func resolvedEntitlementSnapshot(
+        _ entitlementSnapshot: EntitlementSnapshot,
+        now: Date
+    ) -> EntitlementSnapshot {
+        #if DEBUG
+        guard let debugPlanOverride else { return entitlementSnapshot }
+        return EntitlementSnapshot(
+            plan: debugPlanOverride,
+            status: .active,
+            sourceDescription: "debug-billing-service",
+            renewalDate: nil,
+            lastValidatedAt: now
+        )
+        #else
+        return entitlementSnapshot
+        #endif
+    }
+
+    #if DEBUG
+    private func persistDebugPlanOverride() {
+        if let debugPlanOverride {
+            defaults.set(debugPlanOverride.rawValue, forKey: DefaultsKey.debugPlanOverride)
+        } else {
+            defaults.removeObject(forKey: DefaultsKey.debugPlanOverride)
+        }
+    }
+    #endif
 
     private func syncStoreKitTransactionsToBackend(
         _ transactions: [Transaction],
