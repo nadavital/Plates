@@ -53,21 +53,41 @@ final class AppAccountService {
             self.identityMode = .anonymousDevice
         }
 
-        if let rawBackendEnvironment = defaults.string(forKey: DefaultsKey.backendEnvironment),
-           let backendEnvironment = BackendEnvironment(rawValue: rawBackendEnvironment) {
-            self.backendEnvironment = backendEnvironment
-        } else {
-            #if DEBUG
-            self.backendEnvironment = .localPlaceholder
-            #else
-            self.backendEnvironment = .production
-            #endif
-        }
-
-        self.customBackendBaseURL = Self.normalizeCustomBackendBaseURL(
+        let normalizedStoredCustomBackendBaseURL = Self.normalizeCustomBackendBaseURL(
             defaults.string(forKey: DefaultsKey.customBackendBaseURL) ?? ""
         )
+
+        if let rawBackendEnvironment = defaults.string(forKey: DefaultsKey.backendEnvironment),
+           let backendEnvironment = BackendEnvironment(rawValue: rawBackendEnvironment) {
+            #if DEBUG
+            self.backendEnvironment = backendEnvironment == .localPlaceholder ? .staging : backendEnvironment
+            self.customBackendBaseURL = normalizedStoredCustomBackendBaseURL
+            #else
+            self.backendEnvironment = .production
+            self.customBackendBaseURL = ""
+            #endif
+        } else {
+            #if DEBUG
+            self.backendEnvironment = .staging
+            self.customBackendBaseURL = normalizedStoredCustomBackendBaseURL
+            #else
+            self.backendEnvironment = .production
+            self.customBackendBaseURL = ""
+            #endif
+        }
         self.lastSyncedAt = defaults.object(forKey: DefaultsKey.lastSyncedAt) as? Date
+
+        #if DEBUG
+        if defaults.string(forKey: DefaultsKey.backendEnvironment) == BackendEnvironment.localPlaceholder.rawValue {
+            defaults.set(BackendEnvironment.staging.rawValue, forKey: DefaultsKey.backendEnvironment)
+        }
+        #else
+        if defaults.string(forKey: DefaultsKey.backendEnvironment) != BackendEnvironment.production.rawValue ||
+            !normalizedStoredCustomBackendBaseURL.isEmpty {
+            defaults.set(BackendEnvironment.production.rawValue, forKey: DefaultsKey.backendEnvironment)
+            defaults.removeObject(forKey: DefaultsKey.customBackendBaseURL)
+        }
+        #endif
     }
 
     var shortAccountLabel: String {
@@ -101,7 +121,7 @@ final class AppAccountService {
         case .localDevelopment:
             guard customBackendBaseURL.isEmpty else { return nil }
             guard !Self.supportsLocalDevelopmentBackendOnCurrentRuntime else { return nil }
-            return "Local Development points at 127.0.0.1, so it only works in simulator-based testing. On this iPhone, use Production or enter a custom backend URL that points at your Mac or tunnel."
+            return "Local Development points at 127.0.0.1, so it only works in simulator-based testing. On this iPhone, use Staging or enter a custom backend URL that points at your Mac or tunnel."
         case .staging, .production:
             return nil
         }
@@ -110,12 +130,12 @@ final class AppAccountService {
     var recommendedBackendEnvironmentForRealAccountSignIn: BackendEnvironment? {
         switch backendEnvironment {
         case .localPlaceholder:
-            return .production
+            return .staging
         case .localDevelopment:
             if !customBackendBaseURL.isEmpty {
                 return nil
             }
-            return Self.supportsLocalDevelopmentBackendOnCurrentRuntime ? nil : .production
+            return Self.supportsLocalDevelopmentBackendOnCurrentRuntime ? nil : .staging
         case .staging, .production:
             return nil
         }

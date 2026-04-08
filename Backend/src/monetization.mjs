@@ -11,20 +11,20 @@ export function createMonetizationHelpers({
   FEATURE_COSTS,
   PRODUCT_DEFINITIONS
 }) {
-  function ensureQuotaPeriod(userID, plan, now) {
+  async function ensureQuotaPeriod(userID, plan, now) {
     const date = new Date(now);
     const periodStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
     const periodEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
     const limit = PLAN_LIMITS[plan] ?? null;
 
-    let period = db.prepare(`
+    let period = await db.prepare(`
       SELECT *
       FROM quota_periods
       WHERE user_id = ? AND period_start = ? AND period_end = ?
     `).get(userID, periodStart.toISOString(), periodEnd.toISOString());
 
     if (!period) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO quota_periods (
           id, user_id, period_start, period_end, unit_limit, bonus_units, units_used, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -40,11 +40,23 @@ export function createMonetizationHelpers({
         now
       );
 
-      period = db.prepare(`
+      period = await db.prepare(`
         SELECT *
         FROM quota_periods
         WHERE user_id = ? AND period_start = ? AND period_end = ?
       `).get(userID, periodStart.toISOString(), periodEnd.toISOString());
+    } else if (period.unit_limit !== limit) {
+      await db.prepare(`
+        UPDATE quota_periods
+        SET unit_limit = ?, updated_at = ?
+        WHERE id = ?
+      `).run(limit, now, period.id);
+
+      period = await db.prepare(`
+        SELECT *
+        FROM quota_periods
+        WHERE id = ?
+      `).get(period.id);
     }
 
     return period;
@@ -64,9 +76,9 @@ export function createMonetizationHelpers({
     }
   }
 
-  function reserveQuotaUsage(quotaPeriod, unitCost) {
+  async function reserveQuotaUsage(quotaPeriod, unitCost) {
     const now = isoNow();
-    const result = db.prepare(`
+    const result = await db.prepare(`
       UPDATE quota_periods
       SET units_used = units_used + ?, updated_at = ?
       WHERE id = ?
@@ -77,7 +89,7 @@ export function createMonetizationHelpers({
     `).run(unitCost, now, quotaPeriod.id, unitCost);
 
     if (result.changes === 0) {
-      const latestQuotaPeriod = db.prepare(`
+      const latestQuotaPeriod = await db.prepare(`
         SELECT *
         FROM quota_periods
         WHERE id = ?
@@ -93,49 +105,49 @@ export function createMonetizationHelpers({
       });
     }
 
-    return db.prepare(`
+    return await db.prepare(`
       SELECT *
       FROM quota_periods
       WHERE id = ?
     `).get(quotaPeriod.id);
   }
 
-  function releaseReservedQuotaUsage(quotaPeriod, unitCost) {
+  async function releaseReservedQuotaUsage(quotaPeriod, unitCost) {
     const now = isoNow();
-    db.prepare(`
+    await db.prepare(`
       UPDATE quota_periods
       SET units_used = MAX(units_used - ?, 0), updated_at = ?
       WHERE id = ?
     `).run(unitCost, now, quotaPeriod.id);
 
-    return db.prepare(`
+    return await db.prepare(`
       SELECT *
       FROM quota_periods
       WHERE id = ?
     `).get(quotaPeriod.id);
   }
 
-  function recordUsage(userID, quotaPeriod, feature, unitCost, options = {}) {
+  async function recordUsage(userID, quotaPeriod, feature, unitCost, options = {}) {
     const incrementQuotaUnits = options.incrementQuotaUnits ?? true;
     const now = isoNow();
 
     if (incrementQuotaUnits) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE quota_periods
         SET units_used = units_used + ?, updated_at = ?
         WHERE id = ?
       `).run(unitCost, now, quotaPeriod.id);
     }
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO usage_ledger (id, user_id, feature, unit_cost, request_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(createID('ulg'), userID, feature, unitCost, createID('req'), now);
   }
 
-  function recordAIRequest(userID, feature, action, outcome, latencyMs) {
+  async function recordAIRequest(userID, feature, action, outcome, latencyMs) {
     const unitCost = FEATURE_COSTS[feature] ?? FEATURE_COSTS.coachChat;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO ai_requests (id, user_id, feature, model, action, outcome, latency_ms, provider_cost_estimate, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -151,9 +163,9 @@ export function createMonetizationHelpers({
     );
   }
 
-  function buildBillingPayload(userID, installationID, appAccountToken, now) {
-    const subscription = ensureSubscription(userID, now);
-    const quotaPeriod = ensureQuotaPeriod(userID, subscription.plan, now);
+  async function buildBillingPayload(userID, installationID, appAccountToken, now) {
+    const subscription = await ensureSubscription(userID, now);
+    const quotaPeriod = await ensureQuotaPeriod(userID, subscription.plan, now);
 
     return {
       accountSnapshot: {
@@ -166,31 +178,30 @@ export function createMonetizationHelpers({
       entitlementSnapshot: {
         plan: subscription.plan,
         status: subscription.status,
-        sourceDescription: 'backend-bootstrap',
+        sourceDescription: subscription.source ?? 'system',
         renewalDate: subscription.renews_at,
         lastValidatedAt: now
       },
-      quotaSnapshot: buildQuotaSnapshot(quotaPeriod),
-      transportMode: 'backendProxy',
+      quotaSnapshot: await buildQuotaSnapshot(quotaPeriod),
       availableProducts: PRODUCT_DEFINITIONS,
       syncState: 'syncedWithBackend',
       syncedAt: now
     };
   }
 
-  function buildQuotaSnapshot(quotaPeriod) {
+  async function buildQuotaSnapshot(quotaPeriod) {
     return {
       periodStart: quotaPeriod.period_start,
       periodEnd: quotaPeriod.period_end,
       usedUnits: quotaPeriod.units_used,
       bonusUnits: quotaPeriod.bonus_units ?? 0,
-      featureUsageCounts: featureUsageCountsForUser(quotaPeriod.user_id, quotaPeriod.period_start, quotaPeriod.period_end),
+      featureUsageCounts: await featureUsageCountsForUser(quotaPeriod.user_id, quotaPeriod.period_start, quotaPeriod.period_end),
       lastUpdatedAt: quotaPeriod.updated_at
     };
   }
 
-  function featureUsageCountsForUser(userID, periodStart, periodEnd) {
-    const rows = db.prepare(`
+  async function featureUsageCountsForUser(userID, periodStart, periodEnd) {
+    const rows = await db.prepare(`
       SELECT feature, COUNT(*) AS count
       FROM usage_ledger
       WHERE user_id = ? AND created_at >= ? AND created_at < ?
@@ -262,10 +273,10 @@ export function createMonetizationHelpers({
     };
   }
 
-  function buildUsageAnalytics(userID, latestQuotaPeriod) {
+  async function buildUsageAnalytics(userID, latestQuotaPeriod) {
     const trailingWindowStart = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)).toISOString();
 
-    const trailingUsage = db.prepare(`
+    const trailingUsage = await db.prepare(`
       SELECT
         COUNT(*) AS request_count,
         COALESCE(SUM(unit_cost), 0) AS units_used
@@ -273,14 +284,14 @@ export function createMonetizationHelpers({
       WHERE user_id = ? AND created_at >= ?
     `).get(userID, trailingWindowStart);
 
-    const trailingOutcomes = db.prepare(`
+    const trailingOutcomes = await db.prepare(`
       SELECT outcome, COUNT(*) AS count
       FROM ai_requests
       WHERE user_id = ? AND created_at >= ?
       GROUP BY outcome
     `).all(userID, trailingWindowStart);
 
-    const trailingFeatures = db.prepare(`
+    const trailingFeatures = await db.prepare(`
       SELECT feature, COUNT(*) AS request_count, COALESCE(SUM(unit_cost), 0) AS units_used
       FROM usage_ledger
       WHERE user_id = ? AND created_at >= ?
@@ -313,7 +324,7 @@ export function createMonetizationHelpers({
     return normalized.length > 0 ? normalized : null;
   }
 
-  function applyQuotaAdjustment({ userID, quotaPeriod, unitDelta, reason, createdBy }, now) {
+  async function applyQuotaAdjustment({ userID, quotaPeriod, unitDelta, reason, createdBy }, now) {
     const currentBonusUnits = quotaPeriod.bonus_units ?? 0;
     const nextBonusUnits = currentBonusUnits + unitDelta;
     const effectiveLimit = quotaPeriod.unit_limit == null ? null : Math.max(quotaPeriod.unit_limit + nextBonusUnits, 0);
@@ -325,13 +336,13 @@ export function createMonetizationHelpers({
       });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE quota_periods
       SET bonus_units = ?, updated_at = ?
       WHERE id = ?
     `).run(nextBonusUnits, now, quotaPeriod.id);
 
-    recordAdminAdjustment({
+    await recordAdminAdjustment({
       userID,
       quotaPeriodID: quotaPeriod.id,
       adjustmentType: unitDelta > 0 ? 'manual_credit' : 'manual_debit',
@@ -342,21 +353,21 @@ export function createMonetizationHelpers({
       createdBy
     }, now);
 
-    return db.prepare(`
+    return await db.prepare(`
       SELECT *
       FROM quota_periods
       WHERE id = ?
     `).get(quotaPeriod.id);
   }
 
-  function resetQuotaUsage({ userID, quotaPeriod, resetUsedUnitsTo, reason, createdBy }, now) {
-    db.prepare(`
+  async function resetQuotaUsage({ userID, quotaPeriod, resetUsedUnitsTo, reason, createdBy }, now) {
+    await db.prepare(`
       UPDATE quota_periods
       SET units_used = ?, updated_at = ?
       WHERE id = ?
     `).run(resetUsedUnitsTo, now, quotaPeriod.id);
 
-    recordAdminAdjustment({
+    await recordAdminAdjustment({
       userID,
       quotaPeriodID: quotaPeriod.id,
       adjustmentType: 'quota_reset',
@@ -367,14 +378,14 @@ export function createMonetizationHelpers({
       createdBy
     }, now);
 
-    return db.prepare(`
+    return await db.prepare(`
       SELECT *
       FROM quota_periods
       WHERE id = ?
     `).get(quotaPeriod.id);
   }
 
-  function recordAdminAdjustment({
+  async function recordAdminAdjustment({
     userID,
     quotaPeriodID,
     adjustmentType,
@@ -384,7 +395,7 @@ export function createMonetizationHelpers({
     reason,
     createdBy
   }, now) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO admin_adjustments (
         id, user_id, quota_period_id, adjustment_type, unit_delta,
         previous_units_used, new_units_used, reason, created_by, created_at

@@ -72,7 +72,6 @@ struct BillingSyncPayload: Codable, Equatable {
     var accountSnapshot: AppAccountSnapshot
     var entitlementSnapshot: EntitlementSnapshot
     var quotaSnapshot: AIQuotaSnapshot?
-    var transportMode: AITransportMode
     var availableProducts: [SubscriptionProductDefinition]
     var syncState: BillingSyncState
     var syncedAt: Date

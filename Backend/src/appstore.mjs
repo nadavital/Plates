@@ -19,8 +19,8 @@ export function createAppStoreHelpers({
     return PRODUCT_DEFINITIONS.find((candidate) => candidate.id === productID);
   }
 
-  function applyStoreKitSubscriptionState(userID, entitlements, now) {
-    const currentSubscription = ensureSubscription(userID, now);
+  async function applyStoreKitSubscriptionState(userID, entitlements, now) {
+    const currentSubscription = await ensureSubscription(userID, now);
 
     const activeEntitlements = entitlements
       .filter((entitlement) => entitlement.revocationDate == null)
@@ -33,17 +33,28 @@ export function createAppStoreHelpers({
 
     if (activeEntitlements.length === 0) {
       if (shouldPreserveNotificationManagedState(currentSubscription)) {
-        updateSubscriptionRecord(userID, {
+        await updateSubscriptionRecord(userID, {
           plan: currentSubscription.plan,
           status: currentSubscription.status,
+          source: subscriptionSource(currentSubscription),
+          sourceTransactionID: currentSubscription.source_transaction_id ?? null,
+          renewsAt: currentSubscription.renews_at ?? null,
+          expiresAt: currentSubscription.expires_at ?? null
+        }, now);
+      } else if (shouldPreserveNonStoreKitSubscription(currentSubscription)) {
+        await updateSubscriptionRecord(userID, {
+          plan: currentSubscription.plan,
+          status: currentSubscription.status,
+          source: subscriptionSource(currentSubscription),
           sourceTransactionID: currentSubscription.source_transaction_id ?? null,
           renewsAt: currentSubscription.renews_at ?? null,
           expiresAt: currentSubscription.expires_at ?? null
         }, now);
       } else {
-        updateSubscriptionRecord(userID, {
+        await updateSubscriptionRecord(userID, {
           plan: 'free',
           status: 'active',
+          source: 'system',
           sourceTransactionID: null,
           renewsAt: null,
           expiresAt: null
@@ -68,9 +79,10 @@ export function createAppStoreHelpers({
       return currentExpiry > bestExpiry ? current : best;
     }, null);
 
-    updateSubscriptionRecord(userID, {
+    await updateSubscriptionRecord(userID, {
       plan: selectedEntitlement.product.plan,
       status: statusForActiveEntitlement(currentSubscription, selectedEntitlement),
+      source: 'appStore',
       sourceTransactionID: String(selectedEntitlement.originalTransactionID ?? selectedEntitlement.transactionID),
       renewsAt: selectedEntitlement.expirationDate ?? null,
       expiresAt: selectedEntitlement.expirationDate ?? null
@@ -78,8 +90,37 @@ export function createAppStoreHelpers({
   }
 
   function shouldPreserveNotificationManagedState(subscription) {
-    return new Set(['gracePeriod', 'billingRetry', 'expired', 'refunded', 'revoked'])
+    return subscriptionSource(subscription) === 'appStore'
+      && new Set(['gracePeriod', 'billingRetry', 'expired', 'refunded', 'revoked'])
       .has(subscription?.status);
+  }
+
+  function shouldPreserveNonStoreKitSubscription(subscription) {
+    return Boolean(
+      subscription
+      && subscription.plan !== 'free'
+      && subscriptionSource(subscription) !== 'appStore'
+    );
+  }
+
+  function subscriptionSource(subscription) {
+    if (typeof subscription?.source === 'string' && subscription.source.length > 0) {
+      return subscription.source;
+    }
+
+    if (subscription?.source_transaction_id != null) {
+      return 'appStore';
+    }
+
+    if (subscription?.plan === 'developer') {
+      return 'developer';
+    }
+
+    if (subscription?.plan && subscription.plan !== 'free') {
+      return 'adminGrant';
+    }
+
+    return 'system';
   }
 
   function statusForActiveEntitlement(subscription, entitlement) {
@@ -100,8 +141,8 @@ export function createAppStoreHelpers({
     return subscription?.status === 'trial' ? 'trial' : 'active';
   }
 
-  function applyNotificationLifecycleUpdate(userID, { notification, transaction, renewalInfo }, now) {
-    const currentSubscription = ensureSubscription(userID, now);
+  async function applyNotificationLifecycleUpdate(userID, { notification, transaction, renewalInfo }, now) {
+    const currentSubscription = await ensureSubscription(userID, now);
     const status = deriveSubscriptionStatus(notification, renewalInfo, transaction, currentSubscription.status);
     const plan = deriveSubscriptionPlan(transaction, renewalInfo, currentSubscription.plan);
     const sourceTransactionID = String(
@@ -113,19 +154,20 @@ export function createAppStoreHelpers({
     const renewsAt = deriveRenewalDate(notification, renewalInfo, transaction, currentSubscription.renews_at);
     const expiresAt = deriveExpirationDate(notification, renewalInfo, transaction, currentSubscription.expires_at);
 
-    updateSubscriptionRecord(userID, {
+    await updateSubscriptionRecord(userID, {
       plan,
       status,
+      source: 'appStore',
       sourceTransactionID,
       renewsAt,
       expiresAt
     }, now);
   }
 
-  function reconcileUserSubscriptionFromLedger(userID, now) {
-    ensureSubscription(userID, now);
+  async function reconcileUserSubscriptionFromLedger(userID, now) {
+    await ensureSubscription(userID, now);
 
-    const transactions = db.prepare(`
+    const transactions = await db.prepare(`
       SELECT *
       FROM storekit_transactions
       WHERE user_id = ?
@@ -133,9 +175,9 @@ export function createAppStoreHelpers({
     `).all(userID);
 
     const entitlements = transactions.map(storeKitTransactionRowToEntitlement);
-    applyStoreKitSubscriptionState(userID, entitlements, now);
+    await applyStoreKitSubscriptionState(userID, entitlements, now);
 
-    const latestNotificationRow = db.prepare(`
+    const latestNotificationRow = await db.prepare(`
       SELECT *
       FROM app_store_notifications
       WHERE related_original_transaction_id IN (
@@ -154,11 +196,11 @@ export function createAppStoreHelpers({
       const signedRenewalInfo = notification.data?.signedRenewalInfo ?? null;
       const transaction = signedTransactionInfo ? verifyAndDecodeStoreKitTransaction(signedTransactionInfo) : null;
       const renewalInfo = signedRenewalInfo ? verifyAndDecodeAppStoreRenewalInfo(signedRenewalInfo) : null;
-      applyNotificationLifecycleUpdate(userID, { notification, transaction, renewalInfo }, now);
+      await applyNotificationLifecycleUpdate(userID, { notification, transaction, renewalInfo }, now);
       appliedNotificationType = notification.notificationType ?? null;
     }
 
-    const subscription = ensureSubscription(userID, now);
+    const subscription = await ensureSubscription(userID, now);
     return {
       userID,
       reconciledAt: now,
@@ -168,12 +210,12 @@ export function createAppStoreHelpers({
     };
   }
 
-  function updateSubscriptionRecord(userID, { plan, status, sourceTransactionID, renewsAt, expiresAt }, now) {
-    db.prepare(`
+  async function updateSubscriptionRecord(userID, { plan, status, source, sourceTransactionID, renewsAt, expiresAt }, now) {
+    await db.prepare(`
       UPDATE subscriptions
-      SET plan = ?, status = ?, source_transaction_id = ?, renews_at = ?, expires_at = ?, updated_at = ?
+      SET plan = ?, status = ?, source = ?, source_transaction_id = ?, renews_at = ?, expires_at = ?, updated_at = ?
       WHERE user_id = ?
-    `).run(plan, status, sourceTransactionID, renewsAt, expiresAt, now, userID);
+    `).run(plan, status, source, sourceTransactionID, renewsAt, expiresAt, now, userID);
   }
 
   function normalizeStoreKitEntitlement(value) {
@@ -205,8 +247,8 @@ export function createAppStoreHelpers({
     };
   }
 
-  function persistAppStoreNotification(notification, rawPayload, transaction, renewalInfo, now) {
-    db.prepare(`
+  async function persistAppStoreNotification(notification, rawPayload, transaction, renewalInfo, now) {
+    await db.prepare(`
       INSERT INTO app_store_notifications (
         id, notification_uuid, notification_type, subtype, environment, related_transaction_id,
         related_original_transaction_id, raw_payload, created_at, processed_at
@@ -237,8 +279,8 @@ export function createAppStoreHelpers({
     );
   }
 
-  function findUserIDForStoreKitTransaction(transaction) {
-    const byOriginalTransaction = db.prepare(`
+  async function findUserIDForStoreKitTransaction(transaction) {
+    const byOriginalTransaction = await db.prepare(`
       SELECT user_id
       FROM storekit_transactions
       WHERE original_transaction_id = ?
@@ -250,7 +292,7 @@ export function createAppStoreHelpers({
       return byOriginalTransaction.user_id;
     }
 
-    const bySubscription = db.prepare(`
+    const bySubscription = await db.prepare(`
       SELECT user_id
       FROM subscriptions
       WHERE source_transaction_id = ?
@@ -261,7 +303,7 @@ export function createAppStoreHelpers({
       return bySubscription.user_id;
     }
 
-    const byTransaction = db.prepare(`
+    const byTransaction = await db.prepare(`
       SELECT user_id
       FROM storekit_transactions
       WHERE transaction_id = ?
@@ -272,12 +314,12 @@ export function createAppStoreHelpers({
     return byTransaction?.user_id ?? null;
   }
 
-  function findUserIDForOriginalTransaction(originalTransactionId) {
+  async function findUserIDForOriginalTransaction(originalTransactionId) {
     if (!originalTransactionId) {
       return null;
     }
 
-    const byTransaction = db.prepare(`
+    const byTransaction = await db.prepare(`
       SELECT user_id
       FROM storekit_transactions
       WHERE original_transaction_id = ?
@@ -289,7 +331,7 @@ export function createAppStoreHelpers({
       return byTransaction.user_id;
     }
 
-    const bySubscription = db.prepare(`
+    const bySubscription = await db.prepare(`
       SELECT user_id
       FROM subscriptions
       WHERE source_transaction_id = ?
@@ -494,14 +536,14 @@ export function createAppStoreHelpers({
     }
   }
 
-  function persistStoreKitTransactions(userID, transactions, signedTransactions, now) {
-    transactions.forEach((transaction, index) => {
+  async function persistStoreKitTransactions(userID, transactions, signedTransactions, now) {
+    for (const [index, transaction] of transactions.entries()) {
       const rawJWS = transaction.rawJWS ?? signedTransactions[index] ?? null;
       if (!rawJWS) {
-        return;
+        continue;
       }
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO storekit_transactions (
           id, user_id, environment, product_id, transaction_id, original_transaction_id, purchase_date,
           expires_date, revocation_date, signed_date, raw_jws, created_at, updated_at
@@ -531,7 +573,7 @@ export function createAppStoreHelpers({
         now,
         now
       );
-    });
+    }
   }
 
   function verifyAndDecodeAppStoreNotification(compactJWS) {

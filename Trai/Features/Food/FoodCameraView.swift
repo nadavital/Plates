@@ -44,7 +44,6 @@ struct FoodCameraView: View {
     }
 
     private var requiresAuthenticatedAccountForFoodAI: Bool {
-        monetizationService?.aiTransportMode == .backendProxy &&
         accountSessionService?.isAuthenticated != true
     }
 

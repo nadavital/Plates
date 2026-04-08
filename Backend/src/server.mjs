@@ -11,32 +11,34 @@ import {
   PRODUCT_DEFINITIONS
 } from './config.mjs';
 import { createDatabase } from './database.mjs';
+import { createAIProvider } from './ai-provider.mjs';
 import { createMonetizationHelpers } from './monetization.mjs';
 import { createAuthHelpers } from './auth.mjs';
 import { createAppStoreHelpers } from './appstore.mjs';
 import { createRouteHandlers } from './routes.mjs';
 
 const config = createConfig();
-
-const trustedAppStoreRoots = loadTrustedAppStoreRoots(config);
-const db = createDatabase(config.databasePath);
 validateConfig(config);
 
-function buildAdminUserInspection(userID) {
-  const user = db.prepare(`
+const trustedAppStoreRoots = loadTrustedAppStoreRoots(config);
+const db = await createDatabase(config);
+const aiProvider = createAIProvider(config, HttpError);
+
+async function buildAdminUserInspection(userID) {
+  const user = await db.prepare(`
     SELECT id, created_at, updated_at, status
     FROM users
     WHERE id = ?
   `).get(userID);
 
-  const identities = db.prepare(`
+  const identities = await db.prepare(`
     SELECT provider, provider_user_id, email, display_name, created_at, updated_at
     FROM auth_identities
     WHERE user_id = ?
     ORDER BY created_at ASC
   `).all(userID);
 
-  const sessions = db.prepare(`
+  const sessions = await db.prepare(`
     SELECT id, installation_id, app_account_token, expires_at, created_at, updated_at
     FROM sessions
     WHERE user_id = ?
@@ -44,13 +46,13 @@ function buildAdminUserInspection(userID) {
     LIMIT 10
   `).all(userID);
 
-  const subscription = db.prepare(`
+  const subscription = await db.prepare(`
     SELECT *
     FROM subscriptions
     WHERE user_id = ?
   `).get(userID);
 
-  const latestQuotaPeriod = db.prepare(`
+  const latestQuotaPeriod = await db.prepare(`
     SELECT *
     FROM quota_periods
     WHERE user_id = ?
@@ -58,7 +60,7 @@ function buildAdminUserInspection(userID) {
     LIMIT 1
   `).get(userID);
 
-  const recentUsage = db.prepare(`
+  const recentUsage = await db.prepare(`
     SELECT feature, unit_cost, created_at
     FROM usage_ledger
     WHERE user_id = ?
@@ -66,7 +68,7 @@ function buildAdminUserInspection(userID) {
     LIMIT 20
   `).all(userID);
 
-  const recentTransactions = db.prepare(`
+  const recentTransactions = await db.prepare(`
     SELECT environment, product_id, transaction_id, original_transaction_id, purchase_date, expires_date, revocation_date, signed_date, updated_at
     FROM storekit_transactions
     WHERE user_id = ?
@@ -74,7 +76,7 @@ function buildAdminUserInspection(userID) {
     LIMIT 20
   `).all(userID);
 
-  const recentNotifications = db.prepare(`
+  const recentNotifications = await db.prepare(`
     SELECT notification_uuid, notification_type, subtype, environment, related_transaction_id, related_original_transaction_id, processed_at
     FROM app_store_notifications
     WHERE related_original_transaction_id IN (
@@ -86,7 +88,7 @@ function buildAdminUserInspection(userID) {
     LIMIT 20
   `).all(userID);
 
-  const recentAdjustments = db.prepare(`
+  const recentAdjustments = await db.prepare(`
     SELECT adjustment_type, unit_delta, previous_units_used, new_units_used, reason, created_by, created_at
     FROM admin_adjustments
     WHERE user_id = ?
@@ -101,7 +103,7 @@ function buildAdminUserInspection(userID) {
     subscription,
     latestQuotaPeriod,
     quotaStatus: latestQuotaPeriod ? summarizeQuotaPeriod(latestQuotaPeriod) : null,
-    usageAnalytics: buildUsageAnalytics(userID, latestQuotaPeriod),
+    usageAnalytics: await buildUsageAnalytics(userID, latestQuotaPeriod),
     recentUsage,
     recentTransactions,
     recentNotifications,
@@ -357,6 +359,7 @@ let appStoreHelpers;
 authHelpers = createAuthHelpers({
   db,
   config,
+  aiProvider,
   HttpError,
   createID,
   hashToken,

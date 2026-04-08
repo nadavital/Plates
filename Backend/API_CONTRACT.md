@@ -71,7 +71,6 @@ Response:
       "featureUsageCounts": {},
       "lastUpdatedAt": "2026-04-02T16:00:00Z"
     },
-    "transportMode": "backendProxy",
     "availableProducts": [],
     "syncState": "syncedWithBackend",
     "syncedAt": "2026-04-02T16:00:00Z"

@@ -12,6 +12,7 @@ final class BillingService {
         static let availableProducts = "billing.availableProducts.v1"
         #if DEBUG
         static let debugPlanOverride = "billing.debugPlanOverride.v1"
+        static let debugPlanPreviewEnabled = "billing.debugPlanPreviewEnabled.v1"
         #endif
     }
 
@@ -46,6 +47,7 @@ final class BillingService {
     private(set) var lastStoreKitRefreshAt: Date?
     #if DEBUG
     private(set) var debugPlanOverride: SubscriptionPlan?
+    private(set) var isDebugPlanPreviewEnabled: Bool
     #endif
 
     private init(
@@ -83,6 +85,7 @@ final class BillingService {
         } else {
             self.debugPlanOverride = nil
         }
+        self.isDebugPlanPreviewEnabled = defaults.bool(forKey: DefaultsKey.debugPlanPreviewEnabled)
         #endif
 
         startTransactionObservationIfNeeded()
@@ -347,7 +350,6 @@ final class BillingService {
         applyResolvedMonetizationState(
             entitlementSnapshot: payload.entitlementSnapshot,
             quotaSnapshot: payload.quotaSnapshot,
-            transportMode: payload.transportMode,
             now: payload.syncedAt
         )
 
@@ -371,7 +373,6 @@ final class BillingService {
         applyResolvedMonetizationState(
             entitlementSnapshot: Self.localFallbackEntitlement(now: now),
             quotaSnapshot: Self.localFallbackQuotaSnapshot(now: now),
-            transportMode: .directGemini,
             now: now
         )
 
@@ -395,7 +396,6 @@ final class BillingService {
         applyResolvedMonetizationState(
             entitlementSnapshot: Self.localFallbackEntitlement(now: now),
             quotaSnapshot: Self.localFallbackQuotaSnapshot(now: now),
-            transportMode: .directGemini,
             now: now
         )
 
@@ -437,20 +437,12 @@ final class BillingService {
         persistSyncState()
     }
 
-    func setDebugTransportMode(_ transportMode: AITransportMode) {
-        applyResolvedMonetizationState(
-            entitlementSnapshot: monetizationService.entitlementSnapshot,
-            quotaSnapshot: monetizationService.quotaSnapshot,
-            transportMode: transportMode
-        )
-    }
-
     func applyDebugEntitlement(
         plan: SubscriptionPlan,
-        status: SubscriptionStatus = .active,
-        transportMode: AITransportMode? = nil
+        status: SubscriptionStatus = .active
     ) {
         debugPlanOverride = plan
+        isDebugPlanPreviewEnabled = true
         persistDebugPlanOverride()
 
         let now = Date()
@@ -464,12 +456,26 @@ final class BillingService {
                 lastValidatedAt: now
             ),
             quotaSnapshot: nil,
-            transportMode: transportMode ?? monetizationService.aiTransportMode,
             availableProducts: availableProducts,
             syncState: syncState,
             syncedAt: now
         )
         applyRemotePayload(payload)
+    }
+
+    func setDebugPlanPreviewEnabled(_ isEnabled: Bool) {
+        isDebugPlanPreviewEnabled = isEnabled
+        if isEnabled, debugPlanOverride == nil {
+            debugPlanOverride = monetizationService.currentPlan
+        }
+        persistDebugPlanOverride()
+
+        if !isEnabled {
+            applyResolvedMonetizationState(
+                entitlementSnapshot: monetizationService.entitlementSnapshot,
+                quotaSnapshot: monetizationService.quotaSnapshot
+            )
+        }
     }
     #endif
 
@@ -547,7 +553,6 @@ final class BillingService {
                 lastValidatedAt: now
             ),
             quotaSnapshot: nil,
-            transportMode: monetizationService.aiTransportMode,
             now: now
         )
 
@@ -584,7 +589,6 @@ final class BillingService {
     private func applyResolvedMonetizationState(
         entitlementSnapshot: EntitlementSnapshot,
         quotaSnapshot: AIQuotaSnapshot? = nil,
-        transportMode: AITransportMode? = nil,
         now: Date = Date()
     ) {
         monetizationService.applyRemoteState(
@@ -592,8 +596,7 @@ final class BillingService {
                 entitlementSnapshot,
                 now: now
             ),
-            quotaSnapshot: quotaSnapshot,
-            transportMode: transportMode
+            quotaSnapshot: quotaSnapshot
         )
     }
 
@@ -602,11 +605,12 @@ final class BillingService {
         now: Date
     ) -> EntitlementSnapshot {
         #if DEBUG
+        guard isDebugPlanPreviewEnabled else { return entitlementSnapshot }
         guard let debugPlanOverride else { return entitlementSnapshot }
         return EntitlementSnapshot(
             plan: debugPlanOverride,
             status: .active,
-            sourceDescription: "debug-billing-service",
+            sourceDescription: "debug-preview-override",
             renewalDate: nil,
             lastValidatedAt: now
         )
@@ -622,6 +626,7 @@ final class BillingService {
         } else {
             defaults.removeObject(forKey: DefaultsKey.debugPlanOverride)
         }
+        defaults.set(isDebugPlanPreviewEnabled, forKey: DefaultsKey.debugPlanPreviewEnabled)
     }
     #endif
 

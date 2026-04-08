@@ -147,7 +147,6 @@ struct ChatView: View {
     }
 
     private var requiresAuthenticatedAccountForTraiChat: Bool {
-        monetizationService?.aiTransportMode == .backendProxy &&
         accountSessionService?.isAuthenticated != true
     }
 

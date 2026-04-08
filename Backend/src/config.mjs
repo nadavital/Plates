@@ -17,13 +17,25 @@ export function createConfig(env = process.env) {
         ? 'localDevelopment'
         : 'staging';
 
+  const databaseURL = env.TRAI_DATABASE_URL ?? env.DATABASE_URL ?? '';
+  const databaseDriver =
+    String(env.TRAI_DATABASE_DRIVER ?? (databaseURL ? 'postgres' : 'sqlite')).trim() === 'postgres'
+      ? 'postgres'
+      : 'sqlite';
+
   return {
     port: Number.parseInt(env.PORT ?? '8789', 10),
     host: env.HOST ?? '127.0.0.1',
     environment,
+    aiProvider: String(env.TRAI_AI_PROVIDER ?? env.AI_PROVIDER ?? 'gemini').trim() === 'openai' ? 'openai' : 'gemini',
+    databaseDriver,
     databasePath: env.TRAI_DB_PATH ?? defaultDatabasePath,
+    databaseURL,
+    databaseSSLMode: env.TRAI_DATABASE_SSL_MODE ?? env.PGSSLMODE ?? 'disable',
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiModel: env.GEMINI_MODEL ?? 'gemini-3-flash-preview',
+    openAIApiKey: env.OPENAI_API_KEY ?? '',
+    openAIModel: env.OPENAI_MODEL ?? 'gpt-5-mini',
     allowDevAppleBypass: env.ALLOW_DEV_APPLE_BYPASS === 'true',
     appleIssuer: env.APPLE_EXPECTED_ISSUER ?? 'https://appleid.apple.com',
     appleExpectedAudiences: (env.APPLE_EXPECTED_AUDIENCES ?? env.APPLE_AUDIENCE ?? 'Nadav.Trai')
@@ -63,6 +75,14 @@ export function createConfig(env = process.env) {
 export function validateConfig(config) {
   if (config.environment === 'production' && config.allowDevAppleBypass) {
     throw new Error('ALLOW_DEV_APPLE_BYPASS must never be enabled in production.');
+  }
+
+  if (config.databaseDriver === 'postgres' && !config.databaseURL) {
+    throw new Error('TRAI_DATABASE_URL (or DATABASE_URL) must be configured when using postgres.');
+  }
+
+  if (config.aiProvider === 'openai' && !config.openAIApiKey) {
+    throw new Error('OPENAI_API_KEY must be configured when TRAI_AI_PROVIDER=openai.');
   }
 
   if (config.appleExpectedAudiences.length === 0) {

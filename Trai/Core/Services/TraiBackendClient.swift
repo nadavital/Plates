@@ -26,6 +26,11 @@ enum BackendClientError: LocalizedError {
 final class TraiBackendClient {
     static let shared = TraiBackendClient()
 
+    private enum InfoKey {
+        static let stagingBaseURL = "TRAIBackendStagingBaseURL"
+        static let productionBaseURL = "TRAIBackendProductionBaseURL"
+    }
+
     private let session: URLSession
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -73,9 +78,9 @@ final class TraiBackendClient {
             }
             return URL(string: "http://127.0.0.1:8789")
         case .staging:
-            return URL(string: "https://staging-api.trai.app")
+            return configuredURL(forInfoKey: InfoKey.stagingBaseURL, fallback: "https://staging-api.trai.app")
         case .production:
-            return URL(string: "https://api.trai.app")
+            return configuredURL(forInfoKey: InfoKey.productionBaseURL, fallback: "https://api.trai.app")
         }
     }
 
@@ -220,6 +225,15 @@ final class TraiBackendClient {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
+    }
+
+    private func configuredURL(forInfoKey key: String, fallback: String) -> URL? {
+        if let configuredValue = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+           let url = URL(string: configuredValue),
+           !configuredValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return url
+        }
+        return URL(string: fallback)
     }
 
     private static func decodeBackendDate(_ string: String) -> Date? {

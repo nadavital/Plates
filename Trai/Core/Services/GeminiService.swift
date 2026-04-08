@@ -22,7 +22,6 @@ enum ThinkingLevel: String {
 /// Service for interacting with Google's Gemini API
 @MainActor @Observable
 final class GeminiService {
-    let baseURL = "https://generativelanguage.googleapis.com/v1beta"
     let model = "gemini-3-flash-preview"
     let appAccountService = AppAccountService.shared
     let accountSessionService = AccountSessionService.shared
@@ -104,11 +103,6 @@ final class GeminiService {
 
     func completeAIRequest(_ ticket: AIRequestTicket) {
         guard removeAIRequest(id: ticket.id) != nil else { return }
-
-        // Backend-proxied requests are already metered server-side and reflected
-        // in the next synced quota snapshot.
-        guard monetizationService.aiTransportMode == .directGemini else { return }
-        monetizationService.recordSuccessfulAIRequest(ticket.feature)
     }
 
     func cancelAIRequest(_ ticket: AIRequestTicket) {
@@ -148,39 +142,26 @@ final class GeminiService {
         action: String,
         streaming: Bool
     ) throws -> URL {
-        switch monetizationService.aiTransportMode {
-        case .directGemini:
-            let path = streaming
-                ? "\(baseURL)/models/\(model):\(action)?alt=sse&key=\(Secrets.geminiAPIKey)"
-                : "\(baseURL)/models/\(model):\(action)?key=\(Secrets.geminiAPIKey)"
-            guard let url = URL(string: path) else {
-                throw GeminiError.invalidResponse
-            }
-            return url
-        case .backendProxy:
-            guard accountSessionService.isAuthenticated else {
-                let message = "Sign in is required before using server-backed AI features."
-                lastError = message
-                throw GeminiError.accessDenied(message)
-            }
+        guard accountSessionService.isAuthenticated else {
+            let message = "Sign in is required before using server-backed AI features."
+            lastError = message
+            throw GeminiError.accessDenied(message)
+        }
 
-            do {
-                return try backendClient.proxyURL(
-                    action: action,
-                    streaming: streaming,
-                    environment: appAccountService.backendEnvironment,
-                    customBackendBaseURL: appAccountService.currentSnapshot.customBackendBaseURL
-                )
-            } catch {
-                lastError = error.localizedDescription
-                throw GeminiError.accessDenied(error.localizedDescription)
-            }
+        do {
+            return try backendClient.proxyURL(
+                action: action,
+                streaming: streaming,
+                environment: appAccountService.backendEnvironment,
+                customBackendBaseURL: appAccountService.currentSnapshot.customBackendBaseURL
+            )
+        } catch {
+            lastError = error.localizedDescription
+            throw GeminiError.accessDenied(error.localizedDescription)
         }
     }
 
     private func ensureBackendSessionIfNeeded() async throws {
-        guard monetizationService.aiTransportMode == .backendProxy else { return }
-
         guard accountSessionService.isAuthenticated else {
             let message = "Sign in is required before using server-backed AI features."
             lastError = message
@@ -207,8 +188,6 @@ final class GeminiService {
 
     func configureRequest(_ request: inout URLRequest) async throws {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        guard monetizationService.aiTransportMode == .backendProxy else { return }
 
         try await ensureBackendSessionIfNeeded()
 

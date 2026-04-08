@@ -83,18 +83,6 @@ enum SubscriptionStatus: String, Codable, CaseIterable {
     }
 }
 
-enum AITransportMode: String, Codable, CaseIterable {
-    case directGemini
-    case backendProxy
-
-    var displayName: String {
-        switch self {
-        case .directGemini: "Direct Gemini"
-        case .backendProxy: "Backend Proxy"
-        }
-    }
-}
-
 enum AIFeature: String, Codable, CaseIterable, Identifiable {
     case coachChat
     case agentCoachChat

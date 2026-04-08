@@ -124,8 +124,13 @@ extension OnboardingView {
                     let memory = parsed.toCoachMemory(source: "onboarding")
                     modelContext.insert(memory)
                 }
-
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                    NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+                } catch {
+                    modelContext.rollback()
+                    print("Failed to persist onboarding memories: \(error)")
+                }
             } catch {
                 // Fall back to simple memory creation if AI parsing fails
                 print("Failed to parse notes with AI, using fallback: \(error)")
@@ -145,6 +150,12 @@ extension OnboardingView {
             importance: 4
         )
         modelContext.insert(memory)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+        } catch {
+            modelContext.rollback()
+            print("Failed to persist fallback onboarding memory: \(error)")
+        }
     }
 }

@@ -70,7 +70,6 @@ struct WorkoutPlanChatFlow: View {
     }
 
     private var requiresAuthenticatedAccountForWorkoutAI: Bool {
-        monetizationService?.aiTransportMode == .backendProxy &&
         accountSessionService?.isAuthenticated != true
     }
 

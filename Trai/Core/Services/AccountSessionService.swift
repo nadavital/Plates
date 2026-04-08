@@ -95,6 +95,11 @@ final class AccountSessionService {
     func configureAppleSignInRequest(_ request: ASAuthorizationAppleIDRequest) {
         let rawNonce = Self.randomNonce()
         setPendingAppleNonce(rawNonce)
+        lastErrorMessage = nil
+        if sessionSnapshot == nil {
+            authState = .anonymous
+        }
+        persist()
         request.requestedScopes = [.fullName, .email]
         request.nonce = Self.sha256(rawNonce)
     }
@@ -128,7 +133,7 @@ final class AccountSessionService {
         let operationGeneration = sessionOperationGeneration
 
         do {
-            guard let rawNonce = pendingAppleNonce else {
+            guard let rawNonce = currentPendingAppleNonce() else {
                 authState = .failed
                 lastErrorMessage = "Apple sign-in session is missing its nonce. Please try again."
                 return
@@ -265,6 +270,14 @@ final class AccountSessionService {
     }
 
     func handleAuthorizationFailure(_ error: Error) {
+        if Self.isUserCancelledAuthorization(error) {
+            clearPendingAppleNonce()
+            lastErrorMessage = nil
+            authState = sessionSnapshot == nil ? .anonymous : .authenticated
+            persist()
+            return
+        }
+
         authState = .failed
         lastErrorMessage = error.localizedDescription
         clearPendingAppleNonce()
@@ -276,7 +289,9 @@ final class AccountSessionService {
         sessionSnapshot = nil
         authState = .anonymous
         lastErrorMessage = nil
-        clearPendingAppleNonce()
+        if currentPendingAppleNonce() == nil {
+            clearPendingAppleNonce()
+        }
 
         var snapshot = appAccountService.currentSnapshot
         snapshot.identityMode = .anonymousDevice
@@ -304,6 +319,20 @@ final class AccountSessionService {
     private func clearPendingAppleNonce() {
         pendingAppleNonce = nil
         defaults.removeObject(forKey: DefaultsKey.pendingAppleNonce)
+    }
+
+    private func currentPendingAppleNonce() -> String? {
+        if let pendingAppleNonce, !pendingAppleNonce.isEmpty {
+            return pendingAppleNonce
+        }
+
+        if let storedNonce = defaults.string(forKey: DefaultsKey.pendingAppleNonce),
+           !storedNonce.isEmpty {
+            pendingAppleNonce = storedNonce
+            return storedNonce
+        }
+
+        return nil
     }
 
     private func restoreSessionBackedAuthState(after error: Error) {
@@ -348,5 +377,16 @@ private extension AccountSessionService {
     static func sha256(_ value: String) -> String {
         let digest = SHA256.hash(data: Data(value.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func isUserCancelledAuthorization(_ error: Error) -> Bool {
+        if let authorizationError = error as? ASAuthorizationError,
+           authorizationError.code == .canceled {
+            return true
+        }
+
+        let nsError = error as NSError
+        return nsError.domain == ASAuthorizationError.errorDomain
+            && nsError.code == ASAuthorizationError.canceled.rawValue
     }
 }

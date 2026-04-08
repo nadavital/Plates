@@ -116,8 +116,14 @@ struct SavedMemoriesSheet: View {
 
     private func deleteMemory(_ memory: CoachMemory) {
         memory.isActive = false
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+            HapticManager.lightTap()
+        } catch {
+            modelContext.rollback()
+            memory.isActive = true
+        }
         fetchMemories()
-        HapticManager.lightTap()
     }
 }

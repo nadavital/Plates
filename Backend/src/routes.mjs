@@ -1,6 +1,7 @@
 export function createRouteHandlers({
   db,
   config,
+  aiProvider,
   HttpError,
   readJson,
   sendJson,
@@ -44,6 +45,7 @@ export function createRouteHandlers({
   FEATURE_COSTS
 }) {
   const activeAIRequestsByUser = new Map();
+  const allowedAdminSubscriptionSources = new Set(['system', 'adminGrant', 'promo', 'developer']);
 
   async function routeRequest(req, res) {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
@@ -52,7 +54,10 @@ export function createRouteHandlers({
       return sendJson(res, 200, {
         ok: true,
         environment: config.environment,
+        aiProvider: aiProvider.name,
+        hasProviderKey: aiProvider.isConfigured(),
         hasGeminiKey: Boolean(config.geminiApiKey),
+        hasOpenAIKey: Boolean(config.openAIApiKey),
         allowDevAppleBypass: config.allowDevAppleBypass
       });
     }
@@ -87,6 +92,10 @@ export function createRouteHandlers({
 
     if (req.method === 'POST' && url.pathname === '/v1/admin/reconcile-subscription') {
       return handleAdminReconcileSubscription(req, res);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/admin/subscription-override') {
+      return handleAdminSubscriptionOverride(req, res);
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/admin/quota-adjustment') {
@@ -146,9 +155,9 @@ export function createRouteHandlers({
     }
 
     const now = isoNow();
-    const user = findOrCreateUserFromApple(normalizedBody, now);
-    const session = createSession(user.id, body.installationID, body.appAccountToken, now);
-    const billing = buildBillingPayload(user.id, body.installationID, body.appAccountToken, now);
+    const user = await findOrCreateUserFromApple(normalizedBody, now);
+    const session = await createSession(user.id, body.installationID, body.appAccountToken, now);
+    const billing = await buildBillingPayload(user.id, body.installationID, body.appAccountToken, now);
 
     sendJson(res, 200, {
       session: buildSessionSnapshot(session, user, now),
@@ -161,7 +170,7 @@ export function createRouteHandlers({
     assertRequired(body, ['refreshToken', 'appAccountToken']);
 
     const refreshTokenHash = hashToken(body.refreshToken);
-    const row = db.prepare(`
+    const row = await db.prepare(`
       SELECT
         sessions.id,
         sessions.user_id,
@@ -183,8 +192,8 @@ export function createRouteHandlers({
     }
 
     const now = isoNow();
-    const tokens = rotateSessionTokens(row.id, now);
-    const identity = db.prepare(`
+    const tokens = await rotateSessionTokens(row.id, now);
+    const identity = await db.prepare(`
       SELECT email, display_name
       FROM auth_identities
       WHERE user_id = ?
@@ -206,7 +215,7 @@ export function createRouteHandlers({
       expires_at: tokens.expiresAt
     };
 
-    const billing = buildBillingPayload(row.user_id, row.installation_id ?? 'unknown-installation', row.app_account_token, now);
+    const billing = await buildBillingPayload(row.user_id, row.installation_id ?? 'unknown-installation', row.app_account_token, now);
     sendJson(res, 200, {
       session: buildSessionSnapshot(session, user, now),
       billing
@@ -214,9 +223,9 @@ export function createRouteHandlers({
   }
 
   async function handleBootstrap(req, res) {
-    const auth = requireSession(req);
+    const auth = await requireSession(req);
     const now = isoNow();
-    const billing = buildBillingPayload(
+    const billing = await buildBillingPayload(
       auth.user.id,
       auth.session.installation_id ?? 'unknown-installation',
       auth.session.app_account_token,
@@ -230,8 +239,8 @@ export function createRouteHandlers({
   }
 
   async function handleBillingStatus(req, res) {
-    const auth = requireSession(req);
-    const billing = buildBillingPayload(
+    const auth = await requireSession(req);
+    const billing = await buildBillingPayload(
       auth.user.id,
       auth.session.installation_id ?? 'unknown-installation',
       auth.session.app_account_token,
@@ -245,11 +254,12 @@ export function createRouteHandlers({
 
     const lookup = resolveAdminLookup({
       userID: url.searchParams.get('userID'),
+      email: url.searchParams.get('email'),
       appAccountToken: url.searchParams.get('appAccountToken'),
       originalTransactionId: url.searchParams.get('originalTransactionId')
     });
 
-    const userID = resolveAdminUserID(lookup);
+    const userID = await resolveAdminUserID(lookup);
     if (!userID) {
       throw new HttpError(404, {
         error: 'user_not_found',
@@ -257,7 +267,7 @@ export function createRouteHandlers({
       });
     }
 
-    sendJson(res, 200, buildAdminUserInspection(userID));
+    sendJson(res, 200, await buildAdminUserInspection(userID));
   }
 
   async function handleAdminReconcileSubscription(req, res) {
@@ -266,11 +276,12 @@ export function createRouteHandlers({
 
     const lookup = resolveAdminLookup({
       userID: body.userID,
+      email: body.email,
       appAccountToken: body.appAccountToken,
       originalTransactionId: body.originalTransactionId
     });
 
-    const userID = resolveAdminUserID(lookup);
+    const userID = await resolveAdminUserID(lookup);
     if (!userID) {
       throw new HttpError(404, {
         error: 'user_not_found',
@@ -278,8 +289,117 @@ export function createRouteHandlers({
       });
     }
 
-    const summary = reconcileUserSubscriptionFromLedger(userID, isoNow());
+    const summary = await reconcileUserSubscriptionFromLedger(userID, isoNow());
     sendJson(res, 200, summary);
+  }
+
+  async function handleAdminSubscriptionOverride(req, res) {
+    requireAdmin(req);
+    const body = await readJson(req);
+
+    const lookup = resolveAdminLookup({
+      userID: body.userID,
+      email: body.email,
+      appAccountToken: body.appAccountToken,
+      originalTransactionId: body.originalTransactionId
+    });
+
+    const userID = await resolveAdminUserID(lookup);
+    if (!userID) {
+      throw new HttpError(404, {
+        error: 'user_not_found',
+        message: 'No user matched the provided lookup.'
+      });
+    }
+
+    const plan = String(body.plan ?? '').trim();
+    const allowedPlans = new Set(['free', 'pro', 'developer']);
+    if (!allowedPlans.has(plan)) {
+      throw new HttpError(400, {
+        error: 'invalid_plan',
+        message: 'plan must be one of: free, pro, developer.'
+      });
+    }
+
+    const status = String(body.status ?? 'active').trim();
+    const allowedStatuses = new Set(['active', 'trial', 'gracePeriod', 'billingRetry', 'expired', 'refunded', 'revoked']);
+    if (!allowedStatuses.has(status)) {
+      throw new HttpError(400, {
+        error: 'invalid_status',
+        message: 'status is not recognized.'
+      });
+    }
+
+    const source = normalizeAdminSubscriptionSource(body.source, plan);
+    if (!allowedAdminSubscriptionSources.has(source)) {
+      throw new HttpError(400, {
+        error: 'invalid_source',
+        message: 'source must be one of: system, adminGrant, promo, developer.'
+      });
+    }
+
+    const now = isoNow();
+    const currentSubscription = await ensureSubscription(userID, now);
+    const reason = normalizeAdminReason(body.reason) ?? 'manual subscription override';
+
+    await db.prepare(`
+      UPDATE subscriptions
+      SET plan = ?, status = ?, source = ?, source_transaction_id = ?, renews_at = ?, expires_at = ?, updated_at = ?
+      WHERE user_id = ?
+    `).run(
+      plan,
+      status,
+      source,
+      null,
+      body.renewsAt ?? currentSubscription.renews_at ?? null,
+      body.expiresAt ?? currentSubscription.expires_at ?? null,
+      now,
+      userID
+    );
+
+    const updatedSubscription = await ensureSubscription(userID, now);
+    const quotaPeriod = await ensureQuotaPeriod(userID, updatedSubscription.plan, now);
+
+    await db.prepare(`
+      INSERT INTO admin_adjustments (
+        id, user_id, quota_period_id, adjustment_type, unit_delta, previous_units_used, new_units_used, reason, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      `adm_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`,
+      userID,
+      quotaPeriod?.id ?? null,
+      'subscription_override',
+      0,
+      quotaPeriod?.units_used ?? null,
+      quotaPeriod?.units_used ?? null,
+      `plan ${currentSubscription.plan}/${currentSubscription.status}/${currentSubscription.source ?? 'system'} -> ${updatedSubscription.plan}/${updatedSubscription.status}/${updatedSubscription.source ?? source}; ${reason}`,
+      body.createdBy ?? 'admin',
+      now
+    );
+
+    sendJson(res, 200, {
+      userID,
+      overriddenAt: now,
+      subscription: updatedSubscription,
+      quotaSnapshot: await buildQuotaSnapshot(quotaPeriod),
+      analytics: await buildUsageAnalytics(userID, quotaPeriod)
+    });
+  }
+
+  function normalizeAdminSubscriptionSource(value, plan) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+
+    if (plan === 'free') {
+      return 'system';
+    }
+
+    if (plan === 'developer') {
+      return 'developer';
+    }
+
+    return 'adminGrant';
   }
 
   async function handleAdminQuotaAdjustment(req, res) {
@@ -288,11 +408,12 @@ export function createRouteHandlers({
 
     const lookup = resolveAdminLookup({
       userID: body.userID,
+      email: body.email,
       appAccountToken: body.appAccountToken,
       originalTransactionId: body.originalTransactionId
     });
 
-    const userID = resolveAdminUserID(lookup);
+    const userID = await resolveAdminUserID(lookup);
     if (!userID) {
       throw new HttpError(404, {
         error: 'user_not_found',
@@ -309,11 +430,11 @@ export function createRouteHandlers({
     }
 
     const now = isoNow();
-    const subscription = ensureSubscription(userID, now);
-    const quotaPeriod = ensureQuotaPeriod(userID, subscription.plan, now);
+    const subscription = await ensureSubscription(userID, now);
+    const quotaPeriod = await ensureQuotaPeriod(userID, subscription.plan, now);
     const reason = normalizeAdminReason(body.reason);
 
-    const updatedQuotaPeriod = applyQuotaAdjustment({
+    const updatedQuotaPeriod = await applyQuotaAdjustment({
       userID,
       quotaPeriod,
       unitDelta,
@@ -324,8 +445,8 @@ export function createRouteHandlers({
     sendJson(res, 200, {
       userID,
       adjustedAt: now,
-      quotaSnapshot: buildQuotaSnapshot(updatedQuotaPeriod),
-      analytics: buildUsageAnalytics(userID, updatedQuotaPeriod)
+      quotaSnapshot: await buildQuotaSnapshot(updatedQuotaPeriod),
+      analytics: await buildUsageAnalytics(userID, updatedQuotaPeriod)
     });
   }
 
@@ -335,11 +456,12 @@ export function createRouteHandlers({
 
     const lookup = resolveAdminLookup({
       userID: body.userID,
+      email: body.email,
       appAccountToken: body.appAccountToken,
       originalTransactionId: body.originalTransactionId
     });
 
-    const userID = resolveAdminUserID(lookup);
+    const userID = await resolveAdminUserID(lookup);
     if (!userID) {
       throw new HttpError(404, {
         error: 'user_not_found',
@@ -356,11 +478,11 @@ export function createRouteHandlers({
     }
 
     const now = isoNow();
-    const subscription = ensureSubscription(userID, now);
-    const quotaPeriod = ensureQuotaPeriod(userID, subscription.plan, now);
+    const subscription = await ensureSubscription(userID, now);
+    const quotaPeriod = await ensureQuotaPeriod(userID, subscription.plan, now);
     const reason = normalizeAdminReason(body.reason);
 
-    const updatedQuotaPeriod = resetQuotaUsage({
+    const updatedQuotaPeriod = await resetQuotaUsage({
       userID,
       quotaPeriod,
       resetUsedUnitsTo,
@@ -371,13 +493,13 @@ export function createRouteHandlers({
     sendJson(res, 200, {
       userID,
       resetAt: now,
-      quotaSnapshot: buildQuotaSnapshot(updatedQuotaPeriod),
-      analytics: buildUsageAnalytics(userID, updatedQuotaPeriod)
+      quotaSnapshot: await buildQuotaSnapshot(updatedQuotaPeriod),
+      analytics: await buildUsageAnalytics(userID, updatedQuotaPeriod)
     });
   }
 
   async function handleStoreKitSync(req, res) {
-    const auth = requireSession(req);
+    const auth = await requireSession(req);
     const body = await readJson(req);
     const signedTransactions = Array.isArray(body.signedTransactions) ? body.signedTransactions : [];
     const entitlements = Array.isArray(body.entitlements) ? body.entitlements : [];
@@ -399,22 +521,22 @@ export function createRouteHandlers({
           .map(normalizeStoreKitEntitlement)
           .filter(Boolean);
 
-    const matchedUserIDs = new Set(
-      normalizedEntitlements
-        .map((entitlement) => {
+    const matchedUserIDCandidates = await Promise.all(
+      normalizedEntitlements.map(async (entitlement) => {
           if (!entitlement) {
             return null;
           }
 
-          const originalTransactionOwner = findUserIDForOriginalTransaction(entitlement.originalTransactionID);
+          const originalTransactionOwner = await findUserIDForOriginalTransaction(entitlement.originalTransactionID);
           if (originalTransactionOwner) {
             return originalTransactionOwner;
           }
 
-          return findUserIDForStoreKitTransaction(entitlement);
+          return await findUserIDForStoreKitTransaction(entitlement);
         })
-        .filter(Boolean)
     );
+
+    const matchedUserIDs = new Set(matchedUserIDCandidates.filter(Boolean));
 
     if (matchedUserIDs.size > 1) {
       throw new HttpError(409, {
@@ -431,10 +553,10 @@ export function createRouteHandlers({
       });
     }
 
-    applyStoreKitSubscriptionState(auth.user.id, normalizedEntitlements, now);
-    persistStoreKitTransactions(auth.user.id, normalizedEntitlements, signedTransactions, now);
+    await applyStoreKitSubscriptionState(auth.user.id, normalizedEntitlements, now);
+    await persistStoreKitTransactions(auth.user.id, normalizedEntitlements, signedTransactions, now);
 
-    const billing = buildBillingPayload(
+    const billing = await buildBillingPayload(
       auth.user.id,
       auth.session.installation_id ?? 'unknown-installation',
       auth.session.app_account_token,
@@ -456,24 +578,24 @@ export function createRouteHandlers({
     const now = isoNow();
 
     const userID = transaction
-      ? findUserIDForStoreKitTransaction(transaction)
+      ? await findUserIDForStoreKitTransaction(transaction)
       : renewalInfo
-        ? findUserIDForOriginalTransaction(renewalInfo.originalTransactionId)
+        ? await findUserIDForOriginalTransaction(renewalInfo.originalTransactionId)
         : null;
 
     if (userID) {
-      applyNotificationLifecycleUpdate(userID, {
+      await applyNotificationLifecycleUpdate(userID, {
         notification,
         transaction,
         renewalInfo
       }, now);
 
       if (transaction) {
-        persistStoreKitTransactions(userID, [transaction], [signedTransactionInfo], now);
+        await persistStoreKitTransactions(userID, [transaction], [signedTransactionInfo], now);
       }
     }
 
-    persistAppStoreNotification(notification, body.signedPayload, transaction, renewalInfo, now);
+    await persistAppStoreNotification(notification, body.signedPayload, transaction, renewalInfo, now);
     sendJson(res, 200, {
       ok: true,
       matchedUser: Boolean(userID)
@@ -481,30 +603,22 @@ export function createRouteHandlers({
   }
 
   async function handleAIProxy(req, res, url, { streaming }) {
-    const auth = requireSession(req);
-    const action = streaming ? 'streamGenerateContent' : 'generateContent';
+    const auth = await requireSession(req);
+    const action = streaming ? 'stream' : 'generate';
     const requestBody = await readJson(req, {
       maxBytes: config.aiProxyMaxRequestBytes
     });
     const feature = normalizeAIProxyFeature(req.headers['x-trai-ai-feature'], requestBody);
     sanitizeAIProxyRequestBody(requestBody);
 
-    const subscription = ensureSubscription(auth.user.id, isoNow());
+    const subscription = await ensureSubscription(auth.user.id, isoNow());
     ensureEntitled(subscription);
-    enforceAIProxyBurstLimits(auth.user.id);
+    await enforceAIProxyBurstLimits(auth.user.id);
     const releaseConcurrencySlot = reserveAIConcurrencySlot(auth.user.id);
 
-    const quotaPeriod = ensureQuotaPeriod(auth.user.id, subscription.plan, isoNow());
+    const quotaPeriod = await ensureQuotaPeriod(auth.user.id, subscription.plan, isoNow());
     const unitCost = FEATURE_COSTS[feature] ?? FEATURE_COSTS.coachChat;
-    const reservedQuotaPeriod = reserveQuotaUsage(quotaPeriod, unitCost);
-
-    if (!config.geminiApiKey) {
-      releaseReservedQuotaUsage(reservedQuotaPeriod, unitCost);
-      throw new HttpError(503, {
-        error: 'gemini_not_configured',
-        message: 'GEMINI_API_KEY is required for AI proxy requests.'
-      });
-    }
+    const reservedQuotaPeriod = await reserveQuotaUsage(quotaPeriod, unitCost);
 
     const startedAt = Date.now();
     let reservationReleased = false;
@@ -512,22 +626,7 @@ export function createRouteHandlers({
     let deliveryCompleted = false;
 
     try {
-      const upstreamURL = buildGeminiURL(action, streaming);
-      const upstreamResponse = await fetch(upstreamURL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!upstreamResponse.ok) {
-        const errorText = await upstreamResponse.text();
-        throw new HttpError(upstreamResponse.status, {
-          error: 'gemini_error',
-          message: errorText || 'Gemini proxy request failed.'
-        });
-      }
+      const upstreamResponse = await aiProvider.execute(requestBody, { streaming });
 
       if (streaming) {
         res.writeHead(200, {
@@ -553,12 +652,12 @@ export function createRouteHandlers({
       deliveryCompleted = true;
     } catch (error) {
       if (!deliveryCompleted && !reservationReleased) {
-        releaseReservedQuotaUsage(reservedQuotaPeriod, unitCost);
+        await releaseReservedQuotaUsage(reservedQuotaPeriod, unitCost);
         reservationReleased = true;
       }
 
       const outcome = responseStarted ? 'delivery_failed' : 'upstream_error';
-      recordAIRequest(auth.user.id, feature, action, outcome, Date.now() - startedAt);
+      await recordAIRequest(auth.user.id, feature, action, outcome, Date.now() - startedAt);
 
       if (responseStarted) {
         if (!res.destroyed) {
@@ -573,25 +672,23 @@ export function createRouteHandlers({
     }
 
     try {
-      recordUsage(auth.user.id, reservedQuotaPeriod, feature, unitCost, {
+      await recordUsage(auth.user.id, reservedQuotaPeriod, feature, unitCost, {
         incrementQuotaUnits: false
       });
-      recordAIRequest(auth.user.id, feature, action, 'success', Date.now() - startedAt);
+      await recordAIRequest(auth.user.id, feature, action, 'success', Date.now() - startedAt);
     } catch (error) {
       console.error('Failed to finalize AI proxy accounting', error);
     }
   }
 
-  function buildGeminiURL(action, streaming) {
-    const query = new URLSearchParams({ key: config.geminiApiKey });
-    if (streaming) {
-      query.set('alt', 'sse');
+  function ensureEntitled(subscription) {
+    if (subscription.plan === 'free') {
+      throw new HttpError(403, {
+        error: 'subscription_required',
+        message: 'Trai Pro is required to use AI features.'
+      });
     }
 
-    return `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:${action}?${query.toString()}`;
-  }
-
-  function ensureEntitled(subscription) {
     const entitledStatuses = new Set(['active', 'trial', 'gracePeriod']);
     if (!entitledStatuses.has(subscription.status) && subscription.plan !== 'developer') {
       throw new HttpError(403, {
@@ -805,11 +902,11 @@ export function createRouteHandlers({
     }
   }
 
-  function enforceAIProxyBurstLimits(userID) {
+  async function enforceAIProxyBurstLimits(userID) {
     const oneMinuteAgo = new Date(Date.now() - (60 * 1000)).toISOString();
     const tenMinutesAgo = new Date(Date.now() - (10 * 60 * 1000)).toISOString();
 
-    const recentAttempts = db.prepare(`
+    const recentAttempts = await db.prepare(`
       SELECT COUNT(*) AS count
       FROM ai_requests
       WHERE user_id = ? AND created_at >= ?
@@ -822,7 +919,7 @@ export function createRouteHandlers({
       });
     }
 
-    const recentUsage = db.prepare(`
+    const recentUsage = await db.prepare(`
       SELECT COALESCE(SUM(unit_cost), 0) AS units
       FROM usage_ledger
       WHERE user_id = ? AND created_at >= ?

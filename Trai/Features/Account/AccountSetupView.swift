@@ -180,6 +180,7 @@ private struct AccountSetupHero: View {
 }
 
 private struct AccountSetupBottomContent: View {
+    @Environment(\.colorScheme) private var colorScheme
     let secondaryMessage: String
     let blockedReason: String?
     let backendActionTitle: String?
@@ -217,7 +218,7 @@ private struct AccountSetupBottomContent: View {
                 } onCompletion: { result in
                     onAppleSignIn(result, accountSessionService)
                 }
-                .signInWithAppleButtonStyle(.black)
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(height: 50)
             }
         }

@@ -7,7 +7,6 @@ final class MonetizationService {
     private enum DefaultsKey {
         static let entitlementSnapshot = "monetization.entitlementSnapshot.v1"
         static let quotaSnapshot = "monetization.quotaSnapshot.v1"
-        static let transportMode = "monetization.transportMode.v1"
     }
 
     @ObservationIgnored
@@ -19,8 +18,6 @@ final class MonetizationService {
 
     private(set) var entitlementSnapshot: EntitlementSnapshot
     private(set) var quotaSnapshot: AIQuotaSnapshot
-    private(set) var aiTransportMode: AITransportMode
-
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -46,13 +43,6 @@ final class MonetizationService {
             quotaSnapshot = storedQuota
         } else {
             quotaSnapshot = defaultQuota
-        }
-
-        if let rawTransport = defaults.string(forKey: DefaultsKey.transportMode),
-           let transport = AITransportMode(rawValue: rawTransport) {
-            aiTransportMode = transport
-        } else {
-            aiTransportMode = .directGemini
         }
 
         refreshStateIfNeeded(now: now)
@@ -150,16 +140,11 @@ final class MonetizationService {
 
     func applyRemoteState(
         entitlementSnapshot: EntitlementSnapshot,
-        quotaSnapshot: AIQuotaSnapshot? = nil,
-        transportMode: AITransportMode? = nil
+        quotaSnapshot: AIQuotaSnapshot? = nil
     ) {
         self.entitlementSnapshot = entitlementSnapshot
         if let quotaSnapshot {
             self.quotaSnapshot = quotaSnapshot
-        }
-        if let transportMode {
-            aiTransportMode = transportMode
-            defaults.set(transportMode.rawValue, forKey: DefaultsKey.transportMode)
         }
         persistEntitlementSnapshot()
         persistQuotaSnapshot()

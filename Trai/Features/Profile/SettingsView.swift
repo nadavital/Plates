@@ -82,6 +82,7 @@ struct SettingsView: View {
                 Text("Trai guidance will adapt to this tone while still learning from your behavior.")
             }
 
+#if DEBUG
             Section {
                 NavigationLink {
                     DeveloperSettingsView()
@@ -91,6 +92,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Backend, billing, account, and testing controls live here while the app is still in local development.")
             }
+#endif
 
             // MARK: - Nutrition Plan Section
             Section {

@@ -1,5 +1,3 @@
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
@@ -104,7 +102,7 @@ CREATE TABLE IF NOT EXISTS storekit_transactions (
   user_id TEXT NOT NULL,
   environment TEXT,
   product_id TEXT NOT NULL,
-  transaction_id TEXT NOT NULL,
+  transaction_id TEXT NOT NULL UNIQUE,
   original_transaction_id TEXT NOT NULL,
   purchase_date TEXT,
   expires_date TEXT,
@@ -113,7 +111,6 @@ CREATE TABLE IF NOT EXISTS storekit_transactions (
   raw_jws TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE(transaction_id),
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

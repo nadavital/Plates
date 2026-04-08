@@ -34,15 +34,11 @@ Trai is ready for public testing when all of the following are true:
 
 ## 2. Current Gaps Observed In This Repo
 
-These are the highest-signal gaps observed during review:
+These were the highest-signal gaps observed during the original review:
 
-- No StoreKit / subscription code exists in the app.
-- No backend exists for AI proxying, entitlements, metering, quota enforcement, or admin operations.
-- Gemini is called directly from the app in:
-  - `Trai/Core/Services/GeminiService.swift`
-  - `Trai/Core/Services/GeminiService+FunctionCalling.swift`
-  - `Trai/Core/Services/GeminiService+FunctionCallingHelpers.swift`
-- The app depends on a local `Secrets.swift` for the Gemini API key.
+- StoreKit and backend-backed subscriptions were not yet wired end to end.
+- No production backend existed yet for AI proxying, entitlements, metering, quota enforcement, or admin operations.
+- Gemini was still being called directly from the app.
 - The app defines `trai://` routes in `Shared/Contracts/AppRoute.swift`, but URL scheme registration was not found in project Info.plist settings.
 - No `PrivacyInfo.xcprivacy` file is present.
 - Deployment targets are set above the locally supported SDK range:

@@ -58,8 +58,8 @@ export function createAuthHelpers({
     };
   }
 
-  function findOrCreateUserFromApple(body, now) {
-    const identity = db.prepare(`
+  async function findOrCreateUserFromApple(body, now) {
+    const identity = await db.prepare(`
       SELECT users.id, users.status, auth_identities.email, auth_identities.display_name
       FROM auth_identities
       JOIN users ON users.id = auth_identities.user_id
@@ -70,13 +70,13 @@ export function createAuthHelpers({
       const nextEmail = body.email ?? identity.email ?? null;
       const nextDisplayName = body.displayName ?? identity.display_name ?? null;
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE auth_identities
         SET email = ?, display_name = ?, updated_at = ?
         WHERE provider = ? AND provider_user_id = ?
       `).run(nextEmail, nextDisplayName, now, 'apple', body.appleUserID);
 
-      ensureSubscription(identity.id, now);
+      await ensureSubscription(identity.id, now);
       return {
         id: identity.id,
         email: nextEmail,
@@ -85,12 +85,12 @@ export function createAuthHelpers({
     }
 
     const userID = createID('usr');
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO users (id, created_at, updated_at, status)
       VALUES (?, ?, ?, ?)
     `).run(userID, now, now, 'active');
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO auth_identities (
         id, user_id, provider, provider_user_id, email, display_name, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -105,7 +105,7 @@ export function createAuthHelpers({
       now
     );
 
-    ensureSubscription(userID, now);
+    await ensureSubscription(userID, now);
 
     return {
       id: userID,
@@ -114,7 +114,7 @@ export function createAuthHelpers({
     };
   }
 
-  function createSession(userID, installationID, appAccountToken, now) {
+  async function createSession(userID, installationID, appAccountToken, now) {
     const accessToken = crypto.randomBytes(32).toString('hex');
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -133,7 +133,7 @@ export function createAuthHelpers({
       refreshToken
     };
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO sessions (
         id, user_id, installation_id, app_account_token, access_token_hash, refresh_token_hash, expires_at, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -152,12 +152,12 @@ export function createAuthHelpers({
     return sessionRecord;
   }
 
-  function rotateSessionTokens(sessionID, now) {
+  async function rotateSessionTokens(sessionID, now) {
     const accessToken = crypto.randomBytes(32).toString('hex');
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE sessions
       SET access_token_hash = ?, refresh_token_hash = ?, expires_at = ?, updated_at = ?
       WHERE id = ?
@@ -170,7 +170,7 @@ export function createAuthHelpers({
     };
   }
 
-  function requireSession(req) {
+  async function requireSession(req) {
     const authorization = req.headers.authorization ?? '';
     const appAccountToken = req.headers['x-trai-app-account-token'];
 
@@ -183,7 +183,7 @@ export function createAuthHelpers({
 
     const accessToken = authorization.slice('Bearer '.length);
     const tokenHash = hashToken(accessToken);
-    const row = db.prepare(`
+    const row = await db.prepare(`
       SELECT
         sessions.id,
         sessions.user_id,
@@ -217,7 +217,7 @@ export function createAuthHelpers({
       });
     }
 
-    const identity = db.prepare(`
+    const identity = await db.prepare(`
       SELECT email, display_name
       FROM auth_identities
       WHERE user_id = ?
@@ -237,8 +237,8 @@ export function createAuthHelpers({
     };
   }
 
-  function ensureSubscription(userID, now) {
-    let subscription = db.prepare(`
+  async function ensureSubscription(userID, now) {
+    let subscription = await db.prepare(`
       SELECT *
       FROM subscriptions
       WHERE user_id = ?
@@ -246,13 +246,13 @@ export function createAuthHelpers({
 
     if (!subscription) {
       const id = createID('sub');
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO subscriptions (
-          id, user_id, plan, status, source_transaction_id, renews_at, expires_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, userID, 'free', 'active', null, null, null, now, now);
+          id, user_id, plan, status, source, source_transaction_id, renews_at, expires_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, userID, 'free', 'active', 'system', null, null, null, now, now);
 
-      subscription = db.prepare(`
+      subscription = await db.prepare(`
         SELECT *
         FROM subscriptions
         WHERE user_id = ?
@@ -283,22 +283,36 @@ export function createAuthHelpers({
     }
   }
 
-  function resolveAdminLookup({ userID, appAccountToken, originalTransactionId }) {
+  function resolveAdminLookup({ userID, appAccountToken, originalTransactionId, email }) {
     return {
       userID: userID?.trim() || null,
       appAccountToken: appAccountToken?.trim() || null,
-      originalTransactionId: originalTransactionId?.trim() || null
+      originalTransactionId: originalTransactionId?.trim() || null,
+      email: email?.trim().toLowerCase() || null
     };
   }
 
-  function resolveAdminUserID({ userID, appAccountToken, originalTransactionId }) {
+  async function resolveAdminUserID({ userID, appAccountToken, originalTransactionId, email }) {
     if (userID) {
-      const direct = db.prepare(`SELECT id FROM users WHERE id = ? LIMIT 1`).get(userID);
+      const direct = await db.prepare(`SELECT id FROM users WHERE id = ? LIMIT 1`).get(userID);
       return direct?.id ?? null;
     }
 
+    if (email) {
+      const identityMatch = await db.prepare(`
+        SELECT user_id
+        FROM auth_identities
+        WHERE provider = ? AND LOWER(email) = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `).get('apple', email);
+      if (identityMatch?.user_id) {
+        return identityMatch.user_id;
+      }
+    }
+
     if (appAccountToken) {
-      const sessionMatch = db.prepare(`
+      const sessionMatch = await db.prepare(`
         SELECT user_id
         FROM sessions
         WHERE app_account_token = ?
@@ -311,12 +325,12 @@ export function createAuthHelpers({
     }
 
     if (originalTransactionId) {
-      return findUserIDForOriginalTransaction(originalTransactionId);
+      return await findUserIDForOriginalTransaction(originalTransactionId);
     }
 
     throw new HttpError(400, {
       error: 'missing_lookup',
-      message: 'Provide userID, appAccountToken, or originalTransactionId.'
+      message: 'Provide userID, email, appAccountToken, or originalTransactionId.'
     });
   }
 

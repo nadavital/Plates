@@ -91,11 +91,11 @@ Ship Trai for public testing with:
 - Attach feature type to each AI request.
 - Backend enforces quota before calling Gemini.
 - Backend records cost and usage after each request.
-- Keep direct Gemini only as a local/dev fallback.
+- Use the backend as the only shipped AI execution path.
 
 ### Done When
 
-- Production environment can disable direct Gemini entirely.
+- Production uses the backend as the only AI path.
 - AI usage cannot bypass quota enforcement with a modified client.
 
 ## 4. Quota and Usage Ledger
@@ -231,7 +231,7 @@ Ship Trai for public testing with:
 - Sign in with Apple works across reinstall
 - purchase and restore work against real App Store Connect products
 - backend is authoritative for entitlement and quota
-- production disables direct Gemini path
+- production uses the backend as the only AI path
 - quota exhaustion returns correct UX
 - expired subscription returns correct UX
 - support can inspect and adjust user quota

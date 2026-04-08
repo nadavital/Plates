@@ -74,7 +74,19 @@ extension GeminiFunctionExecutor {
         )
 
         modelContext.insert(memory)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+        } catch {
+            modelContext.rollback()
+            return .dataResponse(FunctionResult(
+                name: "save_memory",
+                response: [
+                    "success": false,
+                    "reason": "Failed to save memory"
+                ]
+            ))
+        }
 
         return .dataResponse(FunctionResult(
             name: "save_memory",
@@ -129,7 +141,19 @@ extension GeminiFunctionExecutor {
             deletedContents.append(memory.content)
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+        } catch {
+            modelContext.rollback()
+            return .dataResponse(FunctionResult(
+                name: "delete_memory",
+                response: [
+                    "success": false,
+                    "reason": "Failed to delete memory"
+                ]
+            ))
+        }
 
         return .dataResponse(FunctionResult(
             name: "delete_memory",

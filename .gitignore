@@ -19,3 +19,5 @@ __pycache__/
 # Backend local artifacts
 Backend/node_modules/
 Backend/data/*.sqlite
+Backend/.env
+Backend/.env.local

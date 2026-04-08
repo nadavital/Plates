@@ -96,7 +96,17 @@ struct MemoryRow: View {
 
 struct AllMemoriesView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var memories: [CoachMemory] = []
+    @Query private var memories: [CoachMemory]
+
+    init() {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { memory in
+                memory.isActive
+            },
+            sortBy: [SortDescriptor(\CoachMemory.createdAt, order: .reverse)]
+        )
+        _memories = Query(descriptor)
+    }
 
     var body: some View {
         List {
@@ -107,8 +117,6 @@ struct AllMemoriesView: View {
                         ForEach(topicMemories) { memory in
                             MemoryListRow(memory: memory, onDelete: {
                                 deleteMemory(memory)
-                            }, onUpdate: {
-                                fetchMemories()
                             })
                         }
                     } header: {
@@ -119,24 +127,19 @@ struct AllMemoriesView: View {
         }
         .navigationTitle("All Memories")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            fetchMemories()
-        }
-    }
-
-    private func fetchMemories() {
-        let descriptor = FetchDescriptor<CoachMemory>(
-            predicate: #Predicate { $0.isActive },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        memories = (try? modelContext.fetch(descriptor)) ?? []
     }
 
     private func deleteMemory(_ memory: CoachMemory) {
+        let previousIsActive = memory.isActive
         memory.isActive = false
-        HapticManager.lightTap()
-        // Refresh the list
-        fetchMemories()
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+            HapticManager.lightTap()
+        } catch {
+            modelContext.rollback()
+            memory.isActive = previousIsActive
+        }
     }
 
     private func topicIcon(_ topic: MemoryTopic) -> String {
@@ -395,14 +398,28 @@ struct MemoryEditSheet: View {
         let trimmedContent = draftContent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return }
 
+        let previousContent = memory.content
+        let previousCategory = memory.category
+        let previousTopic = memory.topic
+        let previousImportance = memory.importance
+
         memory.content = trimmedContent
         memory.category = draftCategory
         memory.topic = draftTopic
         memory.importance = draftImportance
 
-        try? modelContext.save()
-        onSave()
-        HapticManager.lightTap()
-        dismiss()
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+            onSave()
+            HapticManager.lightTap()
+            dismiss()
+        } catch {
+            modelContext.rollback()
+            memory.content = previousContent
+            memory.category = previousCategory
+            memory.topic = previousTopic
+            memory.importance = previousImportance
+        }
     }
 }

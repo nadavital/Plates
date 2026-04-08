@@ -251,6 +251,9 @@ struct ProfileView: View {
             .onReceive(NotificationCenter.default.publisher(for: .weightLogged)) { _ in
                 markProfileMetricsRefreshNeeded(delayMilliseconds: 140)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .coachMemoriesChanged)) { _ in
+                markProfileMetricsRefreshNeeded(delayMilliseconds: 60)
+            }
             .onDisappear {
                 isProfileTabVisible = false
                 tabActivationPolicy.deactivate()
