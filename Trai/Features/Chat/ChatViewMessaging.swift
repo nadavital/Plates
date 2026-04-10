@@ -196,7 +196,7 @@ extension ChatView {
             // Fetch activity data from HealthKit
             let activityData = await fetchActivityData()
 
-            let functionContext = GeminiService.ChatFunctionContext(
+            let functionContext = AIService.ChatFunctionContext(
                 profile: profile,
                 todaysFoodEntries: todaysFoodEntries,
                 currentDateTime: currentDateTime,
@@ -210,7 +210,7 @@ extension ChatView {
                 activityData: activityData
             )
 
-            let result = try await geminiService.chatWithFunctions(
+            let result = try await aiService.chatWithFunctions(
                 message: text,
                 imageData: capturedImage?.jpegData(compressionQuality: 0.8),
                 context: functionContext,
@@ -254,7 +254,7 @@ extension ChatView {
         currentMessageTask = nil
     }
 
-    func handleChatResult(_ result: GeminiService.ChatFunctionResult, aiMessage: ChatMessage) {
+    func handleChatResult(_ result: AIService.ChatFunctionResult, aiMessage: ChatMessage) {
         if !result.suggestedFoods.isEmpty {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 aiMessage.setSuggestedMeals(result.suggestedFoods)
@@ -483,7 +483,7 @@ extension ChatView {
         return hasLoggedSession || hasLiveWorkout
     }
 
-    private func fetchActivityData() async -> GeminiService.ActivityData {
+    private func fetchActivityData() async -> AIService.ActivityData {
         guard let healthKitService else {
             return .empty
         }
@@ -494,7 +494,7 @@ extension ChatView {
             async let exercise = healthKitService.fetchTodayExerciseMinutes()
 
             let (fetchedSteps, fetchedCalories, fetchedExercise) = try await (steps, calories, exercise)
-            return GeminiService.ActivityData(
+            return AIService.ActivityData(
                 steps: fetchedSteps,
                 activeCalories: fetchedCalories,
                 exerciseMinutes: fetchedExercise

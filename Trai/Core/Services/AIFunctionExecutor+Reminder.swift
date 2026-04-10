@@ -1,5 +1,5 @@
 //
-//  GeminiFunctionExecutor+Reminder.swift
+//  AIFunctionExecutor+Reminder.swift
 //  Trai
 //
 //  Executes reminder-related function calls
@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension GeminiFunctionExecutor {
+extension AIFunctionExecutor {
 
     // MARK: - Create Reminder
 

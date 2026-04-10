@@ -264,13 +264,16 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showPlanAdjustment) {
             PlanAdjustmentSheet(profile: profile)
+                .traiSheetBranding()
         }
         .sheet(isPresented: $showWorkoutPlanSetup) {
             WorkoutPlanChatFlow()
+                .traiSheetBranding()
         }
         .sheet(isPresented: $showWorkoutPlanEdit) {
             if let plan = profile.workoutPlan {
                 WorkoutPlanEditSheet(currentPlan: plan)
+                    .traiSheetBranding()
             }
         }
     }

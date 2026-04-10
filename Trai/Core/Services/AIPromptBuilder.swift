@@ -1,15 +1,15 @@
 //
-//  GeminiPromptBuilder.swift
+//  AIPromptBuilder.swift
 //  Trai
 //
 //  Core prompts: food analysis, workout suggestions, system prompt, nutrition advice
-//  See also: GeminiChatPrompts.swift, GeminiPlanPrompts.swift
+//  See also: AIChatPrompts.swift, AIPlanPrompts.swift
 //
 
 import Foundation
 
-/// Builds prompts for Gemini API requests
-enum GeminiPromptBuilder {
+/// Builds prompts for Trai AI requests
+enum AIPromptBuilder {
 
     // MARK: - Food Analysis
 
@@ -17,10 +17,39 @@ enum GeminiPromptBuilder {
         var prompt = """
         Analyze this food and provide accurate nutritional information.
 
-        Be accurate with calorie and macro estimates based on typical portion sizes.
-        Focus on the food the user most likely intends to log (main/foreground item or plated meal).
-        Ignore incidental/background foods, nearby items, other people's meals, and unopened packaging unless clearly part of what they ate.
-        If one meal contains multiple clear components (e.g., plate + side), include those components together.
+        You are an expert nutrition coach and food logger. Be decisive and professionally confident when the primary food is identifiable.
+        Your top priority is producing the most accurate loggable estimate possible from the image and any user description.
+        Use visual evidence first, then reasonable nutrition estimation based on typical real-world preparation and portion sizes.
+
+        Rules:
+        - Focus on the food or drink the user most likely intends to log (main/foreground item or plated meal).
+        - Ignore incidental/background foods, nearby items, other people's meals, and unopened packaging unless clearly part of what they ate.
+        - Estimate portion size from visible cues such as plate size, bowl size, cup size, packaging, hand scale, cut pieces, fill level, and common serving presentations.
+        - If the food appears cooked in a recognizable way, infer the most likely cooking method when it materially affects calories or macros. Use visual cues like grill marks, breading, frying texture, roasting, sauteed appearance, sauces, oil sheen, or visible preparation style.
+        - You may infer common included components when they are strongly implied by the visible food presentation, but do NOT add speculative extras that are not reasonably supported by the image or description.
+        - If one meal contains multiple clear components (for example a plate plus a visible side), include those visible components together.
+        - If the image is a beverage, identify the beverage directly. For plain water or plain sparkling water with no visible additions, return water with 0 calories and 0g macros.
+        - Prefer the most specific food name that is actually supported by the image. Do not guess a polished dish name when multiple materially different foods are still plausible.
+        - When the primary food is identifiable, give your best expert estimate instead of hesitating. Use normal real-world assumptions about preparation and serving size unless the image contradicts them.
+        - In notes, briefly capture the main assumptions that materially affected calories, macros, or serving size.
+        - Only use the failure fallback when no identifiable food or drink is visible at all.
+        - Do NOT use the failure fallback just because portion size, recipe details, or cooking method are uncertain. If the food or drink is identifiable, choose a generic visible label and give the best estimate.
+        - If there is no identifiable loggable food or drink visible at all, return the sentinel result with:
+          name: "Unclear food or drink"
+          calories: 0
+          proteinGrams: 0
+          carbsGrams: 0
+          fatGrams: 0
+          confidence: "low"
+          notes: "The image is not clear enough for a reliable food estimate."
+          emoji: "🍽️"
+
+        Estimation guidance:
+        - Be realistic and nutritionally useful. Use typical portion sizes only when visually plausible.
+        - If quantity is uncertain, estimate the most likely visible serving instead of refusing, unless the food itself is too unclear to identify.
+        - If preparation style is visually likely and meaningfully changes calories or macros, incorporate that into the estimate.
+        - Macros and calories should reflect the total visible serving the user is most likely trying to log.
+        - Use confidence "high" or "medium" for most identifiable meals and drinks. Use confidence "low" only when the primary item itself is genuinely hard to identify.
         """
 
         if let description {
@@ -37,51 +66,52 @@ enum GeminiPromptBuilder {
             "properties": [
                 "name": [
                     "type": "string",
-                    "description": "Name of the food item or meal"
+                    "description": "Name of the visible food or drink. Use a generic visible label if uncertain, not a specific guess."
                 ],
                 "calories": [
                     "type": "integer",
-                    "description": "Total calories"
+                    "description": "Estimated total calories for the visible serving. Use 0 only when the item is clearly zero-calorie, such as plain water, or the image is too unclear to identify a loggable item."
                 ],
                 "proteinGrams": [
                     "type": "number",
-                    "description": "Protein in grams"
+                    "description": "Estimated protein in grams for the visible serving"
                 ],
                 "carbsGrams": [
                     "type": "number",
-                    "description": "Carbohydrates in grams"
+                    "description": "Estimated carbohydrates in grams for the visible serving"
                 ],
                 "fatGrams": [
                     "type": "number",
-                    "description": "Fat in grams"
+                    "description": "Estimated fat in grams for the visible serving"
                 ],
                 "fiberGrams": [
                     "type": "number",
-                    "description": "Dietary fiber in grams",
+                    "description": "Estimated dietary fiber in grams if reasonably inferable",
                     "nullable": true
                 ],
                 "servingSize": [
                     "type": "string",
-                    "description": "Estimated serving size",
+                    "description": "Estimated visible serving size such as '1 medium bowl' or '16 oz bottle'",
                     "nullable": true
                 ],
                 "confidence": [
                     "type": "string",
                     "enum": ["high", "medium", "low"],
-                    "description": "Confidence level of the estimate"
+                    "description": "Confidence level of the identification and nutrition estimate. Use low when the primary item itself is hard to identify.",
+                    "nullable": true
                 ],
                 "notes": [
                     "type": "string",
-                    "description": "Any relevant notes about the estimation",
+                    "description": "Short explanation of uncertainty, assumptions, or what is not visible. If confidence is low, explain why.",
                     "nullable": true
                 ],
                 "emoji": [
                     "type": "string",
-                    "description": "A single relevant emoji for this food (e.g., ☕, 🥗, 🍳, 🍕, 🥪)",
+                    "description": "A single relevant emoji for the identified food or drink. Use 🍽️ for unclear items.",
                     "nullable": true
                 ]
             ],
-            "required": ["name", "calories", "proteinGrams", "carbsGrams", "fatGrams", "confidence", "emoji"]
+            "required": ["name", "calories", "proteinGrams", "carbsGrams", "fatGrams"]
         ]
     }
 
@@ -141,7 +171,7 @@ enum GeminiPromptBuilder {
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
-        You are Trai, a friendly fitness and nutrition coach. Never refer to yourself as an AI, Gemini, or assistant. Here's the current context:
+        You are Trai, a friendly fitness and nutrition coach. Never refer to yourself as an AI, language model, or assistant. Here's the current context:
         Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         Goal: \(context.userGoal)

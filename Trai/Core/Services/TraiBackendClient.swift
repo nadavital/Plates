@@ -4,7 +4,7 @@ enum BackendClientError: LocalizedError {
     case environmentNotConfigured
     case invalidResponse
     case unauthorized
-    case serverError(statusCode: Int, message: String)
+    case serverError(statusCode: Int, code: String?, message: String)
     case encodingFailure
 
     var errorDescription: String? {
@@ -15,12 +15,17 @@ enum BackendClientError: LocalizedError {
             "The backend returned an invalid response."
         case .unauthorized:
             "Your session is no longer valid. Please sign in again."
-        case .serverError(let statusCode, let message):
-            "Backend error \(statusCode): \(message)"
+        case .serverError(_, _, let message):
+            message
         case .encodingFailure:
             "Failed to encode the backend request."
         }
     }
+}
+
+private struct BackendErrorPayload: Decodable {
+    var error: String?
+    var message: String?
 }
 
 final class TraiBackendClient {
@@ -210,8 +215,17 @@ final class TraiBackendClient {
         case 401:
             throw BackendClientError.unauthorized
         default:
-            let message = String(data: data, encoding: .utf8) ?? "Unknown backend error"
-            throw BackendClientError.serverError(statusCode: httpResponse.statusCode, message: message)
+            let backendError = try? decoder.decode(BackendErrorPayload.self, from: data)
+            let rawMessage = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = backendError?.message
+                ?? rawMessage.flatMap { $0.isEmpty ? nil : $0 }
+                ?? "Unknown backend error."
+            throw BackendClientError.serverError(
+                statusCode: httpResponse.statusCode,
+                code: backendError?.error,
+                message: message
+            )
         }
 
         do {

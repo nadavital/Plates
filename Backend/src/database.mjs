@@ -118,6 +118,16 @@ function applySQLiteMigrations(db) {
   ensureSQLiteColumn(db, 'sessions', 'installation_id', 'TEXT');
   ensureSQLiteColumn(db, 'subscriptions', 'source', "TEXT NOT NULL DEFAULT 'system'");
   ensureSQLiteColumn(db, 'quota_periods', 'bonus_units', 'INTEGER NOT NULL DEFAULT 0');
+  ensureSQLiteColumn(db, 'ai_requests', 'provider', 'TEXT');
+  ensureSQLiteColumn(db, 'ai_requests', 'input_tokens', 'INTEGER');
+  ensureSQLiteColumn(db, 'ai_requests', 'output_tokens', 'INTEGER');
+  ensureSQLiteColumn(db, 'ai_requests', 'total_tokens', 'INTEGER');
+  ensureSQLiteColumn(db, 'ai_requests', 'cached_input_tokens', 'INTEGER');
+  ensureSQLiteColumn(db, 'ai_requests', 'reasoning_tokens', 'INTEGER');
+  ensureSQLiteColumn(db, 'ai_requests', 'provider_usage_json', 'TEXT');
+  ensureSQLiteColumn(db, 'ai_requests', 'request_format', 'TEXT');
+  ensureSQLiteColumn(db, 'ai_requests', 'retry_count', 'INTEGER NOT NULL DEFAULT 0');
+  ensureSQLiteColumn(db, 'ai_requests', 'retry_reason', 'TEXT');
   ensureSQLiteColumn(db, 'storekit_transactions', 'environment', 'TEXT');
   ensureSQLiteColumn(db, 'storekit_transactions', 'product_id', 'TEXT');
   ensureSQLiteColumn(db, 'storekit_transactions', 'transaction_id', 'TEXT');
@@ -126,6 +136,7 @@ function applySQLiteMigrations(db) {
   ensureSQLiteColumn(db, 'storekit_transactions', 'expires_date', 'TEXT');
   ensureSQLiteColumn(db, 'storekit_transactions', 'revocation_date', 'TEXT');
   ensureSQLiteColumn(db, 'storekit_transactions', 'signed_date', 'TEXT');
+  ensureSQLiteColumn(db, 'storekit_transactions', 'app_account_token', 'TEXT');
   ensureSQLiteColumn(db, 'storekit_transactions', 'raw_jws', 'TEXT');
   ensureSQLiteColumn(db, 'storekit_transactions', 'updated_at', 'TEXT');
   ensureSQLiteColumn(db, 'app_store_notifications', 'notification_uuid', 'TEXT');
@@ -152,6 +163,11 @@ function applySQLiteMigrations(db) {
       FOREIGN KEY(quota_period_id) REFERENCES quota_periods(id) ON DELETE SET NULL
     )
   `);
+  db.exec('CREATE INDEX IF NOT EXISTS usage_ledger_user_created_at_idx ON usage_ledger (user_id, created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS usage_ledger_created_at_idx ON usage_ledger (created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS ai_requests_user_created_at_idx ON ai_requests (user_id, created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS ai_requests_created_at_idx ON ai_requests (created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS ai_requests_provider_model_created_at_idx ON ai_requests (provider, model, created_at)');
   backfillSubscriptionSourcesSQLite(db);
 }
 
@@ -167,6 +183,16 @@ async function applyPostgresMigrations(db) {
   await db.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS installation_id TEXT');
   await db.query("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'system'");
   await db.query('ALTER TABLE quota_periods ADD COLUMN IF NOT EXISTS bonus_units INTEGER NOT NULL DEFAULT 0');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS provider TEXT');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS input_tokens INTEGER');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS output_tokens INTEGER');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS total_tokens INTEGER');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS cached_input_tokens INTEGER');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS reasoning_tokens INTEGER');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS provider_usage_json TEXT');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS request_format TEXT');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0');
+  await db.query('ALTER TABLE ai_requests ADD COLUMN IF NOT EXISTS retry_reason TEXT');
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS environment TEXT');
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS product_id TEXT');
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS transaction_id TEXT');
@@ -175,6 +201,7 @@ async function applyPostgresMigrations(db) {
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS expires_date TEXT');
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS revocation_date TEXT');
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS signed_date TEXT');
+  await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS app_account_token TEXT');
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS raw_jws TEXT');
   await db.query('ALTER TABLE storekit_transactions ADD COLUMN IF NOT EXISTS updated_at TEXT');
   await db.query('ALTER TABLE app_store_notifications ADD COLUMN IF NOT EXISTS notification_uuid TEXT');
@@ -192,6 +219,26 @@ async function applyPostgresMigrations(db) {
   await db.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS app_store_notifications_notification_uuid_idx
       ON app_store_notifications (notification_uuid)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS usage_ledger_user_created_at_idx
+      ON usage_ledger (user_id, created_at)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS usage_ledger_created_at_idx
+      ON usage_ledger (created_at)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS ai_requests_user_created_at_idx
+      ON ai_requests (user_id, created_at)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS ai_requests_created_at_idx
+      ON ai_requests (created_at)
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS ai_requests_provider_model_created_at_idx
+      ON ai_requests (provider, model, created_at)
   `);
   await backfillSubscriptionSourcesPostgres(db);
 }

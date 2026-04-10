@@ -103,6 +103,7 @@ struct WeightTrackingView: View {
             }
             .sheet(isPresented: $showingAddWeight) {
                 LogWeightSheet()
+                    .traiSheetBranding()
             }
             .refreshable {
                 await syncHealthKit()

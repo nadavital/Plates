@@ -70,8 +70,18 @@ struct TraiApp: App {
         let isUITesting = AppLaunchArguments.isUITesting
         let isRunningTests = AppLaunchArguments.isRunningTests
         let shouldUseInMemoryStore = AppLaunchArguments.shouldUseInMemoryStore
+        let launchPendingRoute = AppLaunchArguments.launchPendingRoute
         self.isUITesting = isUITesting
         self.isRunningTests = isRunningTests
+        _deepLinkDestination = State(initialValue: launchPendingRoute)
+
+        #if DEBUG
+        if isUITesting {
+            monetizationService.setDebugPlan(.developer)
+            monetizationService.resetQuotaForDebug()
+            accountSessionService.setDebugAuthenticatedSession()
+        }
+        #endif
 
         do {
             Self.primeSharedStoreDirectoryIfNeeded(usesInMemoryStore: shouldUseInMemoryStore)

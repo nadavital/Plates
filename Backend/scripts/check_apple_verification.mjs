@@ -47,6 +47,7 @@ const child = spawn(process.execPath, ['src/server.mjs'], {
     APP_STORE_EXPECTED_BUNDLE_IDS: 'Nadav.Trai',
     APP_STORE_ROOT_CERT_PATHS: storeKitFixtures.rootCertificatePath,
     APP_STORE_TRUSTED_ROOT_SUBJECTS: 'Unit Test Root CA',
+    OPENAI_API_KEY: 'unit-test-openai-key',
     TRAI_ADMIN_API_KEY: adminToken
   },
   stdio: ['ignore', 'pipe', 'pipe']
@@ -62,6 +63,12 @@ child.stderr.on('data', (chunk) => {
 
 try {
   await waitForHealth();
+  const healthResponse = await fetch(`http://127.0.0.1:${port}/health`);
+  assert.equal(healthResponse.status, 200, 'expected health check to succeed');
+
+  const healthPayload = await healthResponse.json();
+  assert.equal(healthPayload.aiProvider, 'openai', 'expected OpenAI to remain the default provider');
+  assert.equal(healthPayload.hasProviderKey, true, 'expected default provider key to be configured');
 
   const rawNonce = crypto.randomBytes(16).toString('hex');
   const sharedBody = {
@@ -72,6 +79,7 @@ try {
     email: 'tester@example.com',
     displayName: 'Local Tester'
   };
+  const storeKitAppAccountToken = deriveStoreKitAppAccountToken(sharedBody.appAccountToken);
 
   const goodToken = signIdentityToken({
     iss: 'https://appleid.apple.com',
@@ -108,6 +116,7 @@ try {
           bundleId: 'Nadav.Trai',
           environment: 'Sandbox',
           productId: 'trai.pro.monthly',
+          appAccountToken: storeKitAppAccountToken,
           transactionId: '1001',
           originalTransactionId: '1001',
           purchaseDate: Date.now(),
@@ -125,6 +134,53 @@ try {
   assert.equal(syncedPayload.entitlementSnapshot?.plan, 'pro');
   assert.equal(syncedPayload.syncState, 'syncedWithBackend');
 
+  const transientEmptySyncResponse = await fetch(`http://127.0.0.1:${port}/v1/billing/sync-storekit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${successPayload.session.accessToken}`,
+      'X-Trai-App-Account-Token': sharedBody.appAccountToken
+    },
+    body: JSON.stringify({
+      signedTransactions: []
+    })
+  });
+  assert.equal(transientEmptySyncResponse.status, 200, 'expected empty StoreKit sync to succeed');
+
+  const transientEmptySyncPayload = await transientEmptySyncResponse.json();
+  assert.equal(
+    transientEmptySyncPayload.entitlementSnapshot?.plan,
+    'pro',
+    'expected transient empty sync to preserve a still-active verified subscription'
+  );
+
+  const mismatchedSyncResponse = await fetch(`http://127.0.0.1:${port}/v1/billing/sync-storekit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${successPayload.session.accessToken}`,
+      'X-Trai-App-Account-Token': sharedBody.appAccountToken
+    },
+    body: JSON.stringify({
+      signedTransactions: [
+        createSignedStoreKitTransaction(storeKitFixtures, {
+          bundleId: 'Nadav.Trai',
+          environment: 'Sandbox',
+          productId: 'trai.pro.monthly',
+          appAccountToken: deriveStoreKitAppAccountToken('different-account'),
+          transactionId: '2001',
+          originalTransactionId: '2001',
+          purchaseDate: Date.now(),
+          expiresDate: Date.now() + (7 * 24 * 60 * 60 * 1000),
+          signedDate: Date.now(),
+          type: 'Auto-Renewable Subscription',
+          inAppOwnershipType: 'PURCHASED'
+        })
+      ]
+    })
+  });
+  assert.equal(mismatchedSyncResponse.status, 409, 'expected mismatched StoreKit account token to be rejected');
+
   const notificationPayload = createSignedAppStoreNotification(storeKitFixtures, {
     notificationType: 'DID_RENEW',
     subtype: null,
@@ -140,6 +196,7 @@ try {
         bundleId: 'Nadav.Trai',
         environment: 'Sandbox',
         productId: 'trai.pro.monthly',
+        appAccountToken: storeKitAppAccountToken,
         transactionId: '1002',
         originalTransactionId: '1001',
         purchaseDate: Date.now(),
@@ -224,6 +281,7 @@ try {
         bundleId: 'Nadav.Trai',
         environment: 'Sandbox',
         productId: 'trai.pro.monthly',
+        appAccountToken: storeKitAppAccountToken,
         transactionId: '1003',
         originalTransactionId: '1001',
         purchaseDate: Date.now() - (2 * 24 * 60 * 60 * 1000),
@@ -373,6 +431,41 @@ async function postJSON(pathname, body) {
 
 function sha256Hex(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function deriveStoreKitAppAccountToken(appAccountToken) {
+  const normalizedSource = String(appAccountToken ?? '').trim();
+  if (!normalizedSource) {
+    return null;
+  }
+
+  const directUUID = normalizeUUIDString(normalizedSource);
+  if (directUUID) {
+    return directUUID;
+  }
+
+  const digest = crypto
+    .createHash('sha256')
+    .update(`trai.storekit.appAccountToken.v1:${normalizedSource}`)
+    .digest();
+  const bytes = Array.from(digest.subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  return [
+    bytes.slice(0, 4).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+    bytes.slice(4, 6).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+    bytes.slice(6, 8).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+    bytes.slice(8, 10).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+    bytes.slice(10, 16).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  ].join('-');
+}
+
+function normalizeUUIDString(value) {
+  const normalizedValue = String(value ?? '').trim().toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedValue)
+    ? normalizedValue
+    : null;
 }
 
 function createStoreKitCertificateChain(rootDirectory) {

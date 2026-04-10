@@ -11,6 +11,7 @@ import SwiftUI
 
 struct AddCustomExerciseSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
@@ -22,15 +23,20 @@ struct AddCustomExerciseSheet: View {
     @State private var selectedMuscleGroup: Exercise.MuscleGroup?
 
     // AI Analysis state
-    @State private var geminiService = GeminiService()
+    @State private var aiService = AIService()
     @State private var isAnalyzing = false
     @State private var analysisResult: ExerciseAnalysis?
     @State private var hasAnalyzed = false
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     @FocusState private var isNameFocused: Bool
 
     private var canAccessExerciseAI: Bool {
         monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var requiresAuthenticatedAccountForExerciseAI: Bool {
+        accountSessionService?.isAuthenticated != true
     }
 
     var body: some View {
@@ -75,15 +81,20 @@ struct AddCustomExerciseSheet: View {
             }
             .onAppear {
                 exerciseName = initialName
-                if canAccessExerciseAI && !initialName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if canAccessExerciseAI
+                    && !requiresAuthenticatedAccountForExerciseAI
+                    && !initialName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Task { await analyzeExercise() }
                 } else {
                     isNameFocused = true
                 }
             }
         }
-        .tint(TraiColors.brandAccent)
-        .accentColor(TraiColors.brandAccent)
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
+                .traiSheetBranding()
+        }
+        .traiSheetBranding()
         .proUpsellPresenter()
     }
 
@@ -235,6 +246,10 @@ struct AddCustomExerciseSheet: View {
     private func analyzeExercise() async {
         let name = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
+        guard !requiresAuthenticatedAccountForExerciseAI else {
+            presentedAccountSetupContext = .aiFeatures
+            return
+        }
         guard canAccessExerciseAI else {
             proUpsellCoordinator?.present(source: .exerciseAnalysis)
             return
@@ -244,7 +259,7 @@ struct AddCustomExerciseSheet: View {
         defer { isAnalyzing = false }
 
         do {
-            let analysis = try await geminiService.analyzeExercise(name: name)
+            let analysis = try await aiService.analyzeExercise(name: name)
             analysisResult = analysis
             hasAnalyzed = true
 

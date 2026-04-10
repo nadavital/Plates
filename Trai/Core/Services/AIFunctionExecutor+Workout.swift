@@ -1,5 +1,5 @@
 //
-//  GeminiFunctionExecutor+Workout.swift
+//  AIFunctionExecutor+Workout.swift
 //  Trai
 //
 //  Muscle recovery and workout suggestion function execution
@@ -8,7 +8,7 @@
 import Foundation
 import SwiftData
 
-extension GeminiFunctionExecutor {
+extension AIFunctionExecutor {
 
     // MARK: - Muscle Recovery
 

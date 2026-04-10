@@ -125,6 +125,7 @@ struct LiveWorkoutDetailSheet: View {
             }
             .sheet(item: $selectedExercise) { exercise in
                 exercisePRSheet(for: exercise.name)
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingExercisePicker) {
                 ExerciseListView(targetMuscleGroups: targetExerciseMuscleGroups) { exercise in
@@ -132,6 +133,7 @@ struct LiveWorkoutDetailSheet: View {
                 }
             }
         }
+        .traiSheetBranding()
     }
 
     /// Build the PR detail sheet for a given exercise name

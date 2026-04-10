@@ -1,5 +1,5 @@
 //
-//  GeminiService+Food.swift
+//  AIService+Food.swift
 //  Trai
 //
 //  Food analysis and workout suggestion methods
@@ -8,47 +8,45 @@
 import Foundation
 import os
 
-extension GeminiService {
+extension AIService {
 
     // MARK: - Food Analysis
 
     /// Analyze food from an image and/or text description
     func analyzeFoodImage(_ imageData: Data?, description: String?) async throws -> FoodAnalysis {
         guard imageData != nil || description != nil else {
-            throw GeminiError.invalidInput("Please provide an image or description of the food")
+            throw AIServiceError.invalidInput("Please provide an image or description of the food")
         }
 
         isLoading = true
         lastError = nil
         defer { isLoading = false }
         return try await performAIRequest(for: .foodPhotoAnalysis) {
-            var parts: [[String: Any]] = []
+            var parts: [TraiAIPart] = []
 
-            let prompt = GeminiPromptBuilder.buildFoodAnalysisPrompt(description: description)
-            parts.append(["text": prompt])
+            let prompt = AIPromptBuilder.buildFoodAnalysisPrompt(description: description)
+            parts.append(.text(prompt))
 
             if let imageData {
-                let base64Image = imageData.base64EncodedString()
-                parts.append([
-                    "inline_data": [
-                        "mime_type": "image/jpeg",
-                        "data": base64Image
-                    ]
-                ])
+                logImagePayloadSummary(imageData, label: "Food analysis image")
+                parts.append(AIBackendPayloadBuilder.imagePart(imageData))
             }
 
-            var config = buildGenerationConfig(
-                thinkingLevel: .medium,
-                jsonSchema: GeminiPromptBuilder.foodAnalysisSchema
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalMessage(role: .user, parts: parts)
+                ],
+                output: AIBackendPayloadBuilder.canonicalOutput(
+                    kind: .jsonSchema,
+                    schema: AIPromptBuilder.foodAnalysisSchema
+                ),
+                generation: AIBackendPayloadBuilder.canonicalGeneration(
+                    reasoningLevel: .low,
+                    imageResolution: .high
+                )
             )
-            config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
 
-            let requestBody: [String: Any] = [
-                "contents": [["parts": parts]],
-                "generationConfig": config
-            ]
-
-            let responseText = try await makeRequest(body: requestBody)
+            let responseText = try await makeRequest(request: request)
             return try parseFoodAnalysis(from: responseText)
         }
     }
@@ -64,43 +62,41 @@ extension GeminiService {
         lastError = nil
         defer { isLoading = false }
         return try await performAIRequest(for: .foodPhotoAnalysis) {
-            var parts: [[String: Any]] = []
+            var parts: [TraiAIPart] = []
 
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "EEEE, MMMM d 'at' h:mm a"
             let currentDateTime = dateFormatter.string(from: Date())
 
-            let prompt = GeminiPromptBuilder.buildImageChatPrompt(
+            let prompt = AIPromptBuilder.buildImageChatPrompt(
                 userMessage: userMessage,
                 context: context,
                 currentDateTime: currentDateTime,
                 tone: tone
             )
 
-            parts.append(["text": prompt])
+            parts.append(.text(prompt))
 
             if let imageData {
-                let base64Image = imageData.base64EncodedString()
-                parts.append([
-                    "inline_data": [
-                        "mime_type": "image/jpeg",
-                        "data": base64Image
-                    ]
-                ])
+                logImagePayloadSummary(imageData, label: "Food chat image")
+                parts.append(AIBackendPayloadBuilder.imagePart(imageData))
             }
 
-            var config = buildGenerationConfig(
-                thinkingLevel: .medium,
-                jsonSchema: GeminiPromptBuilder.chatImageAnalysisSchema
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalMessage(role: .user, parts: parts)
+                ],
+                output: AIBackendPayloadBuilder.canonicalOutput(
+                    kind: .jsonSchema,
+                    schema: AIPromptBuilder.chatImageAnalysisSchema
+                ),
+                generation: AIBackendPayloadBuilder.canonicalGeneration(
+                    reasoningLevel: .low,
+                    imageResolution: .high
+                )
             )
-            config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
 
-            let requestBody: [String: Any] = [
-                "contents": [["parts": parts]],
-                "generationConfig": config
-            ]
-
-            let responseText = try await makeRequest(body: requestBody)
+            let responseText = try await makeRequest(request: request)
             return try parseChatFoodAnalysis(from: responseText)
         }
     }
@@ -117,7 +113,7 @@ extension GeminiService {
         lastError = nil
         defer { isLoading = false }
         return try await performAIRequest(for: .foodRefinement) {
-            var parts: [[String: Any]] = []
+            var parts: [TraiAIPart] = []
 
             let fiberStr = currentSuggestion.fiberGrams.map { "- Fiber: \(Int($0))g" } ?? ""
             let prompt = """
@@ -135,16 +131,11 @@ extension GeminiService {
             Please provide an UPDATED food analysis based on their correction. If they say it's a different food, update all values accordingly. If they mention adjusting a specific value, update just that. Keep unmentioned values reasonable for the (potentially new) food. Include fiber if relevant.
             """
 
-            parts.append(["text": prompt])
+            parts.append(.text(prompt))
 
             if let imageData {
-                let base64Image = imageData.base64EncodedString()
-                parts.append([
-                    "inline_data": [
-                        "mime_type": "image/jpeg",
-                        "data": base64Image
-                    ]
-                ])
+                logImagePayloadSummary(imageData, label: "Food refinement image")
+                parts.append(AIBackendPayloadBuilder.imagePart(imageData))
             }
 
             let schema: [String: Any] = [
@@ -162,20 +153,21 @@ extension GeminiService {
                 "required": ["name", "calories", "proteinGrams", "carbsGrams", "fatGrams", "emoji"]
             ]
 
-            var config = buildGenerationConfig(
-                thinkingLevel: .low,
-                jsonSchema: schema
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalMessage(role: .user, parts: parts)
+                ],
+                output: AIBackendPayloadBuilder.canonicalOutput(
+                    kind: .jsonSchema,
+                    schema: schema
+                ),
+                generation: AIBackendPayloadBuilder.canonicalGeneration(
+                    reasoningLevel: .low,
+                    imageResolution: imageData == nil ? nil : .high
+                )
             )
-            if imageData != nil {
-                config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
-            }
 
-            let requestBody: [String: Any] = [
-                "contents": [["parts": parts]],
-                "generationConfig": config
-            ]
-
-            let responseText = try await makeRequest(body: requestBody)
+            let responseText = try await makeRequest(request: request)
             return try parseRefinedFoodAnalysis(from: responseText)
         }
     }
@@ -198,7 +190,7 @@ extension GeminiService {
         }
 
         guard let data = cleanText.data(using: .utf8) else {
-            throw GeminiError.parsingError
+            throw AIServiceError.parsingError
         }
 
         struct RefinedFood: Codable {
@@ -309,17 +301,28 @@ extension GeminiService {
 
         guard let data = cleanText.data(using: .utf8) else {
             log("❌ Failed to convert text to data", type: .error)
-            throw GeminiError.parsingError
+            throw AIServiceError.parsingError
         }
 
         do {
             let result = try JSONDecoder().decode(FoodAnalysis.self, from: data)
+            if result.shouldBeRejectedForLogging {
+                let reason = result.rejectionReason ?? "unknown reason"
+                log("⚠️ Rejecting food analysis as too unclear for logging: \(result.name) (\(reason))", type: .error)
+                throw AIServiceError.invalidInput("Couldn't get a reliable food estimate from that image. Try a clearer photo or add a short description.")
+            }
             log("✅ Successfully parsed food analysis: \(result.name)", type: .info)
             return result
         } catch {
             log("❌ JSON decode error: \(error)", type: .error)
             log("📄 JSON text was: \(cleanText.prefix(300))", type: .debug)
-            throw GeminiError.parsingError
+            if let decodingError = error as? DecodingError {
+                logDecodingError(decodingError)
+            }
+            if let aiServiceError = error as? AIServiceError {
+                throw aiServiceError
+            }
+            throw AIServiceError.parsingError
         }
     }
 
@@ -350,18 +353,20 @@ extension GeminiService {
         lastError = nil
         defer { isLoading = false }
         return try await performAIRequest(for: .coachChat) {
-            let prompt = GeminiPromptBuilder.buildWorkoutSuggestionPrompt(
+            let prompt = AIPromptBuilder.buildWorkoutSuggestionPrompt(
                 history: history,
                 goal: goal,
                 availableTime: availableTime
             )
 
-            let requestBody: [String: Any] = [
-                "contents": [["parts": [["text": prompt]]]],
-                "generationConfig": buildGenerationConfig(thinkingLevel: .medium)
-            ]
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
+                ],
+                generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .medium)
+            )
 
-            return try await makeRequest(body: requestBody)
+            return try await makeRequest(request: request)
         }
     }
 }

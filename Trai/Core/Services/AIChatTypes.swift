@@ -1,13 +1,13 @@
 //
-//  GeminiChatTypes.swift
+//  AIChatTypes.swift
 //  Trai
 //
-//  Types for Gemini function calling chat
+//  Types for AI function-calling chat
 //
 
 import Foundation
 
-extension GeminiService {
+extension AIService {
 
     // MARK: - Workout Context
 
@@ -114,7 +114,7 @@ extension GeminiService {
 
     // MARK: - Internal Types
 
-    /// Result from sending a function result back to Gemini
+    /// Result from sending a function result back to the AI backend
     struct FunctionFollowUpResult {
         var text: String = ""
         var suggestedFoods: [SuggestedFoodEntry] = []
@@ -124,6 +124,6 @@ extension GeminiService {
         var suggestedWorkoutLog: SuggestedWorkoutLog?
         var suggestedReminder: SuggestedReminder?
         var savedMemories: [String] = []
-        var accumulatedParts: [[String: Any]] = []
+        var accumulatedParts: [TraiAIPart] = []
     }
 }

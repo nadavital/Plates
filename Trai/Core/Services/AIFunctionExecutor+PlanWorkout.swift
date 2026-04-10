@@ -1,5 +1,5 @@
 //
-//  GeminiFunctionExecutor+PlanWorkout.swift
+//  AIFunctionExecutor+PlanWorkout.swift
 //  Trai
 //
 //  Plan and workout function execution
@@ -8,7 +8,7 @@
 import Foundation
 import SwiftData
 
-extension GeminiFunctionExecutor {
+extension AIFunctionExecutor {
 
     // MARK: - Plan Functions
 

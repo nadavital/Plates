@@ -1,5 +1,5 @@
 //
-//  GeminiService+WorkoutPlan.swift
+//  AIService+WorkoutPlan.swift
 //  Trai
 //
 //  Workout plan generation and refinement
@@ -8,7 +8,7 @@
 import Foundation
 import os
 
-extension GeminiService {
+extension AIService {
 
     // MARK: - Workout Plan Refinement Response
 
@@ -38,19 +38,19 @@ extension GeminiService {
         log("📊 User data - Age: \(request.age), Goal: \(request.goal.rawValue)", type: .info)
         log("🎯 Workout prefs - Days: \(request.availableDays.map { "\($0)" } ?? "flexible"), Experience: \(request.experienceLevel?.rawValue ?? "unspecified"), Equipment: \(request.equipmentAccess?.rawValue ?? "unspecified")", type: .info)
 
-        let prompt = GeminiPromptBuilder.buildWorkoutPlanGenerationPrompt(request: request)
+        let prompt = AIPromptBuilder.buildWorkoutPlanGenerationPrompt(request: request)
         logPrompt(prompt)
 
         do {
             let plan: WorkoutPlan = try await executePlanGenerationPipeline(
                 prompt: prompt,
-                schema: GeminiPromptBuilder.workoutPlanSchema,
+                schema: AIPromptBuilder.workoutPlanSchema,
                 decodeFailureLabel: "workout plan"
             )
             completeAIRequest(requestTicket)
             log("✅ Successfully parsed workout plan - Split: \(plan.splitType.displayName), Templates: \(plan.templates.count)", type: .info)
             return plan
-        } catch GeminiError.parsingError {
+        } catch AIServiceError.parsingError {
             cancelAIRequest(requestTicket)
             log("Falling back to default workout plan after parse failure", type: .error)
             return WorkoutPlan.createDefault(from: request)
@@ -76,7 +76,7 @@ extension GeminiService {
         return try await performAIRequest(for: .workoutPlanRefinement) {
             log("💬 Workout plan refinement request: \(userMessage)", type: .info)
 
-            let prompt = GeminiPromptBuilder.buildWorkoutPlanRefinementPrompt(
+            let prompt = AIPromptBuilder.buildWorkoutPlanRefinementPrompt(
                 currentPlan: currentPlan,
                 request: request,
                 userMessage: userMessage,
@@ -87,7 +87,7 @@ extension GeminiService {
             do {
                 let envelope: PlanPipelineRefinementEnvelope<WorkoutPlan> = try await executePlanRefinementPipeline(
                     prompt: prompt,
-                    schema: GeminiPromptBuilder.workoutPlanRefinementSchema
+                    schema: AIPromptBuilder.workoutPlanRefinementSchema
                 )
 
                 let responseType = WorkoutPlanRefinementResponse.ResponseType(rawValue: envelope.responseType) ?? .message

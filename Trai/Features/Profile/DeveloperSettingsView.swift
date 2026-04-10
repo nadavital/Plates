@@ -61,6 +61,7 @@ struct DeveloperSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $presentedAccountSetupContext) { context in
             AccountSetupView(context: context)
+                .traiSheetBranding()
         }
     }
 
@@ -76,7 +77,8 @@ struct DeveloperSettingsView: View {
                 debugPlanPreviewBinding: debugPlanPreviewBinding(for: billingService),
                 debugSyncStateBinding: debugSyncStateBinding(for: billingService),
                 debugIdentityBinding: debugIdentityBinding(for: appAccountService),
-                debugBackendBinding: debugBackendBinding(for: appAccountService)
+                debugBackendBinding: debugBackendBinding(for: appAccountService),
+                debugAIProviderOverrideBinding: debugAIProviderOverrideBinding(for: appAccountService)
             )
         }
 #endif
@@ -182,6 +184,13 @@ struct DeveloperSettingsView: View {
         Binding(
             get: { appAccountService.backendEnvironment },
             set: { appAccountService.setDebugBackendEnvironment($0) }
+        )
+    }
+
+    private func debugAIProviderOverrideBinding(for appAccountService: AppAccountService) -> Binding<AIProviderOverride> {
+        Binding(
+            get: { appAccountService.debugAIProviderOverride },
+            set: { appAccountService.setDebugAIProviderOverride($0) }
         )
     }
 #endif
@@ -386,6 +395,7 @@ private struct DeveloperOverridesSection: View {
     let debugSyncStateBinding: Binding<BillingSyncState>
     let debugIdentityBinding: Binding<AppAccountIdentityMode>
     let debugBackendBinding: Binding<BackendEnvironment>
+    let debugAIProviderOverrideBinding: Binding<AIProviderOverride>
 
     var body: some View {
         Section {
@@ -417,6 +427,12 @@ private struct DeveloperOverridesSection: View {
                 }
             }
 
+            Picker("AI Provider", selection: debugAIProviderOverrideBinding) {
+                ForEach(AIProviderOverride.allCases) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+            }
+
             LabeledContent("Quota Reset") {
                 Text(monetizationService.nextResetDate, format: .dateTime.month().day())
                     .foregroundStyle(.secondary)
@@ -428,7 +444,7 @@ private struct DeveloperOverridesSection: View {
         } header: {
             Text("Developer Overrides")
         } footer: {
-            Text("These are QA-only overrides. Local plan preview changes UI state, but backend AI and billing still follow the real server entitlement.")
+            Text("These are QA-only overrides. Local plan preview changes UI state, and the AI provider picker only affects debug AI requests against non-production backends.")
         }
     }
 }

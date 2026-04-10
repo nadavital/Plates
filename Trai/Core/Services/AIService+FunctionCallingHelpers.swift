@@ -1,15 +1,15 @@
 //
-//  GeminiService+FunctionCallingHelpers.swift
+//  AIService+FunctionCallingHelpers.swift
 //  Trai
 //
-//  Helper methods for Gemini function calling
+//  Helper methods for AI function calling
 //
 
 import Foundation
 import SwiftData
 import os
 
-extension GeminiService {
+extension AIService {
 
     // MARK: - System Prompt Builder
 
@@ -201,14 +201,14 @@ extension GeminiService {
     func sendFunctionResultForSuggestion(
         name: String,
         response: [String: Any],
-        previousContents: [[String: Any]],
-        originalParts: [[String: Any]],
-        executor: GeminiFunctionExecutor
+        previousMessages: [TraiAIMessage],
+        originalParts: [TraiAIPart],
+        executor: AIFunctionExecutor
     ) async throws -> FunctionFollowUpResult {
-        let funcResult = GeminiFunctionExecutor.FunctionResult(name: name, response: response)
+        let funcResult = AIFunctionExecutor.FunctionResult(name: name, response: response)
         return try await sendFunctionResult(
             functionResult: funcResult,
-            previousContents: previousContents,
+            previousMessages: previousMessages,
             originalParts: originalParts,
             executor: executor,
             onTextChunk: nil
@@ -216,40 +216,40 @@ extension GeminiService {
     }
 
     func sendFunctionResult(
-        functionResult: GeminiFunctionExecutor.FunctionResult,
-        previousContents: [[String: Any]],
-        originalParts: [[String: Any]],
-        executor: GeminiFunctionExecutor,
+        functionResult: AIFunctionExecutor.FunctionResult,
+        previousMessages: [TraiAIMessage],
+        originalParts: [TraiAIPart],
+        executor: AIFunctionExecutor,
         onTextChunk: ((String) -> Void)?
     ) async throws -> FunctionFollowUpResult {
-        var contents = previousContents
+        var messages = previousMessages
         var currentParts = originalParts
         var result = FunctionFollowUpResult()
-        var pendingFunctionResult: GeminiFunctionExecutor.FunctionResult? = functionResult
+        var pendingFunctionResult: AIFunctionExecutor.FunctionResult? = functionResult
 
         for iteration in 0..<5 {
             guard let funcResult = pendingFunctionResult else { break }
             pendingFunctionResult = nil
 
-            contents.append([
-                "role": "model",
-                "parts": currentParts
-            ])
-
-            contents.append([
-                "role": "user",
-                "parts": [[
-                    "functionResponse": [
-                        "name": funcResult.name,
-                        "response": funcResult.response
+            messages.append(
+                AIBackendPayloadBuilder.canonicalMessage(role: .assistant, parts: currentParts)
+            )
+            messages.append(
+                AIBackendPayloadBuilder.canonicalMessage(
+                    role: .tool,
+                    parts: [
+                        AIBackendPayloadBuilder.toolResponsePart(
+                            name: funcResult.name,
+                            response: funcResult.response
+                        )
                     ]
-                ]]
-            ])
+                )
+            )
 
-            let requestBody: [String: Any] = [
-                "contents": contents,
-                "generationConfig": buildGenerationConfig(thinkingLevel: .low)
-            ]
+            let requestBody = AIBackendPayloadBuilder.requestBody(from: AIBackendPayloadBuilder.canonicalRequest(
+                messages: messages,
+                generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
+            ))
 
             let requestTicket = try beginAIRequest(for: .agentToolFollowUp)
 
@@ -291,14 +291,20 @@ extension GeminiService {
                     receivedAnyContent = true
 
                     for part in parts {
-                        currentParts.append(part)
-
                         if let text = part["text"] as? String {
+                            currentParts.append(.text(text))
                             result.text += text
                         }
 
                         if let functionCall = part["functionCall"] as? [String: Any],
                            let functionName = functionCall["name"] as? String {
+                            currentParts.append(
+                                AIBackendPayloadBuilder.toolCallPart(
+                                    id: functionCall["id"] as? String,
+                                    name: functionName,
+                                    arguments: functionCall["args"] as? [String: Any] ?? [:]
+                                )
+                            )
                             log("⏭️ Ignoring follow-up function call: \(functionName)", type: .debug)
                         }
                     }
@@ -320,10 +326,10 @@ extension GeminiService {
     }
 
     func sendParallelFunctionResults(
-        functionResults: [GeminiFunctionExecutor.FunctionResult],
-        previousContents: [[String: Any]],
-        originalParts: [[String: Any]],
-        executor: GeminiFunctionExecutor,
+        functionResults: [AIFunctionExecutor.FunctionResult],
+        previousMessages: [TraiAIMessage],
+        originalParts: [TraiAIPart],
+        executor: AIFunctionExecutor,
         previousText: String = "",
         onTextChunk: ((String) -> Void)?,
         depth: Int = 0
@@ -333,35 +339,39 @@ extension GeminiService {
             return FunctionFollowUpResult()
         }
 
-        var contents = previousContents
+        var messages = previousMessages
         var result = FunctionFollowUpResult()
         let accumulatedPreviousText = previousText
 
-        contents.append([
-            "role": "model",
-            "parts": originalParts
-        ])
+        messages.append(
+            AIBackendPayloadBuilder.canonicalMessage(role: .assistant, parts: originalParts)
+        )
+        messages.append(
+            AIBackendPayloadBuilder.canonicalMessage(
+                role: .tool,
+                parts: functionResults.map {
+                    AIBackendPayloadBuilder.toolResponsePart(
+                        name: $0.name,
+                        response: $0.response
+                    )
+                }
+            )
+        )
 
-        var responseParts: [[String: Any]] = []
-        for funcResult in functionResults {
-            responseParts.append([
-                "functionResponse": [
-                    "name": funcResult.name,
-                    "response": funcResult.response
-                ]
-            ])
+        let canonicalTools: [TraiAITool] = AIFunctionDeclarations.chatFunctions.compactMap { declaration in
+            guard let name = declaration["name"] as? String else { return nil }
+            return AIBackendPayloadBuilder.canonicalTool(
+                name: name,
+                description: declaration["description"] as? String ?? "",
+                parameters: declaration["parameters"] as? [String: Any] ?? [:]
+            )
         }
 
-        contents.append([
-            "role": "user",
-            "parts": responseParts
-        ])
-
-        let requestBody: [String: Any] = [
-            "contents": contents,
-            "tools": [["function_declarations": GeminiFunctionDeclarations.chatFunctions]],
-            "generationConfig": buildGenerationConfig(thinkingLevel: .low)
-        ]
+        let requestBody = AIBackendPayloadBuilder.requestBody(from: AIBackendPayloadBuilder.canonicalRequest(
+            messages: messages,
+            tools: canonicalTools,
+            generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
+        ))
 
         let requestTicket = try beginAIRequest(for: .agentToolFollowUp)
 
@@ -381,7 +391,7 @@ extension GeminiService {
                 return result
             }
 
-            var additionalFunctionResults: [GeminiFunctionExecutor.FunctionResult] = []
+            var additionalFunctionResults: [AIFunctionExecutor.FunctionResult] = []
 
             for try await line in bytes.lines {
                 guard line.hasPrefix("data: ") else { continue }
@@ -400,9 +410,8 @@ extension GeminiService {
                 }
 
                 for part in parts {
-                    result.accumulatedParts.append(part)
-
                     if let text = part["text"] as? String {
+                        result.accumulatedParts.append(.text(text))
                         result.text += text
                         if let onTextChunk {
                             onTextChunk(accumulatedPreviousText + result.text)
@@ -419,10 +428,17 @@ extension GeminiService {
                         }
 
                         let args = functionCall["args"] as? [String: Any] ?? [:]
+                        result.accumulatedParts.append(
+                            AIBackendPayloadBuilder.toolCallPart(
+                                id: functionCall["id"] as? String,
+                                name: functionName,
+                                arguments: args
+                            )
+                        )
                         let argsPreview = args.keys.joined(separator: ", ")
                         log("🔗 Chain[\(depth)]: \(functionName)(\(argsPreview))", type: .info)
 
-                        let call = GeminiFunctionExecutor.FunctionCall(name: functionName, arguments: args)
+                        let call = AIFunctionExecutor.FunctionCall(name: functionName, arguments: args)
                         let execResult = executor.execute(call)
 
                         if functionName == "save_memory", let content = args["content"] as? String {
@@ -480,7 +496,7 @@ extension GeminiService {
             if !additionalFunctionResults.isEmpty && !hasSuggestion {
                 let chainedResult = try await sendParallelFunctionResults(
                     functionResults: additionalFunctionResults,
-                    previousContents: contents,
+                    previousMessages: messages,
                     originalParts: result.accumulatedParts,
                     executor: executor,
                     previousText: accumulatedPreviousText + result.text,

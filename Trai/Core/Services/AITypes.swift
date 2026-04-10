@@ -1,5 +1,5 @@
 //
-//  GeminiTypes.swift
+//  AITypes.swift
 //  Trai
 //
 //  Created by Nadav Avital on 12/25/25.
@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Response from Gemini API for food analysis
+/// Response from Trai AI for food analysis
 struct FoodAnalysis: Codable, Sendable {
     let name: String
     let calories: Int
@@ -17,13 +17,30 @@ struct FoodAnalysis: Codable, Sendable {
     let fiberGrams: Double?
     let sugarGrams: Double?
     let servingSize: String?
-    let confidence: String
+    let confidence: String?
     let notes: String?
     let emoji: String?
 
     /// Display emoji with fallback
     var displayEmoji: String {
         emoji ?? "🍽️"
+    }
+
+    var rejectionReason: String? {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalizedName == "unclear food or drink" {
+            return "model returned unclear sentinel"
+        }
+
+        if calories < 0 || proteinGrams < 0 || carbsGrams < 0 || fatGrams < 0 {
+            return "negative calories or macros"
+        }
+
+        return nil
+    }
+
+    var shouldBeRejectedForLogging: Bool {
+        rejectionReason != nil
     }
 }
 
@@ -332,7 +349,7 @@ struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
 
 // MARK: - Errors
 
-enum GeminiError: LocalizedError {
+enum AIServiceError: LocalizedError {
     case invalidInput(String)
     case invalidResponse
     case apiError(statusCode: Int, message: String)
@@ -374,8 +391,8 @@ extension Error {
 
     var aiUserFacingMessage: String? {
         switch self {
-        case let geminiError as GeminiError:
-            switch geminiError {
+        case let aiServiceError as AIServiceError:
+            switch aiServiceError {
             case .accessDenied(let message), .quotaExceeded(let message):
                 return message
             default:

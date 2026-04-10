@@ -14,7 +14,8 @@ Backend service for:
 cd /Users/navital/Desktop/Trai/Backend
 ALLOW_DEV_APPLE_BYPASS=true \
 TRAI_ENVIRONMENT=staging \
-GEMINI_API_KEY=your_key_here \
+TRAI_AI_PROVIDER=openai \
+OPENAI_API_KEY=your_key_here \
 npm run dev
 ```
 
@@ -34,7 +35,7 @@ Use `.env.example` as the starting point for local and Cloud Run environment con
   - optional custom SQLite path
 - `TRAI_AI_PROVIDER`
   - `gemini` or `openai`
-  - default: `gemini`
+  - default: `openai`
 - `TRAI_DATABASE_DRIVER`
   - `sqlite` or `postgres`
   - defaults to `postgres` when `TRAI_DATABASE_URL` / `DATABASE_URL` is present, otherwise `sqlite`
@@ -50,7 +51,13 @@ Use `.env.example` as the starting point for local and Cloud Run environment con
 - `OPENAI_API_KEY`
   - required only when `TRAI_AI_PROVIDER=openai`
 - `OPENAI_MODEL`
-  - default: `gpt-5-mini`
+  - default: `gpt-5.4-mini`
+- `OPENAI_INPUT_USD_PER_1M_TOKENS`, `OPENAI_OUTPUT_USD_PER_1M_TOKENS`, `OPENAI_CACHED_INPUT_USD_PER_1M_TOKENS`
+  - optional override for OpenAI token-cost estimation
+  - defaults for `gpt-5.4-mini`: `0.75`, `4.5`, `0.075`
+- `GEMINI_INPUT_USD_PER_1M_TOKENS`, `GEMINI_OUTPUT_USD_PER_1M_TOKENS`, `GEMINI_CACHED_INPUT_USD_PER_1M_TOKENS`
+  - optional override for Gemini token-cost estimation
+  - defaults for `gemini-3-flash-preview`: `0.5`, `3`, `0.05`
 - `ALLOW_DEV_APPLE_BYPASS`
   - `true` enables local Apple auth bypass for development
 - `APPLE_EXPECTED_AUDIENCES`
@@ -140,6 +147,50 @@ Recommended follow-up after the first successful production deploy:
 - verify `/health`, Sign in with Apple exchange, bootstrap, AI proxy, and StoreKit sync
 - use production for TestFlight so beta users keep their account state at App Store launch
 
+## Switching A Provider
+
+To test OpenAI on an existing Cloud Run service, store the OpenAI key in Secret Manager:
+
+```bash
+printf '%s' 'YOUR_OPENAI_API_KEY' | gcloud secrets create OPENAI_API_KEY --data-file=-
+```
+
+If the secret already exists:
+
+```bash
+printf '%s' 'YOUR_OPENAI_API_KEY' | gcloud secrets versions add OPENAI_API_KEY --data-file=-
+```
+
+Then redeploy with:
+
+```bash
+cd /Users/navital/Desktop/Trai/Backend
+
+PROJECT_ID=YOUR_PROJECT \
+SERVICE_NAME=trai-backend-staging \
+IMAGE_NAME=trai-backend \
+IMAGE_TAG=openai-staging \
+TRAI_ENVIRONMENT=staging \
+TRAI_AI_PROVIDER=openai \
+OPENAI_MODEL=gpt-5.4-mini \
+CLOUD_SQL_INSTANCE=YOUR_PROJECT:us-central1:trai-staging-postgres \
+DATABASE_URL_SECRET_NAME=TRAI_DATABASE_URL_STAGING \
+./scripts/deploy_cloud_run.sh
+```
+
+Do the same for production by changing:
+
+- `SERVICE_NAME=trai-backend-production`
+- `IMAGE_TAG=openai-production`
+- `TRAI_ENVIRONMENT=production`
+- `DATABASE_URL_SECRET_NAME=TRAI_DATABASE_URL_PRODUCTION`
+
+The active provider can be confirmed from `/health`, which now reports:
+
+- `aiProvider`
+- `aiProviderModel`
+- `aiProviderCapabilities`
+
 ## Scaling Path
 
 The backend now supports both SQLite and Postgres:
@@ -163,7 +214,10 @@ Recommended order:
 - `POST /v1/app-store/notifications` accepts App Store Server Notifications V2 signed payloads and can update subscriptions even when the app is not open.
 - Notification handling now maps lifecycle events into backend subscription states including `gracePeriod`, `billingRetry`, `expired`, `refunded`, and `revoked`.
 - The current launch pricing assumption is a break-even-oriented `Trai Pro` monthly plan at `$3.99`, with backend quotas tuned to avoid subsidizing Gemini usage.
-- `GET /v1/admin/user-inspect`, `POST /v1/admin/reconcile-subscription`, `POST /v1/admin/quota-adjustment`, and `POST /v1/admin/quota-reset` provide support tooling for drift debugging, manual repair, and beta support credits.
+- `GET /v1/admin/user-inspect`, `GET /v1/admin/usage-summary`, `POST /v1/admin/reconcile-subscription`, `POST /v1/admin/quota-adjustment`, and `POST /v1/admin/quota-reset` provide support tooling for drift debugging, manual repair, and beta support credits.
+- `GET /v1/admin/user-inspect` now includes trailing AI telemetry summaries by feature and by provider/model when token metadata is available.
+- `GET /v1/admin/usage-summary` returns trailing-window usage averages, plan breakdowns, top users, and telemetry cost rollups so quota changes can be based on real per-user behavior.
+- Real token-cost estimation is driven by model-aware defaults for the shipped OpenAI and Gemini models, and can still be overridden with `OPENAI_INPUT_USD_PER_1M_TOKENS`, `OPENAI_OUTPUT_USD_PER_1M_TOKENS`, `OPENAI_CACHED_INPUT_USD_PER_1M_TOKENS`, `GEMINI_INPUT_USD_PER_1M_TOKENS`, `GEMINI_OUTPUT_USD_PER_1M_TOKENS`, and `GEMINI_CACHED_INPUT_USD_PER_1M_TOKENS`.
 - The iOS app can use the `Local Development` backend environment to point at `http://127.0.0.1:8789` during simulator-based testing.
 - The iOS app should use `Staging` by default in development builds once a real public staging service exists.
 - Run `npm run verify:apple` to exercise the JWT verification path against a local JWKS fixture.

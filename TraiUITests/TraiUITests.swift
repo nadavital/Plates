@@ -60,7 +60,9 @@ final class TraiUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["Manual"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["foodCameraCaptureReady"].waitForExistence(timeout: 4)
+        )
     }
 
     func testPendingLogWeightRoutePresentsLogWeightSheet() {
@@ -380,9 +382,9 @@ final class TraiUITests: XCTestCase {
     ) -> XCUIApplication {
         let app = XCUIApplication()
         if includeUITestMode {
-            app.launchArguments = ["UITEST_MODE"] + extraArguments
+            app.launchArguments = ["UITEST_MODE", "--disable-tab-prewarm"] + extraArguments
         } else {
-            app.launchArguments = ["--use-persistent-store"] + extraArguments
+            app.launchArguments = ["--use-persistent-store", "--disable-tab-prewarm"] + extraArguments
         }
         return app
     }

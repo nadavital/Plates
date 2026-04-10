@@ -1,19 +1,19 @@
 //
-//  GeminiService+FunctionCalling.swift
+//  AIService+FunctionCalling.swift
 //  Trai
 //
-//  Gemini function calling for tool use
+//  AI function calling for tool use
 //
 
 import Foundation
 import SwiftData
 import os
 
-extension GeminiService {
+extension AIService {
 
     // MARK: - Function Calling Chat
 
-    /// Chat using Gemini function calling for tool use
+    /// Chat using AI function calling for tool use
     func chatWithFunctions(
         message: String,
         imageData: Data?,
@@ -29,56 +29,59 @@ extension GeminiService {
 
         do {
             let systemPrompt = buildFunctionCallingSystemPrompt(context: context)
-            var contents: [[String: Any]] = []
+            var messages: [TraiAIMessage] = []
 
             // Add system prompt
-            contents.append([
-                "role": "user",
-                "parts": [["text": systemPrompt]]
-            ])
-            contents.append([
-                "role": "model",
-                "parts": [["text": context.coachTone.primingReply]]
-            ])
+            messages.append(
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: systemPrompt)
+            )
+            messages.append(
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .assistant, text: context.coachTone.primingReply)
+            )
 
             // Add conversation history
             for msg in conversationHistory.suffix(10) {
-                let parts: [[String: Any]] = [["text": msg.content]]
-                contents.append([
-                    "role": msg.isFromUser ? "user" : "model",
-                    "parts": parts
-                ])
+                messages.append(
+                    AIBackendPayloadBuilder.canonicalTextMessage(
+                        role: msg.isFromUser ? .user : .assistant,
+                        text: msg.content
+                    )
+                )
             }
 
             // Build user message with optional image
-            var userParts: [[String: Any]] = []
+            var canonicalUserParts: [TraiAIPart] = []
             if let imageData {
-                userParts.append([
-                    "inline_data": [
-                        "mime_type": "image/jpeg",
-                        "data": imageData.base64EncodedString()
-                    ]
-                ])
+                canonicalUserParts.append(AIBackendPayloadBuilder.imagePart(imageData))
                 log("📸 Image attached to message", type: .info)
             }
-            userParts.append(["text": message.isEmpty ? "What is this?" : message])
+            let promptText = message.isEmpty ? "What is this?" : message
+            canonicalUserParts.append(.text(promptText))
 
-            contents.append([
-                "role": "user",
-                "parts": userParts
-            ])
+            messages.append(
+                AIBackendPayloadBuilder.canonicalMessage(role: .user, parts: canonicalUserParts)
+            )
 
             // Build request with function declarations
-            var config = buildGenerationConfig(thinkingLevel: .medium)
-            if imageData != nil {
-                config["mediaResolution"] = "MEDIA_RESOLUTION_HIGH"
+            let canonicalTools: [TraiAITool] = AIFunctionDeclarations.chatFunctions.compactMap { declaration in
+                guard let name = declaration["name"] as? String else { return nil }
+                return AIBackendPayloadBuilder.canonicalTool(
+                    name: name,
+                    description: declaration["description"] as? String ?? "",
+                    parameters: declaration["parameters"] as? [String: Any] ?? [:]
+                )
             }
 
-            let requestBody: [String: Any] = [
-                "contents": contents,
-                "tools": [["function_declarations": GeminiFunctionDeclarations.chatFunctions]],
-                "generationConfig": config
-            ]
+            let canonicalRequest = AIBackendPayloadBuilder.canonicalRequest(
+                messages: messages,
+                tools: canonicalTools,
+                generation: AIBackendPayloadBuilder.canonicalGeneration(
+                    reasoningLevel: .medium,
+                    imageResolution: imageData == nil ? nil : .high
+                )
+            )
+
+            let requestBody = AIBackendPayloadBuilder.requestBody(from: canonicalRequest)
 
             // Use streaming API
             let url = try serviceURL(action: "streamGenerateContent", streaming: true)
@@ -92,12 +95,22 @@ extension GeminiService {
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw GeminiError.invalidResponse
+                throw AIServiceError.invalidResponse
             }
 
             guard httpResponse.statusCode == 200 else {
-                log("❌ API Error: status \(httpResponse.statusCode)", type: .error)
-                throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: "Streaming request failed")
+                var data = Data()
+                for try await byte in bytes {
+                    data.append(byte)
+                }
+                let userError = parseAIProxyError(
+                    statusCode: httpResponse.statusCode,
+                    data: data,
+                    fallbackMessage: "Streaming request failed"
+                )
+                lastError = userError.localizedDescription
+                log("❌ API Error: \(userError.localizedDescription)", type: .error)
+                throw userError
             }
 
             let result = try await parseStreamingFunctionResponse(
@@ -106,7 +119,7 @@ extension GeminiService {
                 userMessage: message,
                 context: context,
                 modelContext: modelContext,
-                contents: contents,
+                messages: messages,
                 onTextChunk: onTextChunk,
                 onFunctionCall: onFunctionCall
             )
@@ -126,7 +139,7 @@ extension GeminiService {
         userMessage: String,
         context: ChatFunctionContext,
         modelContext: ModelContext,
-        contents: [[String: Any]],
+        messages: [TraiAIMessage],
         onTextChunk: ((String) -> Void)?,
         onFunctionCall: ((String) -> Void)?
     ) async throws -> ChatFunctionResult {
@@ -139,9 +152,9 @@ extension GeminiService {
         var suggestedWorkoutLog: SuggestedWorkoutLog?
         var suggestedReminder: SuggestedReminder?
         var savedMemories: [String] = []
-        var accumulatedParts: [[String: Any]] = []
+        var accumulatedParts: [TraiAIPart] = []
 
-        let executor = GeminiFunctionExecutor(
+        let executor = AIFunctionExecutor(
             modelContext: modelContext,
             userProfile: context.profile,
             isIncognitoMode: context.isIncognitoMode,
@@ -149,7 +162,7 @@ extension GeminiService {
         )
 
         var pendingFunctionCalls: [(name: String, args: [String: Any])] = []
-        var pendingFunctionResults: [GeminiFunctionExecutor.FunctionResult] = []
+        var pendingFunctionResults: [AIFunctionExecutor.FunctionResult] = []
 
         // Parse streaming response - collect ALL function calls first
         for try await line in bytes.lines {
@@ -169,9 +182,8 @@ extension GeminiService {
             }
 
             for part in parts {
-                accumulatedParts.append(part)
-
                 if let text = part["text"] as? String {
+                    accumulatedParts.append(.text(text))
                     textResponse += text
                     onTextChunk?(textResponse)
                 }
@@ -179,6 +191,13 @@ extension GeminiService {
                 if let functionCall = part["functionCall"] as? [String: Any],
                    let functionName = functionCall["name"] as? String {
                     let args = functionCall["args"] as? [String: Any] ?? [:]
+                    accumulatedParts.append(
+                        AIBackendPayloadBuilder.toolCallPart(
+                            id: functionCall["id"] as? String,
+                            name: functionName,
+                            arguments: args
+                        )
+                    )
                     let argsPreview = args.keys.joined(separator: ", ")
                     log("🔧 \(functionName)(\(argsPreview))", type: .info)
                     functionsCalled.append(functionName)
@@ -191,7 +210,7 @@ extension GeminiService {
         // Process all collected function calls
         if !pendingFunctionCalls.isEmpty {
             for (functionName, args) in pendingFunctionCalls {
-                let call = GeminiFunctionExecutor.FunctionCall(name: functionName, arguments: args)
+                let call = AIFunctionExecutor.FunctionCall(name: functionName, arguments: args)
                 let result = executor.execute(call)
 
                 if functionName == "save_memory", let content = args["content"] as? String {
@@ -248,7 +267,7 @@ extension GeminiService {
                 log("📤 Sending \(pendingFunctionResults.count) result(s) to model", type: .debug)
                 let followUp = try await sendParallelFunctionResults(
                     functionResults: pendingFunctionResults,
-                    previousContents: contents,
+                    previousMessages: messages,
                     originalParts: accumulatedParts,
                     executor: executor,
                     previousText: textResponse,
@@ -283,7 +302,7 @@ extension GeminiService {
                         ? "The user will see cards with \(suggestedFoods.count) food suggestions. Please write a brief, friendly message acknowledging what they ate. \(toneInstruction)"
                         : "The user will see a card with this food suggestion. Please write a brief, friendly message acknowledging what they ate. \(toneInstruction)"
                 ],
-                previousContents: contents,
+                previousMessages: messages,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -302,7 +321,7 @@ extension GeminiService {
                     "fat": plan.fatGrams as Any,
                     "instruction": "The user will see a card with these plan changes. Please write a brief message explaining why you're suggesting these adjustments. \(toneInstruction)"
                 ],
-                previousContents: contents,
+                previousMessages: messages,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -320,7 +339,7 @@ extension GeminiService {
                     "changes": changesDescription,
                     "instruction": "The user will see a card with these proposed changes. Please write a brief, friendly message explaining what you're suggesting to update and why. \(toneInstruction)"
                 ],
-                previousContents: contents,
+                previousMessages: messages,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -341,7 +360,7 @@ extension GeminiService {
                     "duration_minutes": workout.durationMinutes,
                     "instruction": "The user will see a card with this workout suggestion. Please write a brief message about why this workout fits their goals/recovery. \(toneInstruction)"
                 ],
-                previousContents: contents,
+                previousMessages: messages,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -361,7 +380,7 @@ extension GeminiService {
                     "duration_minutes": workoutLog.durationMinutes as Any,
                     "instruction": "The user will see a card to confirm logging this workout. Please write a brief acknowledgement of their effort. \(toneInstruction)"
                 ],
-                previousContents: contents,
+                previousMessages: messages,
                 originalParts: accumulatedParts,
                 executor: executor
             )
@@ -380,10 +399,10 @@ extension GeminiService {
                 let followUp = try await sendFunctionResultForSuggestion(
                     name: calledDataFunctions.first!,
                     response: [
-                        "status": "data_retrieved",
-                        "instruction": "The data has been retrieved. Please summarize the information for the user and answer their original question based on the data. \(toneInstruction)"
-                    ],
-                    previousContents: contents,
+                    "status": "data_retrieved",
+                    "instruction": "The data has been retrieved. Please summarize the information for the user and answer their original question based on the data. \(toneInstruction)"
+                ],
+                    previousMessages: messages,
                     originalParts: accumulatedParts,
                     executor: executor
                 )
@@ -401,7 +420,7 @@ extension GeminiService {
            let quickLogArgs = quickWeightLogArgs(from: userMessage, profile: context.profile) {
             onFunctionCall?("log_weight")
             functionsCalled.append("log_weight")
-            let call = GeminiFunctionExecutor.FunctionCall(name: "log_weight", arguments: quickLogArgs)
+            let call = AIFunctionExecutor.FunctionCall(name: "log_weight", arguments: quickLogArgs)
             if case .dataResponse(let functionResult) = executor.execute(call) {
                 pendingFunctionResults.append(functionResult)
             }

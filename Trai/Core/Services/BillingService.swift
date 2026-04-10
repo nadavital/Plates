@@ -1,6 +1,7 @@
 import Foundation
 import OSLog
 import StoreKit
+import CryptoKit
 
 @MainActor @Observable
 final class BillingService {
@@ -255,7 +256,7 @@ final class BillingService {
 
         do {
             let purchaseResult: Product.PurchaseResult
-            if let token = UUID(uuidString: accountService.installationID) {
+            if let token = storeKitAppAccountToken() {
                 purchaseResult = try await product.purchase(options: [.appAccountToken(token)])
             } else {
                 purchaseResult = try await product.purchase()
@@ -652,7 +653,8 @@ final class BillingService {
                 purchaseDate: transaction.purchaseDate,
                 expirationDate: transaction.expirationDate,
                 revocationDate: transaction.revocationDate,
-                isUpgraded: transaction.isUpgraded
+                isUpgraded: transaction.isUpgraded,
+                appAccountToken: storeKitAppAccountToken()?.uuidString.lowercased()
             )
         }
 
@@ -700,6 +702,32 @@ final class BillingService {
     private func persistProducts() {
         guard let data = try? encoder.encode(availableProducts) else { return }
         defaults.set(data, forKey: DefaultsKey.availableProducts)
+    }
+
+    private func storeKitAppAccountToken() -> UUID? {
+        Self.storeKitAppAccountToken(for: accountService.appAccountToken)
+    }
+
+    private static func storeKitAppAccountToken(for rawToken: String) -> UUID? {
+        let trimmedToken = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedToken.isEmpty else { return nil }
+
+        if let uuid = UUID(uuidString: trimmedToken) {
+            return uuid
+        }
+
+        let digest = SHA256.hash(data: Data("trai.storekit.appAccountToken.v1:\(trimmedToken)".utf8))
+        var bytes = Array(digest.prefix(16))
+        guard bytes.count == 16 else { return nil }
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 
     private func resolveProductDefinition(for productID: String) -> SubscriptionProductDefinition? {

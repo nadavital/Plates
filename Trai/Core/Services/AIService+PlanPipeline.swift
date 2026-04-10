@@ -1,14 +1,14 @@
 //
-//  GeminiService+PlanPipeline.swift
+//  AIService+PlanPipeline.swift
 //  Trai
 //
-//  Shared internal pipeline helpers for Gemini plan generation/refinement
+//  Shared internal pipeline helpers for AI plan generation/refinement
 //
 
 import Foundation
 import os
 
-extension GeminiService {
+extension AIService {
     struct PlanPipelineRefinementEnvelope<Plan: Decodable>: Decodable {
         let responseType: String
         let message: String
@@ -21,15 +21,20 @@ extension GeminiService {
         schema: [String: Any],
         decodeFailureLabel: String
     ) async throws -> Plan {
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]],
-            "generationConfig": buildGenerationConfig(
-                thinkingLevel: .medium,
-                jsonSchema: schema
+        let request = AIBackendPayloadBuilder.canonicalRequest(
+            messages: [
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
+            ],
+            output: AIBackendPayloadBuilder.canonicalOutput(
+                kind: .jsonSchema,
+                schema: schema
+            ),
+            generation: AIBackendPayloadBuilder.canonicalGeneration(
+                reasoningLevel: .medium
             )
-        ]
+        )
 
-        let responseText = try await makeRequest(body: requestBody)
+        let responseText = try await makeRequest(request: request)
         logResponse(responseText)
         return try parsePlanPayload(
             from: responseText,
@@ -41,15 +46,20 @@ extension GeminiService {
         prompt: String,
         schema: [String: Any]
     ) async throws -> PlanPipelineRefinementEnvelope<Plan> {
-        let requestBody: [String: Any] = [
-            "contents": [["parts": [["text": prompt]]]],
-            "generationConfig": buildGenerationConfig(
-                thinkingLevel: .low,
-                jsonSchema: schema
+        let request = AIBackendPayloadBuilder.canonicalRequest(
+            messages: [
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
+            ],
+            output: AIBackendPayloadBuilder.canonicalOutput(
+                kind: .jsonSchema,
+                schema: schema
+            ),
+            generation: AIBackendPayloadBuilder.canonicalGeneration(
+                reasoningLevel: .low
             )
-        ]
+        )
 
-        let responseText = try await makeRequest(body: requestBody)
+        let responseText = try await makeRequest(request: request)
         logResponse(responseText)
         return try parsePlanRefinementEnvelope(from: responseText)
     }
@@ -80,7 +90,7 @@ extension GeminiService {
 
         guard let data = cleanText.data(using: .utf8) else {
             log("⚠️ Failed to convert response to UTF8 data for \(decodeFailureLabel)", type: .error)
-            throw GeminiError.parsingError
+            throw AIServiceError.parsingError
         }
 
         do {
@@ -90,7 +100,7 @@ extension GeminiService {
             if let decodingError = decodingError as? DecodingError {
                 logPlanPipelineDecodingError(decodingError)
             }
-            throw GeminiError.parsingError
+            throw AIServiceError.parsingError
         }
     }
 
@@ -100,7 +110,7 @@ extension GeminiService {
         let cleanText = cleanJSONResponse(text)
 
         guard let data = cleanText.data(using: .utf8) else {
-            throw GeminiError.parsingError
+            throw AIServiceError.parsingError
         }
 
         return try JSONDecoder().decode(PlanPipelineRefinementEnvelope<Plan>.self, from: data)

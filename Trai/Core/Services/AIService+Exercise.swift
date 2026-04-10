@@ -1,5 +1,5 @@
 //
-//  GeminiService+Exercise.swift
+//  AIService+Exercise.swift
 //  Trai
 //
 //  AI-powered exercise analysis for custom exercise creation
@@ -33,9 +33,9 @@ struct ExercisePhotoAnalysis: Codable {
     }
 }
 
-// MARK: - GeminiService Exercise Extension
+// MARK: - AIService Exercise Extension
 
-extension GeminiService {
+extension AIService {
     /// Analyze an exercise name to determine its category, target muscles, and description
     func analyzeExercise(name: String) async throws -> ExerciseAnalysis {
         log("Analyzing exercise: \(name)", type: .info)
@@ -83,23 +83,26 @@ extension GeminiService {
                 "required": ["category", "description"]
             ]
 
-            let body: [String: Any] = [
-                "contents": [
-                    ["role": "user", "parts": [["text": prompt]]]
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
                 ],
-                "generationConfig": buildGenerationConfig(
-                    thinkingLevel: .minimal,
-                    jsonSchema: schema
+                output: AIBackendPayloadBuilder.canonicalOutput(
+                    kind: .jsonSchema,
+                    schema: schema
+                ),
+                generation: AIBackendPayloadBuilder.canonicalGeneration(
+                    reasoningLevel: .minimal
                 )
-            ]
+            )
 
             logPrompt(prompt)
 
-            let response = try await makeRequest(body: body)
+            let response = try await makeRequest(request: request)
             logResponse(response)
 
             guard let data = response.data(using: .utf8) else {
-                throw GeminiError.invalidResponse
+                throw AIServiceError.invalidResponse
             }
 
             let analysis = try JSONDecoder().decode(ExerciseAnalysis.self, from: data)
@@ -131,7 +134,14 @@ extension GeminiService {
             }
 
             let prompt = """
-            Look at this image of gym equipment or exercise machine.
+            Look at this image related to gym equipment or an exercise machine.
+
+            The image may show:
+            - the full machine
+            - part of the machine
+            - an instruction placard or diagram
+            - a brand/model label
+            - close-up text describing how the machine is used
 
             Identify:
             1. What equipment or machine this is (e.g., "Lat Pulldown Machine", "Cable Crossover", "Leg Press")
@@ -140,11 +150,21 @@ extension GeminiService {
             4. Any setup tips or key things to know
             \(existingExercisesContext)
             IMPORTANT:
-            - Be specific when similar machines exist. Prefer precise variants (e.g., "Converging Chest Press Machine" vs "Chest Press Machine", "Hack Squat" vs "Leg Press").
-            - If brand/model text is visible on the machine, include that in equipmentName (e.g., "Life Fitness Seated Row Machine").
-            - Prioritize what is clearly visible in the image over generic guesses.
-            If this isn't gym equipment, still try to identify what it is and suggest any exercises that could be done with it.
+            - Use any visible text, diagrams, labels, or setup instructions in the image to help identify the equipment.
+            - Prioritize what is clearly visible in the image over guessing.
+            - Do NOT invent hidden attachments, stations, exercise variants, or machine names that are not supported by the visible image.
+            - If the image only shows a partial view or descriptive signage, use the visible clues but keep the answer generic if needed instead of forcing a highly specific machine name.
+            - Be specific when similar machines exist, but only when the image supports that level of certainty.
+            - If brand/model text is clearly visible on the machine, include that in equipmentName (e.g., "Life Fitness Seated Row Machine").
+            - If the image is too unclear to confidently identify gym equipment, return:
+              equipmentName: "Unclear gym equipment"
+              suggestedExercises: []
+              description: "The image does not clearly show identifiable gym equipment."
+              tips: "Retake the photo with the full machine, placard, or visible labels."
+            - If the image is not gym equipment, do not force it into a gym machine category. Use a generic visible label, keep suggestedExercises empty unless they are clearly supported by the object shown, and explain the uncertainty in description or tips.
             """
+
+            logImagePayloadSummary(imageData, label: "Exercise photo analysis image")
 
             let schema: [String: Any] = [
                 "type": "object",
@@ -183,35 +203,33 @@ extension GeminiService {
                 "required": ["equipmentName", "suggestedExercises", "description"]
             ]
 
-            let base64Image = imageData.base64EncodedString()
-            let body: [String: Any] = [
-                "contents": [
-                    [
-                        "role": "user",
-                        "parts": [
-                            ["text": prompt],
-                            [
-                                "inlineData": [
-                                    "mimeType": "image/jpeg",
-                                    "data": base64Image
-                                ]
-                            ]
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalMessage(
+                        role: .user,
+                        parts: [
+                            .text(prompt),
+                            AIBackendPayloadBuilder.imagePart(imageData)
                         ]
-                    ]
+                    )
                 ],
-                "generationConfig": buildGenerationConfig(
-                    thinkingLevel: .minimal,
-                    jsonSchema: schema
+                output: AIBackendPayloadBuilder.canonicalOutput(
+                    kind: .jsonSchema,
+                    schema: schema
+                ),
+                generation: AIBackendPayloadBuilder.canonicalGeneration(
+                    reasoningLevel: .minimal,
+                    imageResolution: .high
                 )
-            ]
+            )
 
             logPrompt(prompt)
 
-            let response = try await makeRequest(body: body)
+            let response = try await makeRequest(request: request)
             logResponse(response)
 
             guard let data = response.data(using: .utf8) else {
-                throw GeminiError.invalidResponse
+                throw AIServiceError.invalidResponse
             }
 
             let analysis = try JSONDecoder().decode(ExercisePhotoAnalysis.self, from: data)

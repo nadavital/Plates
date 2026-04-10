@@ -12,6 +12,7 @@
 		50550A782F2067D000068DCD /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A772F2067D000068DCD /* WidgetKit.framework */; };
 		50550A7A2F2067D000068DCD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 50550A792F2067D000068DCD /* SwiftUI.framework */; };
 		50550A8B2F2067D100068DCD /* TraiWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 50550A752F2067D000068DCD /* TraiWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7C1000013C00000100C10001 /* AIBackendPayloadBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1000023C00000100C10001 /* AIBackendPayloadBuilderTests.swift */; };
 		A2C961AB7A8B0C439B9FB78A /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
 		A30000012B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */; };
 		A30000032B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000042B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift */; };
@@ -71,6 +72,7 @@
 		50550A772F2067D000068DCD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		50550A792F2067D000068DCD /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		507B71222EFDE03E00DE636E /* Trai.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Trai.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C1000023C00000100C10001 /* AIBackendPayloadBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIBackendPayloadBuilderTests.swift; sourceTree = "<group>"; };
 		7888F9EC3466C3F845899CD8 /* TraiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		798CA7F0428F6892AAAA2CE4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPerformanceDataSeederTests.swift; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 		BD0EB4BE4273B147615FCF00 /* TraiTests */ = {
 			isa = PBXGroup;
 			children = (
+				7C1000023C00000100C10001 /* AIBackendPayloadBuilderTests.swift */,
 				A30000042B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift */,
 				F20000022A00000100F20001 /* AppRouteTests.swift */,
 				F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */,
@@ -402,6 +405,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7C1000013C00000100C10001 /* AIBackendPayloadBuilderTests.swift in Sources */,
 				A30000032B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift in Sources */,
 				F20000012A00000100F20001 /* AppRouteTests.swift in Sources */,
 				F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */,

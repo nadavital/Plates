@@ -51,10 +51,10 @@ struct LogFoodTextIntent: AppIntent {
             return .result(dialog: "Please complete onboarding in Trai first.")
         }
 
-        // Use Gemini to analyze the food description
-        let geminiService = GeminiService()
+        // Use the shared AI service to analyze the food description
+        let aiService = AIService()
         do {
-            let analysis = try await geminiService.analyzeFoodDescription(food)
+            let analysis = try await aiService.analyzeFoodDescription(food)
 
             // Create food entry from analysis
             let entry = FoodEntry(
@@ -102,9 +102,9 @@ struct LogFoodTextIntent: AppIntent {
     }
 }
 
-// MARK: - Gemini Extension for Text Analysis
+// MARK: - AI Service Extension for Text Analysis
 
-extension GeminiService {
+extension AIService {
     /// Analyze a text food description and return nutrition info
     func analyzeFoodDescription(_ description: String) async throws -> FoodAnalysisResult {
         try await performAIRequest(for: .foodPhotoAnalysis) {
@@ -158,7 +158,7 @@ extension GeminiService {
 
             guard let data = response.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw GeminiError.invalidResponse
+                throw AIServiceError.invalidResponse
             }
 
             return FoodAnalysisResult(

@@ -1,17 +1,17 @@
 //
-//  GeminiFunctionExecutor.swift
+//  AIFunctionExecutor.swift
 //  Trai
 //
-//  Executes Gemini function calls locally and formats results
-//  Extensions: GeminiFunctionExecutor+Food.swift, GeminiFunctionExecutor+PlanWorkout.swift
+//  Executes AI function calls locally and formats results
+//  Extensions: AIFunctionExecutor+Food.swift, AIFunctionExecutor+PlanWorkout.swift
 //
 
 import Foundation
 import SwiftData
 
-/// Executes function calls from Gemini and returns results
+/// Executes AI function calls and returns results
 @MainActor
-final class GeminiFunctionExecutor {
+final class AIFunctionExecutor {
 
     // MARK: - Types
 
@@ -31,7 +31,7 @@ final class GeminiFunctionExecutor {
     }
 
     enum ExecutionResult {
-        /// Data to send back to Gemini for final response
+        /// Data to send back to the AI backend for final response
         case dataResponse(FunctionResult)
         /// Food suggestion to show user (needs confirmation)
         case suggestedFood(SuggestedFoodEntry)
@@ -75,13 +75,13 @@ final class GeminiFunctionExecutor {
     let modelContext: ModelContext
     let userProfile: UserProfile?
     let isIncognitoMode: Bool
-    let activityData: GeminiService.ActivityData
+    let activityData: AIService.ActivityData
 
     init(
         modelContext: ModelContext,
         userProfile: UserProfile?,
         isIncognitoMode: Bool = false,
-        activityData: GeminiService.ActivityData = .empty
+        activityData: AIService.ActivityData = .empty
     ) {
         self.modelContext = modelContext
         self.userProfile = userProfile

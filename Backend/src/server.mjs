@@ -11,7 +11,7 @@ import {
   PRODUCT_DEFINITIONS
 } from './config.mjs';
 import { createDatabase } from './database.mjs';
-import { createAIProvider } from './ai-provider.mjs';
+import { createAIProvider, normalizeAIProviderName } from './ai-provider.mjs';
 import { createMonetizationHelpers } from './monetization.mjs';
 import { createAuthHelpers } from './auth.mjs';
 import { createAppStoreHelpers } from './appstore.mjs';
@@ -22,7 +22,6 @@ validateConfig(config);
 
 const trustedAppStoreRoots = loadTrustedAppStoreRoots(config);
 const db = await createDatabase(config);
-const aiProvider = createAIProvider(config, HttpError);
 
 async function buildAdminUserInspection(userID) {
   const user = await db.prepare(`
@@ -68,6 +67,31 @@ async function buildAdminUserInspection(userID) {
     LIMIT 20
   `).all(userID);
 
+  const recentAIRequests = await db.prepare(`
+    SELECT
+      feature,
+      provider,
+      model,
+      action,
+      outcome,
+      latency_ms,
+      input_tokens,
+      output_tokens,
+      total_tokens,
+      cached_input_tokens,
+      reasoning_tokens,
+      provider_cost_estimate,
+      provider_usage_json,
+      request_format,
+      retry_count,
+      retry_reason,
+      created_at
+    FROM ai_requests
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 20
+  `).all(userID);
+
   const recentTransactions = await db.prepare(`
     SELECT environment, product_id, transaction_id, original_transaction_id, purchase_date, expires_date, revocation_date, signed_date, updated_at
     FROM storekit_transactions
@@ -105,9 +129,18 @@ async function buildAdminUserInspection(userID) {
     quotaStatus: latestQuotaPeriod ? summarizeQuotaPeriod(latestQuotaPeriod) : null,
     usageAnalytics: await buildUsageAnalytics(userID, latestQuotaPeriod),
     recentUsage,
+    recentAIRequests,
     recentTransactions,
     recentNotifications,
     recentAdjustments,
+    monetizationPolicy: buildMonetizationPolicySummary()
+  };
+}
+
+async function buildAdminUsageSummary(days = 30) {
+  return {
+    generatedAt: new Date().toISOString(),
+    usageAnalytics: await buildGlobalUsageAnalytics(days),
     monetizationPolicy: buildMonetizationPolicySummary()
   };
 }
@@ -282,12 +315,18 @@ function hashToken(token) {
 
 function normalizeNumericIdentifier(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.trunc(value);
+    return Number.isSafeInteger(value) ? String(Math.trunc(value)) : null;
   }
 
-  if (typeof value === 'string' && value.length > 0) {
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) ? parsed : null;
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmedValue = value.trim();
+    if (/^\d+$/.test(trimmedValue)) {
+      return trimmedValue;
+    }
   }
 
   return null;
@@ -352,6 +391,18 @@ class HttpError extends Error {
     this.payload = payload;
   }
 }
+
+function resolveAIProvider(providerOverride = null) {
+  return createAIProvider(
+    {
+      ...config,
+      aiProvider: normalizeAIProviderName(providerOverride ?? config.aiProvider)
+    },
+    HttpError
+  );
+}
+
+const aiProvider = resolveAIProvider();
 
 let authHelpers;
 let appStoreHelpers;
@@ -428,6 +479,7 @@ const {
   buildMonetizationPolicySummary,
   summarizeQuotaPeriod,
   buildUsageAnalytics,
+  buildGlobalUsageAnalytics,
   normalizeAdminReason,
   applyQuotaAdjustment,
   resetQuotaUsage
@@ -448,11 +500,14 @@ const {
 const { routeRequest, handleServerError } = createRouteHandlers({
   db,
   config,
+  aiProvider,
+  resolveAIProvider,
   HttpError,
   readJson,
   sendJson,
   buildSessionSnapshot,
   buildAdminUserInspection,
+  buildAdminUsageSummary,
   assertRequired,
   hashToken,
   isoNow,

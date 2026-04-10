@@ -85,6 +85,7 @@ struct AllWorkoutsSheet: View {
                 }
             }
         }
+        .traiSheetBranding()
     }
 }
 

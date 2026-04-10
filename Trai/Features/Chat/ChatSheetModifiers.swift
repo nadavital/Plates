@@ -14,6 +14,7 @@ extension View {
     ) -> some View {
         self.fullScreenCover(isPresented: showingCamera) {
             ChatCameraView(onCapture: onCapture)
+                .traiSheetBranding()
         }
     }
 
@@ -28,6 +29,7 @@ extension View {
                 ImagePreviewView(image: image) {
                     enlargedImage.wrappedValue = nil
                 }
+                .traiSheetBranding()
             }
         }
     }
@@ -49,6 +51,7 @@ extension View {
                     onSave(updatedMeal, editing.message)
                     editingMeal.wrappedValue = nil
                 }
+                .traiSheetBranding()
             }
         }
     }
@@ -63,6 +66,7 @@ extension View {
         )) {
             if let entry = viewingEntry {
                 EditFoodEntrySheet(entry: entry)
+                    .traiSheetBranding()
             }
         }
     }
@@ -92,6 +96,7 @@ extension View {
                     onSave(updatedPlan, editing.message)
                     editingPlan.wrappedValue = nil
                 }
+                .traiSheetBranding()
             }
         }
     }

@@ -187,13 +187,14 @@ struct ProfileView: View {
                         showSettingsSheet = true
                     } label: {
                         Image(systemName: "gearshape.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(TraiColors.brandAccent)
                     }
                 }
             }
             .sheet(isPresented: $showPlanSheet) {
                 if let currentProfile {
                     PlanAdjustmentSheet(profile: currentProfile)
+                        .traiSheetBranding()
                 }
             }
             .sheet(isPresented: $showSettingsSheet) {
@@ -201,18 +202,22 @@ struct ProfileView: View {
                     NavigationStack {
                         SettingsView(profile: currentProfile)
                     }
+                    .traiSheetBranding()
                 }
             }
             .sheet(isPresented: $showPlanSetupSheet) {
                 WorkoutPlanChatFlow()
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showPlanEditSheet) {
                 if let plan = currentProfile?.workoutPlan {
                     WorkoutPlanEditSheet(currentPlan: plan)
+                        .traiSheetBranding()
                 }
             }
             .sheet(item: $presentedAccountSetupContext) { context in
                 AccountSetupView(context: context)
+                    .traiSheetBranding()
             }
             .onAppear {
                 handleProfileTabSelectionChange(to: appTabSelection.wrappedValue, trackOpen: true)

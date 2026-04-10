@@ -22,7 +22,7 @@
     <key>TRAIBackendProductionBaseURL</key>
     <string>https://trai-backend-production-g33i5go2kq-uc.a.run.app</string>
     <key>TRAIBackendStagingBaseURL</key>
-    <string>https://trai-backend-staging-870319365836.us-central1.run.app</string>
+    <string>https://trai-backend-staging-g33i5go2kq-uc.a.run.app</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>fetch</string>

@@ -95,6 +95,7 @@ struct PlanReviewStepView: View {
                         adjustedFat = String(newPlan.dailyTargets.fat)
                     }
                 )
+                .traiSheetBranding()
             }
         }
     }

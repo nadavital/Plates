@@ -15,16 +15,53 @@ export function createAppStoreHelpers({
   ensureSubscription,
   planRank
 }) {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
   function findKnownProduct(productID) {
     return PRODUCT_DEFINITIONS.find((candidate) => candidate.id === productID);
+  }
+
+  function normalizeStoreKitAppAccountToken(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const normalizedValue = value.trim().toLowerCase();
+    return uuidPattern.test(normalizedValue) ? normalizedValue : null;
+  }
+
+  function effectiveTimestamp(now) {
+    return Date.parse(now) || Date.now();
+  }
+
+  function isEntitlementActiveAt(entitlement, now) {
+    return entitlement.revocationDate == null
+      && (entitlement.expirationDate == null || Date.parse(entitlement.expirationDate) > effectiveTimestamp(now));
+  }
+
+  function selectPreferredEntitlement(entitlements) {
+    return entitlements.reduce((best, current) => {
+      if (!best) {
+        return current;
+      }
+
+      const bestRank = planRank(best.product.plan);
+      const currentRank = planRank(current.product.plan);
+      if (currentRank !== bestRank) {
+        return currentRank > bestRank ? current : best;
+      }
+
+      const bestExpiry = best.expirationDate ? Date.parse(best.expirationDate) : Number.POSITIVE_INFINITY;
+      const currentExpiry = current.expirationDate ? Date.parse(current.expirationDate) : Number.POSITIVE_INFINITY;
+      return currentExpiry > bestExpiry ? current : best;
+    }, null);
   }
 
   async function applyStoreKitSubscriptionState(userID, entitlements, now) {
     const currentSubscription = await ensureSubscription(userID, now);
 
     const activeEntitlements = entitlements
-      .filter((entitlement) => entitlement.revocationDate == null)
-      .filter((entitlement) => entitlement.expirationDate == null || Date.parse(entitlement.expirationDate) > Date.now())
+      .filter((entitlement) => isEntitlementActiveAt(entitlement, now))
       .map((entitlement) => ({
         ...entitlement,
         product: findKnownProduct(entitlement.productID)
@@ -41,43 +78,43 @@ export function createAppStoreHelpers({
           renewsAt: currentSubscription.renews_at ?? null,
           expiresAt: currentSubscription.expires_at ?? null
         }, now);
-      } else if (shouldPreserveNonStoreKitSubscription(currentSubscription)) {
-        await updateSubscriptionRecord(userID, {
-          plan: currentSubscription.plan,
-          status: currentSubscription.status,
-          source: subscriptionSource(currentSubscription),
-          sourceTransactionID: currentSubscription.source_transaction_id ?? null,
-          renewsAt: currentSubscription.renews_at ?? null,
-          expiresAt: currentSubscription.expires_at ?? null
-        }, now);
       } else {
-        await updateSubscriptionRecord(userID, {
-          plan: 'free',
-          status: 'active',
-          source: 'system',
-          sourceTransactionID: null,
-          renewsAt: null,
-          expiresAt: null
-        }, now);
+        const ledgerBackedEntitlement = await findBestStoredActiveEntitlement(userID, now);
+        if (shouldPreserveLedgerBackedStoreKitState(currentSubscription, ledgerBackedEntitlement)) {
+          await updateSubscriptionRecord(userID, {
+            plan: ledgerBackedEntitlement.product.plan,
+            status: statusForActiveEntitlement(currentSubscription, ledgerBackedEntitlement),
+            source: 'appStore',
+            sourceTransactionID: String(
+              ledgerBackedEntitlement.originalTransactionID ?? ledgerBackedEntitlement.transactionID
+            ),
+            renewsAt: ledgerBackedEntitlement.expirationDate ?? null,
+            expiresAt: ledgerBackedEntitlement.expirationDate ?? null
+          }, now);
+        } else if (shouldPreserveNonStoreKitSubscription(currentSubscription)) {
+          await updateSubscriptionRecord(userID, {
+            plan: currentSubscription.plan,
+            status: currentSubscription.status,
+            source: subscriptionSource(currentSubscription),
+            sourceTransactionID: currentSubscription.source_transaction_id ?? null,
+            renewsAt: currentSubscription.renews_at ?? null,
+            expiresAt: currentSubscription.expires_at ?? null
+          }, now);
+        } else {
+          await updateSubscriptionRecord(userID, {
+            plan: 'free',
+            status: 'active',
+            source: 'system',
+            sourceTransactionID: null,
+            renewsAt: null,
+            expiresAt: null
+          }, now);
+        }
       }
       return;
     }
 
-    const selectedEntitlement = activeEntitlements.reduce((best, current) => {
-      if (!best) {
-        return current;
-      }
-
-      const bestRank = planRank(best.product.plan);
-      const currentRank = planRank(current.product.plan);
-      if (currentRank !== bestRank) {
-        return currentRank > bestRank ? current : best;
-      }
-
-      const bestExpiry = best.expirationDate ? Date.parse(best.expirationDate) : Number.POSITIVE_INFINITY;
-      const currentExpiry = current.expirationDate ? Date.parse(current.expirationDate) : Number.POSITIVE_INFINITY;
-      return currentExpiry > bestExpiry ? current : best;
-    }, null);
+    const selectedEntitlement = selectPreferredEntitlement(activeEntitlements);
 
     await updateSubscriptionRecord(userID, {
       plan: selectedEntitlement.product.plan,
@@ -101,6 +138,15 @@ export function createAppStoreHelpers({
       && subscription.plan !== 'free'
       && subscriptionSource(subscription) !== 'appStore'
     );
+  }
+
+  function shouldPreserveLedgerBackedStoreKitState(subscription, entitlement) {
+    if (!entitlement) {
+      return false;
+    }
+
+    return subscriptionSource(subscription) === 'appStore'
+      && !new Set(['refunded', 'revoked']).has(subscription?.status);
   }
 
   function subscriptionSource(subscription) {
@@ -241,6 +287,7 @@ export function createAppStoreHelpers({
       expirationDate: normalizeDateString(value.expirationDate),
       revocationDate: normalizeDateString(value.revocationDate),
       isUpgraded: Boolean(value.isUpgraded),
+      appAccountToken: normalizeStoreKitAppAccountToken(value.appAccountToken),
       environment: typeof value.environment === 'string' ? value.environment : null,
       signedDate: normalizeDateString(value.signedDate),
       rawJWS: typeof value.rawJWS === 'string' ? value.rawJWS : null
@@ -341,6 +388,28 @@ export function createAppStoreHelpers({
     return bySubscription?.user_id ?? null;
   }
 
+  async function findBestStoredActiveEntitlement(userID, now) {
+    const rows = await db.prepare(`
+      SELECT *
+      FROM storekit_transactions
+      WHERE user_id = ?
+        AND revocation_date IS NULL
+      ORDER BY COALESCE(expires_date, '9999-12-31T23:59:59.999Z') DESC,
+        COALESCE(signed_date, updated_at) DESC
+    `).all(userID);
+
+    const activeEntitlements = rows
+      .map(storeKitTransactionRowToEntitlement)
+      .filter((entitlement) => isEntitlementActiveAt(entitlement, now))
+      .map((entitlement) => ({
+        ...entitlement,
+        product: findKnownProduct(entitlement.productID)
+      }))
+      .filter((entitlement) => entitlement.product);
+
+    return selectPreferredEntitlement(activeEntitlements);
+  }
+
   function storeKitTransactionRowToEntitlement(row) {
     return {
       productID: row.product_id,
@@ -350,6 +419,7 @@ export function createAppStoreHelpers({
       expirationDate: row.expires_date,
       revocationDate: row.revocation_date,
       isUpgraded: false,
+      appAccountToken: normalizeStoreKitAppAccountToken(row.app_account_token),
       environment: row.environment ?? null,
       signedDate: row.signed_date ?? null,
       rawJWS: row.raw_jws ?? null
@@ -405,6 +475,7 @@ export function createAppStoreHelpers({
       expirationDate: normalizeDateString(payload.expiresDate),
       revocationDate: normalizeDateString(payload.revocationDate),
       isUpgraded: Boolean(payload.isUpgraded),
+      appAccountToken: normalizeStoreKitAppAccountToken(payload.appAccountToken),
       environment: typeof payload.environment === 'string' ? payload.environment : null,
       signedDate: normalizeDateString(payload.signedDate),
       rawJWS: compactJWS
@@ -546,8 +617,8 @@ export function createAppStoreHelpers({
       await db.prepare(`
         INSERT INTO storekit_transactions (
           id, user_id, environment, product_id, transaction_id, original_transaction_id, purchase_date,
-          expires_date, revocation_date, signed_date, raw_jws, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          expires_date, revocation_date, signed_date, app_account_token, raw_jws, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(transaction_id) DO UPDATE SET
           environment = excluded.environment,
           product_id = excluded.product_id,
@@ -556,6 +627,7 @@ export function createAppStoreHelpers({
           expires_date = excluded.expires_date,
           revocation_date = excluded.revocation_date,
           signed_date = excluded.signed_date,
+          app_account_token = excluded.app_account_token,
           raw_jws = excluded.raw_jws,
           updated_at = excluded.updated_at
       `).run(
@@ -569,6 +641,7 @@ export function createAppStoreHelpers({
         transaction.expirationDate ?? null,
         transaction.revocationDate ?? null,
         transaction.signedDate ?? null,
+        transaction.appAccountToken ?? null,
         rawJWS,
         now,
         now

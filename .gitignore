@@ -9,6 +9,7 @@ DerivedData/
 .deriveddata/
 .deriveddata-*/
 *.xcresult
+/build/
 
 CONTINUITY.md
 

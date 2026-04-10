@@ -1,5 +1,5 @@
 //
-//  GeminiService+Memory.swift
+//  AIService+Memory.swift
 //  Trai
 //
 //  Memory parsing - uses AI to extract categorized memories from user notes
@@ -8,7 +8,7 @@
 import Foundation
 import os
 
-extension GeminiService {
+extension AIService {
 
     /// Parsed memory from user notes
     struct ParsedMemory: Codable {
@@ -112,25 +112,26 @@ extension GeminiService {
             "required": ["memories"]
         ]
 
-        let body: [String: Any] = [
-            "contents": [
-                ["role": "user", "parts": [["text": userPrompt]]]
+        let request = AIBackendPayloadBuilder.canonicalRequest(
+            system: systemPrompt,
+            messages: [
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: userPrompt)
             ],
-            "systemInstruction": [
-                "parts": [["text": systemPrompt]]
-            ],
-            "generationConfig": buildGenerationConfig(
-                thinkingLevel: .low,
-                maxTokens: 2048,
-                jsonSchema: schema
+            output: AIBackendPayloadBuilder.canonicalOutput(
+                kind: .jsonSchema,
+                schema: schema
+            ),
+            generation: AIBackendPayloadBuilder.canonicalGeneration(
+                reasoningLevel: .low,
+                maxTokens: 2048
             )
-        ]
+        )
 
         do {
-            let response = try await makeRequest(body: body)
+            let response = try await makeRequest(request: request)
             logResponse(response)
 
-            guard let data = response.data(using: .utf8),
+            guard let data = response.data(using: String.Encoding.utf8),
                   let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let memoriesArray = json["memories"] as? [[String: Any]] else {
                 cancelAIRequest(requestTicket)

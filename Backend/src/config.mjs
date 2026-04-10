@@ -23,19 +23,24 @@ export function createConfig(env = process.env) {
       ? 'postgres'
       : 'sqlite';
 
+  const geminiModel = env.GEMINI_MODEL ?? 'gemini-3-flash-preview';
+  const openAIModel = env.OPENAI_MODEL ?? 'gpt-5.4-mini';
+  const defaultOpenAITokenPricing = defaultTokenPricingForProvider('openai', openAIModel);
+  const defaultGeminiTokenPricing = defaultTokenPricingForProvider('gemini', geminiModel);
+
   return {
     port: Number.parseInt(env.PORT ?? '8789', 10),
     host: env.HOST ?? '127.0.0.1',
     environment,
-    aiProvider: String(env.TRAI_AI_PROVIDER ?? env.AI_PROVIDER ?? 'gemini').trim() === 'openai' ? 'openai' : 'gemini',
+    aiProvider: String(env.TRAI_AI_PROVIDER ?? env.AI_PROVIDER ?? 'openai').trim() === 'gemini' ? 'gemini' : 'openai',
     databaseDriver,
     databasePath: env.TRAI_DB_PATH ?? defaultDatabasePath,
     databaseURL,
     databaseSSLMode: env.TRAI_DATABASE_SSL_MODE ?? env.PGSSLMODE ?? 'disable',
     geminiApiKey: env.GEMINI_API_KEY ?? '',
-    geminiModel: env.GEMINI_MODEL ?? 'gemini-3-flash-preview',
+    geminiModel,
     openAIApiKey: env.OPENAI_API_KEY ?? '',
-    openAIModel: env.OPENAI_MODEL ?? 'gpt-5-mini',
+    openAIModel,
     allowDevAppleBypass: env.ALLOW_DEV_APPLE_BYPASS === 'true',
     appleIssuer: env.APPLE_EXPECTED_ISSUER ?? 'https://appleid.apple.com',
     appleExpectedAudiences: (env.APPLE_EXPECTED_AUDIENCES ?? env.APPLE_AUDIENCE ?? 'Nadav.Trai')
@@ -68,7 +73,21 @@ export function createConfig(env = process.env) {
     aiProxyMaxFunctionDeclarations: Number.parseInt(env.AI_PROXY_MAX_FUNCTION_DECLARATIONS ?? '24', 10),
     aiProxyMaxConcurrentRequestsPerUser: Number.parseInt(env.AI_PROXY_MAX_CONCURRENT_REQUESTS_PER_USER ?? '3', 10),
     aiProxyMaxRequestsPerMinute: Number.parseInt(env.AI_PROXY_MAX_REQUESTS_PER_MINUTE ?? '20', 10),
-    aiProxyMaxUnitsPerTenMinutes: Number.parseInt(env.AI_PROXY_MAX_UNITS_PER_TEN_MINUTES ?? '150', 10)
+    aiProxyMaxUnitsPerTenMinutes: Number.parseInt(env.AI_PROXY_MAX_UNITS_PER_TEN_MINUTES ?? '150', 10),
+    aiProxyMaxUnitsPer24Hours: Number.parseInt(env.AI_PROXY_MAX_UNITS_PER_24_HOURS ?? '150', 10),
+    aiProxyMaxUnitsPer7Days: Number.parseInt(env.AI_PROXY_MAX_UNITS_PER_7_DAYS ?? '500', 10),
+    aiTokenPricing: {
+      openai: {
+        inputUSDPer1M: parseOptionalNumber(env.OPENAI_INPUT_USD_PER_1M_TOKENS) ?? defaultOpenAITokenPricing?.inputUSDPer1M ?? null,
+        outputUSDPer1M: parseOptionalNumber(env.OPENAI_OUTPUT_USD_PER_1M_TOKENS) ?? defaultOpenAITokenPricing?.outputUSDPer1M ?? null,
+        cachedInputUSDPer1M: parseOptionalNumber(env.OPENAI_CACHED_INPUT_USD_PER_1M_TOKENS) ?? defaultOpenAITokenPricing?.cachedInputUSDPer1M ?? null
+      },
+      gemini: {
+        inputUSDPer1M: parseOptionalNumber(env.GEMINI_INPUT_USD_PER_1M_TOKENS) ?? defaultGeminiTokenPricing?.inputUSDPer1M ?? null,
+        outputUSDPer1M: parseOptionalNumber(env.GEMINI_OUTPUT_USD_PER_1M_TOKENS) ?? defaultGeminiTokenPricing?.outputUSDPer1M ?? null,
+        cachedInputUSDPer1M: parseOptionalNumber(env.GEMINI_CACHED_INPUT_USD_PER_1M_TOKENS) ?? defaultGeminiTokenPricing?.cachedInputUSDPer1M ?? null
+      }
+    }
   };
 }
 
@@ -99,6 +118,54 @@ export function loadTrustedAppStoreRoots(config) {
       throw new Error(`Failed to read trusted App Store root certificate at ${filePath}`);
     }
   });
+}
+
+function parseOptionalNumber(value) {
+  if (value == null || String(value).trim() === '') {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function defaultTokenPricingForProvider(provider, model) {
+  const normalizedProvider = String(provider ?? '').trim().toLowerCase();
+  const normalizedModel = String(model ?? '').trim().toLowerCase();
+
+  if (normalizedProvider === 'openai') {
+    if (normalizedModel.startsWith('gpt-5.4-mini')) {
+      return {
+        inputUSDPer1M: 0.75,
+        outputUSDPer1M: 4.5,
+        cachedInputUSDPer1M: 0.075
+      };
+    }
+
+    if (normalizedModel.startsWith('gpt-5.4')) {
+      return {
+        inputUSDPer1M: 2.5,
+        outputUSDPer1M: 15,
+        cachedInputUSDPer1M: 0.25
+      };
+    }
+
+    return null;
+  }
+
+  if (normalizedProvider === 'gemini') {
+    if (normalizedModel.startsWith('gemini-3-flash-preview')) {
+      return {
+        inputUSDPer1M: 0.5,
+        outputUSDPer1M: 3,
+        cachedInputUSDPer1M: 0.05
+      };
+    }
+
+    return null;
+  }
+
+  return null;
 }
 
 export const PLAN_LIMITS = {

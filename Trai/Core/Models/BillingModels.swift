@@ -44,6 +44,22 @@ enum BillingSyncState: String, Codable, CaseIterable {
     }
 }
 
+enum AIProviderOverride: String, Codable, CaseIterable, Identifiable {
+    case automatic
+    case gemini
+    case openai
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .gemini: "Gemini"
+        case .openai: "OpenAI"
+        }
+    }
+}
+
 struct AppAccountSnapshot: Codable, Equatable {
     var installationID: String
     var appAccountToken: String

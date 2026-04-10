@@ -306,8 +306,10 @@ struct MemoryDetailSheet: View {
                     onUpdate()
                 }
                 .presentationDetents([.medium, .large])
+                .traiSheetBranding()
             }
         }
+        .traiSheetBranding()
     }
 
     private var categoryColor: Color {

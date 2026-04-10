@@ -76,6 +76,7 @@ struct StoreKitEntitlementRecord: Codable, Equatable, Identifiable {
     var expirationDate: Date?
     var revocationDate: Date?
     var isUpgraded: Bool
+    var appAccountToken: String?
 }
 
 struct BackendAIProxyRequest: Codable, Equatable {

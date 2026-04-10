@@ -77,6 +77,7 @@ struct WorkoutPlanEditSheet: View {
         }
         .fullScreenCover(isPresented: $showingFullSetup) {
             WorkoutPlanChatFlow()
+                .traiSheetBranding()
         }
         .sheet(isPresented: $showingDayEditor) {
             WorkoutDayEditorSheet(
@@ -94,6 +95,7 @@ struct WorkoutPlanEditSheet: View {
                     showingDayEditor = false
                 }
             )
+            .traiSheetBranding()
         }
     }
 
@@ -614,6 +616,7 @@ private struct WorkoutDayEditorSheet: View {
                 }
             }
         }
+        .traiSheetBranding()
     }
 
     private func applyPreset(_ muscles: [LiveWorkout.MuscleGroup]) {

@@ -87,8 +87,10 @@ struct PlanAdjustmentSheet: View {
                             }
                         }
                 }
+                .traiSheetBranding()
             }
         }
+        .traiSheetBranding()
     }
 
     // MARK: - AI Coach Card

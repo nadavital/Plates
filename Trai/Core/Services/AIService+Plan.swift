@@ -1,5 +1,5 @@
 //
-//  GeminiService+Plan.swift
+//  AIService+Plan.swift
 //  Trai
 //
 //  Nutrition plan generation and refinement
@@ -8,7 +8,7 @@
 import Foundation
 import os
 
-extension GeminiService {
+extension AIService {
 
     // MARK: - Plan Refinement Response
 
@@ -38,19 +38,19 @@ extension GeminiService {
         log("📊 User data - Age: \(request.age), Gender: \(request.gender.rawValue), Weight: \(request.weightKg)kg, Height: \(request.heightCm)cm", type: .info)
         log("🏃 Activity: \(request.activityLevel.rawValue), Goal: \(request.goal.rawValue)", type: .info)
 
-        let prompt = GeminiPromptBuilder.buildPlanGenerationPrompt(request: request)
+        let prompt = AIPromptBuilder.buildPlanGenerationPrompt(request: request)
         logPrompt(prompt)
 
         do {
             let plan: NutritionPlan = try await executePlanGenerationPipeline(
                 prompt: prompt,
-                schema: GeminiPromptBuilder.nutritionPlanSchema,
+                schema: AIPromptBuilder.nutritionPlanSchema,
                 decodeFailureLabel: "nutrition plan"
             )
             completeAIRequest(requestTicket)
             log("✅ Successfully parsed nutrition plan - Calories: \(plan.dailyTargets.calories)", type: .info)
             return plan
-        } catch GeminiError.parsingError {
+        } catch AIServiceError.parsingError {
             cancelAIRequest(requestTicket)
             log("Falling back to default nutrition plan after parse failure", type: .error)
             return NutritionPlan.createDefault(from: request)
@@ -76,7 +76,7 @@ extension GeminiService {
         return try await performAIRequest(for: .nutritionPlanRefinement) {
             log("💬 Plan refinement request: \(userMessage)", type: .info)
 
-            let prompt = GeminiPromptBuilder.buildPlanRefinementPrompt(
+            let prompt = AIPromptBuilder.buildPlanRefinementPrompt(
                 currentPlan: currentPlan,
                 request: request,
                 userMessage: userMessage,
@@ -87,7 +87,7 @@ extension GeminiService {
             do {
                 let envelope: PlanPipelineRefinementEnvelope<NutritionPlan> = try await executePlanRefinementPipeline(
                     prompt: prompt,
-                    schema: GeminiPromptBuilder.planRefinementSchema
+                    schema: AIPromptBuilder.planRefinementSchema
                 )
 
                 let responseType = PlanRefinementResponse.ResponseType(rawValue: envelope.responseType) ?? .message

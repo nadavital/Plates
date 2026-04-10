@@ -1,12 +1,22 @@
+import { createHash } from 'node:crypto';
+import {
+  canonicalMessagesFromTraiRequest,
+  normalizeIncomingTraiRequest,
+  traiEventToGeminiSSEChunk,
+  traiResponseToGeminiJSON
+} from './trai-ai-contract.mjs';
+
 export function createRouteHandlers({
   db,
   config,
   aiProvider,
+  resolveAIProvider,
   HttpError,
   readJson,
   sendJson,
   buildSessionSnapshot,
   buildAdminUserInspection,
+  buildAdminUsageSummary,
   assertRequired,
   hashToken,
   isoNow,
@@ -46,6 +56,30 @@ export function createRouteHandlers({
 }) {
   const activeAIRequestsByUser = new Map();
   const allowedAdminSubscriptionSources = new Set(['system', 'adminGrant', 'promo', 'developer']);
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  function normalizeAIProviderOverride(value) {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    if (typeof rawValue !== 'string') {
+      return null;
+    }
+
+    const normalizedValue = rawValue.trim().toLowerCase();
+    if (normalizedValue === 'gemini' || normalizedValue === 'openai') {
+      return normalizedValue;
+    }
+
+    return null;
+  }
+
+  function aiProviderForRequest(req) {
+    if (config.environment === 'production') {
+      return aiProvider;
+    }
+
+    const providerOverride = normalizeAIProviderOverride(req.headers['x-trai-ai-provider-override']);
+    return providerOverride ? resolveAIProvider(providerOverride) : aiProvider;
+  }
 
   async function routeRequest(req, res) {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
@@ -55,6 +89,8 @@ export function createRouteHandlers({
         ok: true,
         environment: config.environment,
         aiProvider: aiProvider.name,
+        aiProviderModel: aiProvider.model,
+        aiProviderCapabilities: aiProvider.capabilities,
         hasProviderKey: aiProvider.isConfigured(),
         hasGeminiKey: Boolean(config.geminiApiKey),
         hasOpenAIKey: Boolean(config.openAIApiKey),
@@ -88,6 +124,10 @@ export function createRouteHandlers({
 
     if (req.method === 'GET' && url.pathname === '/v1/admin/user-inspect') {
       return handleAdminUserInspect(req, res, url);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/v1/admin/usage-summary') {
+      return handleAdminUsageSummary(req, res, url);
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/admin/reconcile-subscription') {
@@ -128,6 +168,78 @@ export function createRouteHandlers({
       error: 'internal_server_error',
       message: 'Unexpected server error.'
     });
+  }
+
+  function normalizeUUIDString(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const normalizedValue = value.trim().toLowerCase();
+    return uuidPattern.test(normalizedValue) ? normalizedValue : null;
+  }
+
+  function deriveStoreKitAppAccountToken(appAccountToken) {
+    const normalizedSource = typeof appAccountToken === 'string'
+      ? appAccountToken.trim()
+      : '';
+    if (!normalizedSource) {
+      return null;
+    }
+
+    const directUUID = normalizeUUIDString(normalizedSource);
+    if (directUUID) {
+      return directUUID;
+    }
+
+    const digest = createHash('sha256')
+      .update(`trai.storekit.appAccountToken.v1:${normalizedSource}`)
+      .digest();
+    const bytes = Array.from(digest.subarray(0, 16));
+    if (bytes.length !== 16) {
+      return null;
+    }
+
+    bytes[6] = (bytes[6] & 0x0f) | 0x50;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    return [
+      bytes.slice(0, 4).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+      bytes.slice(4, 6).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+      bytes.slice(6, 8).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+      bytes.slice(8, 10).map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+      bytes.slice(10, 16).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    ].join('-');
+  }
+
+  function validateStoreKitAppAccountAssociation(auth, entitlementsWithMatchedUsers) {
+    const acceptedTokens = new Set();
+    const derivedToken = deriveStoreKitAppAccountToken(auth.session.app_account_token);
+    if (derivedToken) {
+      acceptedTokens.add(derivedToken);
+    }
+
+    const legacyInstallationToken = normalizeUUIDString(auth.session.installation_id);
+    if (legacyInstallationToken) {
+      acceptedTokens.add(legacyInstallationToken);
+    }
+
+    if (acceptedTokens.size === 0) {
+      return;
+    }
+
+    const mismatchedEntitlement = entitlementsWithMatchedUsers.find(({ entitlement, matchedUserID }) =>
+      matchedUserID !== auth.user.id
+      && entitlement?.appAccountToken
+      && !acceptedTokens.has(entitlement.appAccountToken)
+    );
+
+    if (mismatchedEntitlement) {
+      throw new HttpError(409, {
+        error: 'subscription_owner_conflict',
+        message: 'This App Store subscription is linked to a different Trai account.'
+      });
+    }
   }
 
   async function handleAppleExchange(req, res) {
@@ -188,6 +300,13 @@ export function createRouteHandlers({
       throw new HttpError(401, {
         error: 'unauthorized',
         message: 'Refresh token not found.'
+      });
+    }
+
+    if (row.expires_at && Date.parse(row.expires_at) < Date.now()) {
+      throw new HttpError(401, {
+        error: 'session_expired',
+        message: 'Session has expired.'
       });
     }
 
@@ -268,6 +387,13 @@ export function createRouteHandlers({
     }
 
     sendJson(res, 200, await buildAdminUserInspection(userID));
+  }
+
+  async function handleAdminUsageSummary(req, res, url) {
+    requireAdmin(req);
+
+    const requestedDays = Number.parseInt(url.searchParams.get('days') ?? '30', 10);
+    sendJson(res, 200, await buildAdminUsageSummary(requestedDays));
   }
 
   async function handleAdminReconcileSubscription(req, res) {
@@ -536,6 +662,14 @@ export function createRouteHandlers({
         })
     );
 
+    validateStoreKitAppAccountAssociation(
+      auth,
+      normalizedEntitlements.map((entitlement, index) => ({
+        entitlement,
+        matchedUserID: matchedUserIDCandidates[index] ?? null
+      }))
+    );
+
     const matchedUserIDs = new Set(matchedUserIDCandidates.filter(Boolean));
 
     if (matchedUserIDs.size > 1) {
@@ -604,49 +738,73 @@ export function createRouteHandlers({
 
   async function handleAIProxy(req, res, url, { streaming }) {
     const auth = await requireSession(req);
+    const selectedAIProvider = aiProviderForRequest(req);
     const action = streaming ? 'stream' : 'generate';
     const requestBody = await readJson(req, {
       maxBytes: config.aiProxyMaxRequestBytes
     });
-    const feature = normalizeAIProxyFeature(req.headers['x-trai-ai-feature'], requestBody);
-    sanitizeAIProxyRequestBody(requestBody);
+    sanitizeIncomingTraiRequestBody(requestBody);
+    const traiRequest = normalizeIncomingTraiRequest(requestBody);
+    const feature = normalizeAIProxyFeature(req.headers['x-trai-ai-feature'], traiRequest);
 
     const subscription = await ensureSubscription(auth.user.id, isoNow());
     ensureEntitled(subscription);
-    await enforceAIProxyBurstLimits(auth.user.id);
+    const unitCost = FEATURE_COSTS[feature] ?? FEATURE_COSTS.coachChat;
+    await enforceAIProxyBurstLimits(auth.user.id, subscription.plan, unitCost);
     const releaseConcurrencySlot = reserveAIConcurrencySlot(auth.user.id);
 
     const quotaPeriod = await ensureQuotaPeriod(auth.user.id, subscription.plan, isoNow());
-    const unitCost = FEATURE_COSTS[feature] ?? FEATURE_COSTS.coachChat;
     const reservedQuotaPeriod = await reserveQuotaUsage(quotaPeriod, unitCost);
 
     const startedAt = Date.now();
     let reservationReleased = false;
     let responseStarted = false;
     let deliveryCompleted = false;
+    let providerUsageMetadata = null;
+    let retryCount = 0;
+    let retryReason = null;
 
     try {
-      const upstreamResponse = await aiProvider.execute(requestBody, { streaming });
+      const execution = await executeTraiRequestWithRetries(
+        selectedAIProvider,
+        traiRequest,
+        { streaming, feature }
+      );
+      const providerResult = execution.providerResult;
+      retryCount = execution.retryCount;
+      retryReason = execution.retryReason;
+      providerUsageMetadata = providerResult.type === 'stream'
+        ? providerResult.getUsageMetadata?.() ?? null
+        : providerResult.usageMetadata ?? null;
 
       if (streaming) {
         res.writeHead(200, {
-          'Content-Type': upstreamResponse.headers.get('content-type') ?? 'text/event-stream',
+          'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive'
         });
         responseStarted = true;
 
-        for await (const chunk of upstreamResponse.body) {
-          await writeResponseChunk(res, chunk);
+        for await (const event of providerResult.stream) {
+          await writeResponseChunk(res, Buffer.from(traiEventToGeminiSSEChunk(event), 'utf8'));
         }
+        await writeResponseChunk(res, Buffer.from('data: [DONE]\n\n', 'utf8'));
         await endResponse(res);
+        providerUsageMetadata = providerResult.getUsageMetadata?.() ?? providerUsageMetadata;
       } else {
-        const bodyText = await upstreamResponse.text();
+        const bodyText = JSON.stringify(traiResponseToGeminiJSON(providerResult.response));
+        logTraiRequestSuccessSummary({
+          feature,
+          providerName: selectedAIProvider.name,
+          traiRequest,
+          traiResponse: providerResult.response
+        });
         res.writeHead(200, {
-          'Content-Type': upstreamResponse.headers.get('content-type') ?? 'application/json'
+          'Content-Type': 'application/json'
         });
         responseStarted = true;
         await endResponse(res, bodyText);
+        providerUsageMetadata = providerResult.usageMetadata ?? providerUsageMetadata;
       }
 
       deliveryCompleted = true;
@@ -657,7 +815,21 @@ export function createRouteHandlers({
       }
 
       const outcome = responseStarted ? 'delivery_failed' : 'upstream_error';
-      await recordAIRequest(auth.user.id, feature, action, outcome, Date.now() - startedAt);
+      await recordAIRequest(
+        auth.user.id,
+        feature,
+        action,
+        outcome,
+        Date.now() - startedAt,
+        selectedAIProvider.model,
+        {
+          provider: selectedAIProvider.name,
+          providerUsage: providerUsageMetadata,
+          requestFormat: traiRequest?.requestFormat,
+          retryCount,
+          retryReason
+        }
+      );
 
       if (responseStarted) {
         if (!res.destroyed) {
@@ -675,7 +847,21 @@ export function createRouteHandlers({
       await recordUsage(auth.user.id, reservedQuotaPeriod, feature, unitCost, {
         incrementQuotaUnits: false
       });
-      await recordAIRequest(auth.user.id, feature, action, 'success', Date.now() - startedAt);
+      await recordAIRequest(
+        auth.user.id,
+        feature,
+        action,
+        'success',
+        Date.now() - startedAt,
+        selectedAIProvider.model,
+        {
+          provider: selectedAIProvider.name,
+          providerUsage: providerUsageMetadata,
+          requestFormat: traiRequest?.requestFormat,
+          retryCount,
+          retryReason
+        }
+      );
     } catch (error) {
       console.error('Failed to finalize AI proxy accounting', error);
     }
@@ -736,9 +922,9 @@ export function createRouteHandlers({
     });
   }
 
-  function normalizeAIProxyFeature(headerValue, requestBody) {
+  function normalizeAIProxyFeature(headerValue, traiRequest) {
     const requestedFeature = normalizeRequestedFeature(headerValue);
-    const minimumFeature = inferMinimumFeatureForRequest(requestBody);
+    const minimumFeature = inferMinimumFeatureForTraiRequest(traiRequest);
 
     const requestedCost = FEATURE_COSTS[requestedFeature] ?? FEATURE_COSTS.coachChat;
     const minimumCost = FEATURE_COSTS[minimumFeature] ?? FEATURE_COSTS.coachChat;
@@ -750,39 +936,31 @@ export function createRouteHandlers({
     return Object.hasOwn(FEATURE_COSTS, requested) ? requested : 'coachChat';
   }
 
-  function inferMinimumFeatureForRequest(requestBody) {
-    let hasInlineMedia = false;
-    let hasFunctionResponses = false;
+  function inferMinimumFeatureForTraiRequest(traiRequest) {
+    let hasImages = false;
+    let hasToolResponses = false;
     let hasTools = false;
 
-    if (Array.isArray(requestBody?.contents)) {
-      for (const content of requestBody.contents) {
-        if (!Array.isArray(content?.parts)) {
-          continue;
+    for (const message of canonicalMessagesFromTraiRequest(traiRequest)) {
+      for (const part of normalizeArray(message?.parts)) {
+        if (part?.type === 'image') {
+          hasImages = true;
         }
-
-        for (const part of content.parts) {
-          if (part?.inline_data) {
-            hasInlineMedia = true;
-          }
-          if (part?.functionResponse) {
-            hasFunctionResponses = true;
-          }
+        if (part?.type === 'tool_response') {
+          hasToolResponses = true;
         }
       }
     }
 
-    if (Array.isArray(requestBody?.tools)) {
-      hasTools = requestBody.tools.some((tool) =>
-        Array.isArray(tool?.function_declarations) && tool.function_declarations.length > 0
-      );
-    }
+    hasTools = normalizeArray(traiRequest?.tools).some((tool) =>
+      typeof tool?.name === 'string' && tool.name.trim().length > 0
+    );
 
-    if (hasInlineMedia) {
+    if (hasImages) {
       return 'exercisePhotoAnalysis';
     }
 
-    if (hasFunctionResponses) {
+    if (hasToolResponses) {
       return 'agentToolFollowUp';
     }
 
@@ -793,7 +971,7 @@ export function createRouteHandlers({
     return 'coachChat';
   }
 
-  function sanitizeAIProxyRequestBody(requestBody) {
+  function sanitizeIncomingTraiRequestBody(requestBody) {
     if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
       throw new HttpError(400, {
         error: 'invalid_ai_request',
@@ -801,15 +979,15 @@ export function createRouteHandlers({
       });
     }
 
-    const contents = requestBody.contents;
-    if (!Array.isArray(contents) || contents.length === 0) {
+    const messageEntries = extractIncomingRequestMessages(requestBody);
+    if (messageEntries.length === 0) {
       throw new HttpError(400, {
         error: 'invalid_ai_request',
-        message: 'AI proxy requests must include at least one content item.'
+        message: 'AI proxy requests must include at least one message.'
       });
     }
 
-    if (contents.length > config.aiProxyMaxContents) {
+    if (messageEntries.length > config.aiProxyMaxContents) {
       throw new HttpError(413, {
         error: 'ai_request_too_large',
         message: 'Conversation context is too large for the AI proxy.'
@@ -820,36 +998,37 @@ export function createRouteHandlers({
     let inlineImages = 0;
     let inlineImageBytes = 0;
 
-    for (const content of contents) {
-      if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    for (const message of messageEntries) {
+      if (!message || typeof message !== 'object' || Array.isArray(message)) {
         throw new HttpError(400, {
           error: 'invalid_ai_request',
-          message: 'Each content entry must be an object.'
+          message: 'Each AI message must be an object.'
         });
       }
 
-      if (!Array.isArray(content.parts) || content.parts.length === 0) {
+      if (!Array.isArray(message.parts) || message.parts.length === 0) {
         throw new HttpError(400, {
           error: 'invalid_ai_request',
-          message: 'Each content entry must include at least one part.'
+          message: 'Each AI message must include at least one part.'
         });
       }
 
-      if (content.parts.length > config.aiProxyMaxPartsPerContent) {
+      if (message.parts.length > config.aiProxyMaxPartsPerContent) {
         throw new HttpError(413, {
           error: 'ai_request_too_large',
-          message: 'One of the AI content entries contains too many parts.'
+          message: 'One of the AI messages contains too many parts.'
         });
       }
 
-      for (const part of content.parts) {
+      for (const part of message.parts) {
         if (typeof part?.text === 'string') {
           totalTextChars += part.text.length;
         }
 
-        if (part?.inline_data) {
+        const imagePart = extractRequestImagePart(part);
+        if (imagePart) {
           inlineImages += 1;
-          const inlineData = typeof part.inline_data.data === 'string' ? part.inline_data.data : '';
+          const inlineData = typeof imagePart.data === 'string' ? imagePart.data : '';
           inlineImageBytes += Buffer.byteLength(inlineData, 'base64');
         }
       }
@@ -871,10 +1050,13 @@ export function createRouteHandlers({
 
     if (Array.isArray(requestBody.tools)) {
       const declarationCount = requestBody.tools.reduce((count, tool) => {
-        if (!Array.isArray(tool?.function_declarations)) {
-          return count;
+        if (Array.isArray(tool?.function_declarations)) {
+          return count + tool.function_declarations.length;
         }
-        return count + tool.function_declarations.length;
+        if (typeof tool?.name === 'string' && tool.name.trim().length > 0) {
+          return count + 1;
+        }
+        return count;
       }, 0);
 
       if (declarationCount > config.aiProxyMaxFunctionDeclarations) {
@@ -885,26 +1067,290 @@ export function createRouteHandlers({
       }
     }
 
-    const generationConfig = requestBody.generationConfig;
-    if (generationConfig && typeof generationConfig === 'object' && !Array.isArray(generationConfig)) {
-      const requestedMaxOutputTokens = Number.parseInt(generationConfig.maxOutputTokens ?? `${config.aiProxyMaxOutputTokens}`, 10);
-      generationConfig.maxOutputTokens = Number.isFinite(requestedMaxOutputTokens)
-        ? Math.min(Math.max(requestedMaxOutputTokens, 1), config.aiProxyMaxOutputTokens)
-        : config.aiProxyMaxOutputTokens;
+    const canonicalGeneration = normalizeObject(requestBody.generation);
+    const legacyGenerationConfig = normalizeObject(requestBody.generationConfig);
+    const isCanonicalRequest = looksLikeCanonicalRequestBody(requestBody);
+    const activeGeneration = isCanonicalRequest ? canonicalGeneration : legacyGenerationConfig;
+    const requestedMaxOutputTokens = Number.parseInt(activeGeneration.maxOutputTokens ?? `${config.aiProxyMaxOutputTokens}`, 10);
+    const normalizedMaxOutputTokens = Number.isFinite(requestedMaxOutputTokens)
+      ? Math.min(Math.max(requestedMaxOutputTokens, 1), config.aiProxyMaxOutputTokens)
+      : config.aiProxyMaxOutputTokens;
 
-      if (generationConfig.candidateCount != null) {
-        generationConfig.candidateCount = 1;
-      }
-    } else {
-      requestBody.generationConfig = {
-        maxOutputTokens: config.aiProxyMaxOutputTokens
+    if (isCanonicalRequest) {
+      requestBody.generation = {
+        ...canonicalGeneration,
+        maxOutputTokens: normalizedMaxOutputTokens
       };
+      return;
+    }
+
+    requestBody.generationConfig = {
+      ...legacyGenerationConfig,
+      maxOutputTokens: normalizedMaxOutputTokens
+    };
+    if (requestBody.generationConfig.candidateCount != null) {
+      requestBody.generationConfig.candidateCount = 1;
     }
   }
 
-  async function enforceAIProxyBurstLimits(userID) {
+  function extractIncomingRequestMessages(requestBody) {
+    if (Array.isArray(requestBody?.messages)) {
+      return requestBody.messages;
+    }
+
+    if (Array.isArray(requestBody?.contents)) {
+      return requestBody.contents;
+    }
+
+    return [];
+  }
+
+  function normalizeObject(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  }
+
+  function looksLikeCanonicalRequestBody(requestBody) {
+    return Array.isArray(requestBody?.messages)
+      || Object.prototype.hasOwnProperty.call(requestBody ?? {}, 'system')
+      || Object.prototype.hasOwnProperty.call(requestBody ?? {}, 'generation')
+      || Object.prototype.hasOwnProperty.call(requestBody ?? {}, 'output');
+  }
+
+  function extractInlineDataPart(part) {
+    const inlineDataPart = part?.inlineData ?? part?.inline_data;
+    return inlineDataPart && typeof inlineDataPart === 'object' && !Array.isArray(inlineDataPart)
+      ? inlineDataPart
+      : null;
+  }
+
+  function extractRequestImagePart(part) {
+    const inlineDataPart = extractInlineDataPart(part);
+    if (inlineDataPart) {
+      return inlineDataPart;
+    }
+
+    if (
+      part?.type === 'image'
+      && typeof part?.mimeType === 'string'
+      && typeof part?.data === 'string'
+    ) {
+      return {
+        mimeType: part.mimeType,
+        data: part.data
+      };
+    }
+
+    return null;
+  }
+
+  function logTraiRequestSuccessSummary({ feature, providerName, traiRequest, traiResponse }) {
+    if (
+      feature !== 'foodPhotoAnalysis'
+      && feature !== 'exercisePhotoAnalysis'
+      && !requestContainsImages(traiRequest)
+    ) {
+      return;
+    }
+
+    const responseText = normalizeArray(traiResponse?.parts)
+      .filter((part) => part?.type === 'text' && typeof part?.text === 'string')
+      .map((part) => part.text)
+      .join('\n');
+
+    const baseSummary = {
+      feature,
+      provider: providerName,
+      requestFormat: typeof traiRequest?.requestFormat === 'string' ? traiRequest.requestFormat : 'unknown',
+      imageCount: countTraiRequestImages(traiRequest),
+      responseChars: responseText.length
+    };
+
+    const parsed = parseTopLevelJSONObject(responseText);
+
+    if (feature === 'foodPhotoAnalysis' && parsed) {
+      const summary = summarizeFoodAnalysisPayload(parsed);
+
+      console.log('[AI image summary]', JSON.stringify({
+        ...baseSummary,
+        classification: summary.classification,
+        calories: summary.calories,
+        proteinGrams: summary.proteinGrams,
+        carbsGrams: summary.carbsGrams,
+        fatGrams: summary.fatGrams,
+        confidence: summary.confidence
+      }));
+      return;
+    }
+
+    if (feature === 'exercisePhotoAnalysis' && parsed) {
+      const normalizedName = String(parsed.equipmentName ?? '').trim().toLowerCase();
+      console.log('[AI image summary]', JSON.stringify({
+        ...baseSummary,
+        classification: normalizedName === 'unclear gym equipment' ? 'unclear' : normalizedName ? 'identified' : 'missing_name',
+        suggestedExercisesCount: Array.isArray(parsed.suggestedExercises) ? parsed.suggestedExercises.length : 0
+      }));
+      return;
+    }
+
+    console.log('[AI image summary]', JSON.stringify(baseSummary));
+  }
+
+  function requestContainsImages(traiRequest) {
+    return countTraiRequestImages(traiRequest) > 0;
+  }
+
+  async function executeTraiRequestWithRetries(selectedAIProvider, traiRequest, { streaming, feature }) {
+    const providerResult = await selectedAIProvider.execute(traiRequest, { streaming });
+    if (streaming || providerResult?.type !== 'single' || feature !== 'foodPhotoAnalysis') {
+      return {
+        providerResult,
+        retryCount: 0,
+        retryReason: null
+      };
+    }
+
+    const foodSummary = summarizeFoodAnalysisResponse(providerResult.response);
+    if (!shouldRetryFoodAnalysis(foodSummary)) {
+      return {
+        providerResult,
+        retryCount: 0,
+        retryReason: null
+      };
+    }
+
+    const retryReason = 'identified_zero_macro_estimate';
+    console.log('[AI food retry]', JSON.stringify({
+      provider: selectedAIProvider.name,
+      reason: retryReason,
+      classification: foodSummary.classification,
+      calories: foodSummary.calories,
+      proteinGrams: foodSummary.proteinGrams,
+      carbsGrams: foodSummary.carbsGrams,
+      fatGrams: foodSummary.fatGrams
+    }));
+
+    const retryRequest = buildFoodAnalysisRetryRequest(traiRequest, providerResult.response);
+    return {
+      providerResult: await selectedAIProvider.execute(retryRequest, { streaming: false }),
+      retryCount: 1,
+      retryReason
+    };
+  }
+
+  function shouldRetryFoodAnalysis(foodSummary) {
+    return foodSummary.classification === 'identified'
+      && foodSummary.calories === 0
+      && foodSummary.proteinGrams === 0
+      && foodSummary.carbsGrams === 0
+      && foodSummary.fatGrams === 0;
+  }
+
+  function buildFoodAnalysisRetryRequest(traiRequest, traiResponse) {
+    const priorResponseText = extractTraiResponseText(traiResponse);
+    const correctiveText = [
+      'Your previous food-analysis result was invalid.',
+      'You identified a non-water food or drink but returned 0 calories and 0g macros.',
+      'Re-examine the same image carefully and return one of these only:',
+      '1. A realistic non-zero calorie/macro estimate for the identified food or drink, or',
+      '2. The exact sentinel name "Unclear food or drink" only if there is no identifiable loggable food or drink visible at all.',
+      'Do not return 0 calories and 0g macros unless the item is clearly plain water or plain sparkling water with no additions.'
+    ].join(' ');
+
+    return {
+      ...traiRequest,
+      canonicalMessages: [
+        ...canonicalMessagesFromTraiRequest(traiRequest),
+        {
+          role: 'assistant',
+          parts: [{ type: 'text', text: priorResponseText }]
+        },
+        {
+          role: 'user',
+          parts: [{ type: 'text', text: correctiveText }]
+        }
+      ]
+    };
+  }
+
+  function countTraiRequestImages(traiRequest) {
+    return canonicalMessagesFromTraiRequest(traiRequest).reduce((count, message) => {
+      return count + normalizeArray(message?.parts).filter((part) => part?.type === 'image').length;
+    }, 0);
+  }
+
+  function summarizeFoodAnalysisResponse(traiResponse) {
+    const parsed = parseTopLevelJSONObject(extractTraiResponseText(traiResponse));
+    return summarizeFoodAnalysisPayload(parsed);
+  }
+
+  function summarizeFoodAnalysisPayload(parsed) {
+    const normalizedName = String(parsed?.name ?? '').trim().toLowerCase();
+    const classification =
+      normalizedName === 'unclear food or drink'
+        ? 'unclear'
+        : ['water', 'plain water', 'sparkling water', 'plain sparkling water'].includes(normalizedName)
+          ? 'water'
+          : normalizedName.length > 0
+            ? 'identified'
+            : 'missing_name';
+
+    return {
+      classification,
+      calories: finiteNumberOrNull(parsed?.calories),
+      proteinGrams: finiteNumberOrNull(parsed?.proteinGrams),
+      carbsGrams: finiteNumberOrNull(parsed?.carbsGrams),
+      fatGrams: finiteNumberOrNull(parsed?.fatGrams),
+      confidence: typeof parsed?.confidence === 'string' ? parsed.confidence : null
+    };
+  }
+
+  function extractTraiResponseText(traiResponse) {
+    return normalizeArray(traiResponse?.parts)
+      .filter((part) => part?.type === 'text' && typeof part?.text === 'string')
+      .map((part) => part.text)
+      .join('\n');
+  }
+
+  function parseTopLevelJSONObject(text) {
+    if (typeof text !== 'string' || text.trim().length === 0) {
+      return null;
+    }
+
+    const trimmed = text.trim();
+    const match = trimmed.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(match[0]);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function finiteNumberOrNull(value) {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function normalizeArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function pacingLimitError(error, message) {
+    return new HttpError(429, { error, message });
+  }
+
+  function quotaLimitError(error, message) {
+    return new HttpError(403, { error, message });
+  }
+
+  async function enforceAIProxyBurstLimits(userID, plan, unitCost) {
     const oneMinuteAgo = new Date(Date.now() - (60 * 1000)).toISOString();
     const tenMinutesAgo = new Date(Date.now() - (10 * 60 * 1000)).toISOString();
+    const twentyFourHoursAgo = new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString();
+    const sevenDaysAgo = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)).toISOString();
 
     const recentAttempts = await db.prepare(`
       SELECT COUNT(*) AS count
@@ -913,10 +1359,10 @@ export function createRouteHandlers({
     `).get(userID, oneMinuteAgo);
 
     if ((recentAttempts?.count ?? 0) >= config.aiProxyMaxRequestsPerMinute) {
-      throw new HttpError(429, {
-        error: 'ai_rate_limited',
-        message: 'AI is temporarily unavailable for this account right now.'
-      });
+      throw pacingLimitError(
+        'ai_rate_limited_requests_per_minute',
+        'You are sending Trai AI requests too quickly right now. Please wait a minute and try again.'
+      );
     }
 
     const recentUsage = await db.prepare(`
@@ -925,21 +1371,49 @@ export function createRouteHandlers({
       WHERE user_id = ? AND created_at >= ?
     `).get(userID, tenMinutesAgo);
 
-    if ((recentUsage?.units ?? 0) >= config.aiProxyMaxUnitsPerTenMinutes) {
-      throw new HttpError(429, {
-        error: 'ai_rate_limited',
-        message: 'AI is temporarily unavailable for this account right now.'
-      });
+    if (((recentUsage?.units ?? 0) + unitCost) > config.aiProxyMaxUnitsPerTenMinutes) {
+      throw pacingLimitError(
+        'ai_rate_limited_units_per_ten_minutes',
+        'You have hit a short-term Trai AI pacing limit. Please wait a bit and try again.'
+      );
+    }
+
+    if (plan !== 'developer') {
+      const dailyUsage = await db.prepare(`
+        SELECT COALESCE(SUM(unit_cost), 0) AS units
+        FROM usage_ledger
+        WHERE user_id = ? AND created_at >= ?
+      `).get(userID, twentyFourHoursAgo);
+
+      if (((dailyUsage?.units ?? 0) + unitCost) > config.aiProxyMaxUnitsPer24Hours) {
+        throw quotaLimitError(
+          'quota_exhausted_daily',
+          'You have hit your daily Trai AI limit. Please try again tomorrow.'
+        );
+      }
+
+      const weeklyUsage = await db.prepare(`
+        SELECT COALESCE(SUM(unit_cost), 0) AS units
+        FROM usage_ledger
+        WHERE user_id = ? AND created_at >= ?
+      `).get(userID, sevenDaysAgo);
+
+      if (((weeklyUsage?.units ?? 0) + unitCost) > config.aiProxyMaxUnitsPer7Days) {
+        throw quotaLimitError(
+          'quota_exhausted_weekly',
+          'You have hit your weekly Trai AI limit. Please try again in a few days.'
+        );
+      }
     }
   }
 
   function reserveAIConcurrencySlot(userID) {
     const activeRequests = activeAIRequestsByUser.get(userID) ?? 0;
     if (activeRequests >= config.aiProxyMaxConcurrentRequestsPerUser) {
-      throw new HttpError(429, {
-        error: 'ai_rate_limited',
-        message: 'AI is temporarily unavailable for this account right now.'
-      });
+      throw pacingLimitError(
+        'ai_rate_limited_concurrency',
+        'Another Trai AI request is still running. Please wait a moment and try again.'
+      );
     }
 
     activeAIRequestsByUser.set(userID, activeRequests + 1);

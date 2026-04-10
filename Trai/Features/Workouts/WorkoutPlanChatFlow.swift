@@ -76,29 +76,32 @@ struct WorkoutPlanChatFlow: View {
     // MARK: - Body
 
     var body: some View {
-        if requiresAuthenticatedAccountForWorkoutAI {
-            AccountSetupView(context: .aiFeatures, showsDismissButton: !embedded)
-        } else if !canAccessWorkoutAI {
-            ProUpsellView(source: .workoutPlan, showsDismissButton: !embedded)
-        } else if embedded {
-            mainContent
-        } else {
-            NavigationStack {
+        Group {
+            if requiresAuthenticatedAccountForWorkoutAI {
+                AccountSetupView(context: .aiFeatures, showsDismissButton: !embedded)
+            } else if !canAccessWorkoutAI {
+                ProUpsellView(source: .workoutPlan, showsDismissButton: !embedded)
+            } else if embedded {
                 mainContent
-                    .navigationTitle("Create Your Plan")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            if !isOnboarding && !isGenerating {
-                                Button("Cancel", systemImage: "xmark") {
-                                    dismiss()
+            } else {
+                NavigationStack {
+                    mainContent
+                        .navigationTitle("Create Your Plan")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                if !isOnboarding && !isGenerating {
+                                    Button("Cancel", systemImage: "xmark") {
+                                        dismiss()
+                                    }
                                 }
                             }
                         }
-                    }
-                    .interactiveDismissDisabled(isGenerating)
+                        .interactiveDismissDisabled(isGenerating)
+                }
             }
         }
+        .traiSheetBranding()
     }
 
     private var mainContent: some View {
@@ -487,7 +490,7 @@ struct WorkoutPlanChatFlow: View {
 
         Task {
             let request = buildRequest()
-            let service = GeminiService()
+            let service = AIService()
 
             do {
                 let plan = try await service.generateWorkoutPlan(request: request)
@@ -582,7 +585,7 @@ struct WorkoutPlanChatFlow: View {
 
         Task {
             let request = buildRequest()
-            let service = GeminiService()
+            let service = AIService()
 
             do {
                 let response = try await service.refineWorkoutPlan(

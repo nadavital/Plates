@@ -291,31 +291,38 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingPlanSetup) {
                 WorkoutPlanChatFlow()
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingPersonalRecords) {
                 PersonalRecordsView()
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingMuscleRecoveryDetail) {
                 MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)
+                    .traiSheetBranding()
             }
             .sheet(item: $showingWorkoutDetail) { workout in
                 WorkoutDetailSheet(workout: workout)
+                    .traiSheetBranding()
             }
             .sheet(item: $showingLiveWorkoutDetail) { workout in
                 LiveWorkoutDetailSheet(
                     workout: workout,
                     useLbs: !(userProfile?.usesMetricExerciseWeight ?? true)
                 )
+                .traiSheetBranding()
             }
             .sheet(isPresented: $showingWorkoutSheet) {
                 if let workout = pendingWorkout {
                     LiveWorkoutView(workout: workout, template: pendingTemplate)
+                        .traiSheetBranding()
                 }
             }
             .sheet(isPresented: $showingCustomWorkoutSetup) {
                 CustomWorkoutSetupSheet { name, type, muscles in
                     queueCustomWorkoutStart(name: name, type: type, muscles: muscles)
                 }
+                .traiSheetBranding()
             }
             .onChange(of: showingCustomWorkoutSetup) { _, isShowing in
                 guard !isShowing, let pendingCustomWorkoutStart else { return }

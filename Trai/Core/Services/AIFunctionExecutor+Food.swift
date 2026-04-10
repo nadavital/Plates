@@ -1,5 +1,5 @@
 //
-//  GeminiFunctionExecutor+Food.swift
+//  AIFunctionExecutor+Food.swift
 //  Trai
 //
 //  Food-related function execution
@@ -8,7 +8,7 @@
 import Foundation
 import SwiftData
 
-extension GeminiFunctionExecutor {
+extension AIFunctionExecutor {
 
     // MARK: - Food Functions
 

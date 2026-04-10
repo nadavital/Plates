@@ -56,6 +56,7 @@ struct WorkoutPlanHistoryView: View {
             NavigationStack {
                 WorkoutPlanVersionDetailView(version: version)
             }
+            .traiSheetBranding()
         }
         .onAppear {
             fetchPlanVersions()

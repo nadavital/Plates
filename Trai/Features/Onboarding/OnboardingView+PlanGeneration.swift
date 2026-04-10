@@ -46,7 +46,7 @@ extension OnboardingView {
             }
 
             do {
-                let plan = try await geminiService.generateNutritionPlan(request: request)
+                let plan = try await aiService.generateNutritionPlan(request: request)
                 self.generatedPlan = plan
                 self.populateAdjustedValues(from: plan)
             } catch {

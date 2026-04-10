@@ -9,6 +9,7 @@ import Foundation
 
 enum AppLaunchArguments {
     static let uiTestMode = "UITEST_MODE"
+    static let pendingAppRoute = "-pendingAppRoute"
     static let seedLiveWorkoutPerfData = "--seed-live-workout-perf-data"
     static let uiTestLiveWorkoutPreset = "--ui-test-live-workout-preset"
     static let enableTabPrewarm = "--enable-tab-prewarm"
@@ -80,5 +81,17 @@ enum AppLaunchArguments {
             return true
         }
         return (ProcessInfo.processInfo.systemUptime - processStartupUptime) < startupSuppressedAnimationWindowSeconds
+    }
+
+    static var launchPendingRoute: AppRoute? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let routeFlagIndex = arguments.firstIndex(of: pendingAppRoute) else {
+            return nil
+        }
+        let valueIndex = arguments.index(after: routeFlagIndex)
+        guard arguments.indices.contains(valueIndex) else {
+            return nil
+        }
+        return AppRoute(urlString: arguments[valueIndex])
     }
 }

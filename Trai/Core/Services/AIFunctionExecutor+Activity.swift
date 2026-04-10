@@ -1,5 +1,5 @@
 //
-//  GeminiFunctionExecutor+Activity.swift
+//  AIFunctionExecutor+Activity.swift
 //  Trai
 //
 //  Activity data function execution
@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension GeminiFunctionExecutor {
+extension AIFunctionExecutor {
 
     // MARK: - Activity Summary
 

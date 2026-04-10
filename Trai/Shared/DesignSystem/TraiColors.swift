@@ -38,3 +38,13 @@ enum TraiColors {
         endPoint: .bottomTrailing
     )
 }
+
+extension View {
+    /// Applies an explicit Trai brand tint at the presented-view root so sheets
+    /// do not briefly fall back to the system blue accent during presentation.
+    func traiSheetBranding() -> some View {
+        self
+            .tint(TraiColors.brandAccent)
+            .accentColor(TraiColors.brandAccent)
+    }
+}

@@ -49,11 +49,11 @@ struct FoodCameraView: View {
 
     var body: some View {
         Group {
-            if requiresAuthenticatedAccountForFoodAI {
-                AccountSetupView(context: .aiFeatures)
-            } else if !canAccessFoodAI {
+            if !canAccessFoodAI {
                 Color(.systemBackground)
                     .ignoresSafeArea()
+            } else if requiresAuthenticatedAccountForFoodAI {
+                AccountSetupView(context: .aiFeatures)
             } else {
                 NavigationStack {
                     if draft == nil {
@@ -81,6 +81,7 @@ struct FoodCameraView: View {
                 pendingManualEntry = entry
                 showingManualEntry = false
             }
+            .traiSheetBranding()
         }
         .onChange(of: showingManualEntry) { _, isShowing in
             guard !isShowing else { return }
@@ -93,7 +94,7 @@ struct FoodCameraView: View {
             }
         }
         .task(id: canAccessFoodAI) {
-            if !canAccessFoodAI && !requiresAuthenticatedAccountForFoodAI && !showingManualEntry {
+            if !canAccessFoodAI && !showingManualEntry {
                 showingManualEntry = true
             }
         }
@@ -142,6 +143,14 @@ private struct FoodLogCaptureStepView: View {
             onSubmitDescription: submitTextDescription,
             selectedPhotoItem: $selectedPhotoItem
         )
+        .overlay(alignment: .topLeading) {
+            Text("ready")
+                .font(.system(size: 1))
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("foodCameraCaptureReady")
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -251,7 +260,7 @@ private struct FoodLogReviewStepView: View {
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
-    @State private var geminiService = GeminiService()
+    @State private var aiService = AIService()
     @State private var isAnalyzing = false
     @State private var analysisErrorMessage: String?
     @State private var isLoadingRefinement = false
@@ -344,7 +353,7 @@ private struct FoodLogReviewStepView: View {
             defer { isAnalyzing = false }
 
             do {
-                let result = try await geminiService.analyzeFoodImage(
+                let result = try await aiService.analyzeFoodImage(
                     draft.image?.jpegData(compressionQuality: 0.8),
                     description: trimmedDescription.isEmpty ? nil : trimmedDescription
                 )
@@ -371,7 +380,7 @@ private struct FoodLogReviewStepView: View {
             defer { isLoadingRefinement = false }
 
             do {
-                let refinedSuggestion = try await geminiService.refineFoodAnalysis(
+                let refinedSuggestion = try await aiService.refineFoodAnalysis(
                     correction: correction,
                     currentSuggestion: currentSuggestion,
                     imageData: draft.image?.jpegData(compressionQuality: 0.8)

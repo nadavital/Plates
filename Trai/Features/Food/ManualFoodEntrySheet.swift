@@ -114,8 +114,7 @@ struct ManualFoodEntrySheet: View {
             }
         }
         .proUpsellPresenter()
-        .tint(TraiColors.brandAccent)
-        .accentColor(TraiColors.brandAccent)
+        .traiSheetBranding()
     }
 
     private var upgradeRow: some View {

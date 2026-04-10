@@ -1,5 +1,5 @@
 //
-//  GeminiWorkoutPlanPrompts.swift
+//  AIWorkoutPlanPrompts.swift
 //  Trai
 //
 //  Workout plan generation and refinement prompts
@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Workout Plan Generation
 
-extension GeminiPromptBuilder {
+extension AIPromptBuilder {
 
     static func buildWorkoutPlanGenerationPrompt(
         request: WorkoutPlanGenerationRequest,
@@ -214,7 +214,7 @@ extension GeminiPromptBuilder {
 
 // MARK: - Workout Plan Refinement
 
-extension GeminiPromptBuilder {
+extension AIPromptBuilder {
 
     static func buildWorkoutPlanRefinementPrompt(
         currentPlan: WorkoutPlan,

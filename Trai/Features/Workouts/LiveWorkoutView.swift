@@ -394,7 +394,7 @@ struct LiveWorkoutView: View {
         heartRateTimer = nil
     }
 
-    private func buildWorkoutContext() -> GeminiService.WorkoutContext {
+    private func buildWorkoutContext() -> AIService.WorkoutContext {
         let entries = viewModel.entries
 
         // Count exercises with ALL sets having data entered as "completed"
@@ -417,7 +417,7 @@ struct LiveWorkoutView: View {
             total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
         }
 
-        return GeminiService.WorkoutContext(
+        return AIService.WorkoutContext(
             workoutName: viewModel.workoutName,
             elapsedMinutes: Int(viewModel.elapsedTime / 60),
             exercisesCompleted: completedExercises,

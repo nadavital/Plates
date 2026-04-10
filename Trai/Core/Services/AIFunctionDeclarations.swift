@@ -1,14 +1,14 @@
 //
-//  GeminiFunctionDeclarations.swift
+//  AIFunctionDeclarations.swift
 //  Trai
 //
-//  Function declarations (tools) for Gemini function calling API
+//  Function declarations (tools) for AI function calling
 //
 
 import Foundation
 
-/// Function declarations for Gemini API function calling
-enum GeminiFunctionDeclarations {
+/// Function declarations for Trai AI function calling
+enum AIFunctionDeclarations {
 
     // MARK: - All Chat Functions
 

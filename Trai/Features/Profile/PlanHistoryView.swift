@@ -51,6 +51,7 @@ struct PlanHistoryView: View {
             NavigationStack {
                 PlanVersionDetailView(version: version)
             }
+            .traiSheetBranding()
         }
         .onAppear {
             fetchPlanVersions()

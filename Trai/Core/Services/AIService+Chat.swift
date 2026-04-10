@@ -1,5 +1,5 @@
 //
-//  GeminiService+Chat.swift
+//  AIService+Chat.swift
 //  Trai
 //
 //  Chat and conversation methods
@@ -8,7 +8,7 @@
 import Foundation
 import os
 
-extension GeminiService {
+extension AIService {
 
     // MARK: - Chat
 
@@ -23,19 +23,19 @@ extension GeminiService {
         lastError = nil
         defer { isLoading = false }
         return try await performAIRequest(for: .coachChat) {
-            let contents = buildChatContents(
+            let messages = buildChatMessages(
                 message: message,
                 context: context,
                 conversationHistory: conversationHistory,
                 tone: tone
             )
 
-            let requestBody: [String: Any] = [
-                "contents": contents,
-                "generationConfig": buildGenerationConfig(thinkingLevel: .low)
-            ]
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: messages,
+                generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
+            )
 
-            return try await makeRequest(body: requestBody)
+            return try await makeRequest(request: request)
         }
     }
 
@@ -51,19 +51,19 @@ extension GeminiService {
         lastError = nil
         defer { isLoading = false }
         try await performAIRequest(for: .coachChat) {
-            let contents = buildChatContents(
+            let messages = buildChatMessages(
                 message: message,
                 context: context,
                 conversationHistory: conversationHistory,
                 tone: tone
             )
 
-            let requestBody: [String: Any] = [
-                "contents": contents,
-                "generationConfig": buildGenerationConfig(thinkingLevel: .low)
-            ]
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: messages,
+                generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low)
+            )
 
-            try await makeStreamingRequest(body: requestBody, onChunk: onChunk)
+            try await makeStreamingRequest(request: request, onChunk: onChunk)
         }
     }
 
@@ -87,7 +87,7 @@ extension GeminiService {
                 .map { ($0.isFromUser ? "User" : "Coach") + ": " + $0.content }
                 .joined(separator: "\n")
 
-            let prompt = GeminiPromptBuilder.buildTextChatPrompt(
+            let prompt = AIPromptBuilder.buildTextChatPrompt(
                 userMessage: message,
                 context: context,
                 currentDateTime: currentDateTime,
@@ -96,48 +96,52 @@ extension GeminiService {
                 tone: tone
             )
 
-            let requestBody: [String: Any] = [
-                "contents": [["parts": [["text": prompt]]]],
-                "generationConfig": buildGenerationConfig(
-                    thinkingLevel: .medium,
-                    jsonSchema: GeminiPromptBuilder.chatImageAnalysisSchema
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
+                ],
+                output: AIBackendPayloadBuilder.canonicalOutput(
+                    kind: .jsonSchema,
+                    schema: AIPromptBuilder.chatImageAnalysisSchema
+                ),
+                generation: AIBackendPayloadBuilder.canonicalGeneration(
+                    reasoningLevel: .medium
                 )
-            ]
+            )
 
-            let responseText = try await makeRequest(body: requestBody)
+            let responseText = try await makeRequest(request: request)
             return try parseChatFoodAnalysis(from: responseText)
         }
     }
 
-    func buildChatContents(
+    func buildChatMessages(
         message: String,
         context: FitnessContext,
         conversationHistory: [ChatMessage],
         tone: TraiCoachTone = .sharedPreference
-    ) -> [[String: Any]] {
-        var contents: [[String: Any]] = []
+    ) -> [TraiAIMessage] {
+        var contents: [TraiAIMessage] = []
 
-        let systemPrompt = GeminiPromptBuilder.buildSystemPrompt(context: context, tone: tone)
-        contents.append([
-            "role": "user",
-            "parts": [["text": systemPrompt]]
-        ])
-        contents.append([
-            "role": "model",
-            "parts": [["text": tone.primingReply]]
-        ])
+        let systemPrompt = AIPromptBuilder.buildSystemPrompt(context: context, tone: tone)
+        contents.append(
+            AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: systemPrompt)
+        )
+        contents.append(
+            AIBackendPayloadBuilder.canonicalTextMessage(role: .assistant, text: tone.primingReply)
+        )
 
         for msg in conversationHistory.suffix(10) {
-            contents.append([
-                "role": msg.isFromUser ? "user" : "model",
-                "parts": [["text": msg.content]]
-            ])
+            contents.append(
+                AIBackendPayloadBuilder.canonicalTextMessage(
+                    role: msg.isFromUser ? .user : .assistant,
+                    text: msg.content
+                )
+            )
         }
 
-        contents.append([
-            "role": "user",
-            "parts": [["text": message]]
-        ])
+        contents.append(
+            AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: message)
+        )
 
         return contents
     }
@@ -150,14 +154,16 @@ extension GeminiService {
         lastError = nil
         defer { isLoading = false }
         return try await performAIRequest(for: .nutritionAdvice) {
-            let prompt = GeminiPromptBuilder.buildNutritionAdvicePrompt(meals: todaysMeals, profile: profile)
+            let prompt = AIPromptBuilder.buildNutritionAdvicePrompt(meals: todaysMeals, profile: profile)
 
-            let requestBody: [String: Any] = [
-                "contents": [["parts": [["text": prompt]]]],
-                "generationConfig": buildGenerationConfig(thinkingLevel: .medium)
-            ]
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: [
+                    AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: prompt)
+                ],
+                generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .medium)
+            )
 
-            return try await makeRequest(body: requestBody)
+            return try await makeRequest(request: request)
         }
     }
 }

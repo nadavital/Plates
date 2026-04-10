@@ -282,6 +282,7 @@ struct MainTabView: View {
             }
             .sheet(item: $presentedWorkout) { workout in
                 LiveWorkoutView(workout: workout)
+                    .traiSheetBranding()
             }
             .confirmationDialog(
                 "End Workout?",
@@ -299,12 +300,15 @@ struct MainTabView: View {
             }
             .fullScreenCover(item: $foodCameraPresentation) { presentation in
                 FoodCameraView(sessionId: presentation.sessionId)
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
+                    .traiSheetBranding()
             }
             .sheet(item: $intentTriggeredWorkout) { workout in
                 LiveWorkoutView(workout: workout)
+                    .traiSheetBranding()
             }
             .onAppear {
                 consumePendingRoute()
@@ -439,7 +443,11 @@ struct MainTabView: View {
         switch destination {
         case .logFood:
             guard foodCameraPresentation == nil else { return }
-            foodCameraPresentation = FoodCameraPresentation()
+            Task { @MainActor in
+                await Task.yield()
+                guard foodCameraPresentation == nil else { return }
+                foodCameraPresentation = FoodCameraPresentation()
+            }
             BehaviorTracker(modelContext: modelContext).recordDeferred(
                 actionKey: BehaviorActionKey.logFood,
                 domain: .nutrition,

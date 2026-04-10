@@ -47,11 +47,11 @@ struct AskTraiIntent: AppIntent {
         )
         let todayFood = (try? context.fetch(foodDescriptor)) ?? []
 
-        // Build context for Gemini
-        let geminiService = GeminiService()
+        // Build context for the shared AI service
+        let aiService = AIService()
 
         do {
-            let response = try await geminiService.askQuickQuestion(
+            let response = try await aiService.askQuickQuestion(
                 question: question,
                 userContext: buildUserContext(profile: profile, todayFood: todayFood)
             )
@@ -84,9 +84,9 @@ struct AskTraiIntent: AppIntent {
     }
 }
 
-// MARK: - Gemini Extension for Quick Questions
+// MARK: - AI Service Extension for Quick Questions
 
-extension GeminiService {
+extension AIService {
     /// Answer a quick question with minimal context (for Siri)
     func askQuickQuestion(
         question: String,

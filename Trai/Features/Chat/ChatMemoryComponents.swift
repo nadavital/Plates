@@ -47,6 +47,7 @@ struct MemorySavedBadge: View {
         .sheet(isPresented: $showMemories) {
             SavedMemoriesSheet(memoryContents: memories)
                 .presentationDetents([.medium])
+                .traiSheetBranding()
         }
         .sheet(item: $singleMemory) { memory in
             MemoryDetailSheet(memory: memory, onDelete: {
@@ -56,6 +57,7 @@ struct MemorySavedBadge: View {
                 HapticManager.lightTap()
             })
             .presentationDetents([.medium])
+            .traiSheetBranding()
         }
     }
 
@@ -103,6 +105,7 @@ struct SavedMemoriesSheet: View {
                 fetchMemories()
             }
         }
+        .traiSheetBranding()
     }
 
     private func fetchMemories() {

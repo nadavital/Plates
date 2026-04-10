@@ -1,5 +1,5 @@
 //
-//  GeminiPlanPrompts.swift
+//  AIPlanPrompts.swift
 //  Trai
 //
 //  Onboarding plan generation and refinement prompts
@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Plan Generation
 
-extension GeminiPromptBuilder {
+extension AIPromptBuilder {
 
     static func buildPlanGenerationPrompt(
         request: PlanGenerationRequest,
@@ -145,7 +145,7 @@ extension GeminiPromptBuilder {
 
 // MARK: - Plan Refinement
 
-extension GeminiPromptBuilder {
+extension AIPromptBuilder {
 
     static func buildPlanRefinementPrompt(
         currentPlan: NutritionPlan,

@@ -57,7 +57,7 @@ struct OnboardingView: View {
     @State var generatedWorkoutPlan: WorkoutPlan?
     @State var showingWorkoutSetup = false
 
-    @State var geminiService = GeminiService()
+    @State var aiService = AIService()
 
     let totalSteps = 8
 

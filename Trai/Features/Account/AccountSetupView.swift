@@ -109,8 +109,7 @@ struct AccountSetupView: View {
             guard isAuthenticated else { return }
             dismiss()
         }
-        .tint(TraiColors.brandAccent)
-        .accentColor(TraiColors.brandAccent)
+        .traiSheetBranding()
     }
 
     private var backendActionTitle: String? {

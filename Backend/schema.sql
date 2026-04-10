@@ -75,11 +75,21 @@ CREATE TABLE IF NOT EXISTS ai_requests (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   feature TEXT NOT NULL,
+  provider TEXT,
   model TEXT NOT NULL,
   action TEXT NOT NULL,
   outcome TEXT NOT NULL,
   latency_ms INTEGER,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  cached_input_tokens INTEGER,
+  reasoning_tokens INTEGER,
   provider_cost_estimate REAL,
+  provider_usage_json TEXT,
+  request_format TEXT,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  retry_reason TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -110,6 +120,7 @@ CREATE TABLE IF NOT EXISTS storekit_transactions (
   expires_date TEXT,
   revocation_date TEXT,
   signed_date TEXT,
+  app_account_token TEXT,
   raw_jws TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -129,3 +140,18 @@ CREATE TABLE IF NOT EXISTS app_store_notifications (
   created_at TEXT NOT NULL,
   processed_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS usage_ledger_user_created_at_idx
+  ON usage_ledger (user_id, created_at);
+
+CREATE INDEX IF NOT EXISTS usage_ledger_created_at_idx
+  ON usage_ledger (created_at);
+
+CREATE INDEX IF NOT EXISTS ai_requests_user_created_at_idx
+  ON ai_requests (user_id, created_at);
+
+CREATE INDEX IF NOT EXISTS ai_requests_created_at_idx
+  ON ai_requests (created_at);
+
+CREATE INDEX IF NOT EXISTS ai_requests_provider_model_created_at_idx
+  ON ai_requests (provider, model, created_at);

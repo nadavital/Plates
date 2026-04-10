@@ -47,7 +47,7 @@ struct ChatView: View {
     }
 
     /// Optional workout context for mid-workout chat
-    var workoutContext: GeminiService.WorkoutContext?
+    var workoutContext: AIService.WorkoutContext?
 
     @Query var allMessages: [ChatMessage]
 
@@ -72,7 +72,7 @@ struct ChatView: View {
     @Environment(HealthKitService.self) var healthKitService: HealthKitService?
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
-    @State var geminiService = GeminiService()
+    @State var aiService = AIService()
     @State var recoveryService = MuscleRecoveryService.shared
     @State var isLoading = false
     @State var currentActivity: String?
@@ -150,7 +150,7 @@ struct ChatView: View {
         accountSessionService?.isAuthenticated != true
     }
 
-    init(workoutContext: GeminiService.WorkoutContext? = nil) {
+    init(workoutContext: AIService.WorkoutContext? = nil) {
         self.workoutContext = workoutContext
 
         let now = Date()
@@ -1083,7 +1083,9 @@ private struct ChatRootView: View {
         .chatViewFoodEntrySheet(viewingEntry: viewingFoodEntry, viewingLoggedMealId: $viewingLoggedMealId)
         .sheet(item: $viewingAppliedPlan) { plan in
             PlanUpdateDetailSheet(plan: plan)
+                .traiSheetBranding()
         }
+        .traiSheetBranding()
     }
 }
 

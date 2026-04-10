@@ -1,0 +1,275 @@
+[
+  {
+    "name": "coach_text_low_reasoning",
+    "request": {
+      "system": "You are Trai.",
+      "messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "text": "Plan my meals for today."
+            }
+          ]
+        }
+      ],
+      "tools": [],
+      "output": {
+        "kind": "text"
+      },
+      "generation": {
+        "reasoning": "low",
+        "maxOutputTokens": 180,
+        "temperature": 0.3,
+        "topP": 0.85
+      }
+    }
+  },
+  {
+    "name": "food_photo_structured",
+    "request": {
+      "system": "You are Trai.",
+      "messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "text": "Analyze this food and provide accurate nutritional information."
+            },
+            {
+              "type": "image",
+              "mimeType": "image/jpeg",
+              "data": "Zm9vZC1pbWFnZS1ieXRlcy0xMjM="
+            }
+          ]
+        }
+      ],
+      "tools": [],
+      "output": {
+        "kind": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "calories": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "calories"
+          ]
+        }
+      },
+      "generation": {
+        "reasoning": "medium",
+        "imageDetail": "high",
+        "maxOutputTokens": 512
+      }
+    }
+  },
+  {
+    "name": "exercise_photo_minimal_reasoning",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "text": "Identify this gym equipment and suggest exercises."
+            },
+            {
+              "type": "image",
+              "mimeType": "image/jpeg",
+              "data": "ZXhlcmNpc2UtaW1hZ2UtYnl0ZXM="
+            }
+          ]
+        }
+      ],
+      "tools": [],
+      "output": {
+        "kind": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "equipmentName": {
+              "type": "string"
+            },
+            "suggestedExercises": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "equipmentName",
+            "suggestedExercises"
+          ]
+        }
+      },
+      "generation": {
+        "reasoning": "minimal",
+        "imageDetail": "high",
+        "maxOutputTokens": 320,
+        "temperature": 0.1,
+        "topP": 0.5
+      }
+    }
+  },
+  {
+    "name": "tool_follow_up",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "text": "How much protein is in a banana?"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call_lookup",
+              "name": "lookup_food",
+              "args": {
+                "query": "banana"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "parts": [
+            {
+              "type": "tool_response",
+              "toolCallID": "call_lookup",
+              "name": "lookup_food",
+              "response": {
+                "protein": 1.3
+              }
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "name": "lookup_food",
+          "description": "Look up food macros",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "output": {
+        "kind": "text"
+      },
+      "generation": {
+        "reasoning": "low",
+        "maxOutputTokens": 120
+      }
+    }
+  },
+  {
+    "name": "structured_optional_fields",
+    "request": {
+      "messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "text": "Extract the meal name and any optional serving details."
+            }
+          ]
+        }
+      ],
+      "tools": [],
+      "output": {
+        "kind": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "servingSize": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "notes": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      },
+      "generation": {
+        "reasoning": "low",
+        "maxOutputTokens": 220
+      }
+    }
+  },
+  {
+    "name": "multi_image_text_analysis",
+    "request": {
+      "system": "You are Trai.",
+      "messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "text": "Compare these two meal photos."
+            },
+            {
+              "type": "image",
+              "mimeType": "image/jpeg",
+              "data": "aW1hZ2UtMQ=="
+            },
+            {
+              "type": "image",
+              "mimeType": "image/png",
+              "data": "aW1hZ2UtMg=="
+            }
+          ]
+        }
+      ],
+      "tools": [],
+      "output": {
+        "kind": "text"
+      },
+      "generation": {
+        "reasoning": "low",
+        "imageDetail": "high",
+        "maxOutputTokens": 240
+      }
+    }
+  }
+]

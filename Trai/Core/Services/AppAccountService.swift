@@ -11,6 +11,7 @@ final class AppAccountService {
         static let backendEnvironment = "account.backendEnvironment.v1"
         static let customBackendBaseURL = "account.customBackendBaseURL.v1"
         static let lastSyncedAt = "account.lastSyncedAt.v1"
+        static let debugAIProviderOverride = "account.debugAIProviderOverride.v1"
     }
 
     @ObservationIgnored
@@ -22,6 +23,9 @@ final class AppAccountService {
     private(set) var backendEnvironment: BackendEnvironment
     private(set) var customBackendBaseURL: String
     private(set) var lastSyncedAt: Date?
+    #if DEBUG
+    private(set) var debugAIProviderOverride: AIProviderOverride
+    #endif
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -76,6 +80,14 @@ final class AppAccountService {
             #endif
         }
         self.lastSyncedAt = defaults.object(forKey: DefaultsKey.lastSyncedAt) as? Date
+        #if DEBUG
+        if let rawDebugAIProviderOverride = defaults.string(forKey: DefaultsKey.debugAIProviderOverride),
+           let debugAIProviderOverride = AIProviderOverride(rawValue: rawDebugAIProviderOverride) {
+            self.debugAIProviderOverride = debugAIProviderOverride
+        } else {
+            self.debugAIProviderOverride = .automatic
+        }
+        #endif
 
         #if DEBUG
         if defaults.string(forKey: DefaultsKey.backendEnvironment) == BackendEnvironment.localPlaceholder.rawValue {
@@ -175,6 +187,11 @@ final class AppAccountService {
         identityMode = mode
         persist()
     }
+
+    func setDebugAIProviderOverride(_ override: AIProviderOverride) {
+        debugAIProviderOverride = override
+        persist()
+    }
     #endif
 
     func setBackendEnvironment(_ environment: BackendEnvironment) {
@@ -198,6 +215,9 @@ final class AppAccountService {
             defaults.set(customBackendBaseURL, forKey: DefaultsKey.customBackendBaseURL)
         }
         defaults.set(lastSyncedAt, forKey: DefaultsKey.lastSyncedAt)
+        #if DEBUG
+        defaults.set(debugAIProviderOverride.rawValue, forKey: DefaultsKey.debugAIProviderOverride)
+        #endif
     }
 
     private static var supportsLocalDevelopmentBackendOnCurrentRuntime: Bool {

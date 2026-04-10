@@ -138,6 +138,7 @@ struct WorkoutSummarySheet: View {
             }
             .sheet(item: $selectedExercise) { exercise in
                 exercisePRSheet(for: exercise.name)
+                    .traiSheetBranding()
             }
         }
         .overlay {
@@ -148,6 +149,7 @@ struct WorkoutSummarySheet: View {
                     .ignoresSafeArea()
             }
         }
+        .traiSheetBranding()
         .traiBackground()
     }
 

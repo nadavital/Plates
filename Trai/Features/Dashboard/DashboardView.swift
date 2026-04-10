@@ -637,16 +637,20 @@ struct DashboardView: View {
             }
             .fullScreenCover(item: $localFoodCameraPresentation) { presentation in
                 FoodCameraView(sessionId: presentation.sessionId)
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingWeightTracking) {
                 WeightTrackingView()
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingWorkoutSheet) {
                 if let workout = pendingWorkout {
                     LiveWorkoutView(workout: workout, template: pendingTemplate)
+                        .traiSheetBranding()
                 }
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
@@ -675,6 +679,7 @@ struct DashboardView: View {
                     },
                     onDeleteEntry: deleteFoodEntry
                 )
+                .traiSheetBranding()
             }
             .sheet(isPresented: $showingMacroDetail) {
                 MacroDetailSheet(
@@ -701,9 +706,11 @@ struct DashboardView: View {
                         }
                     }
                 )
+                .traiSheetBranding()
             }
             .sheet(item: $entryToEdit) { entry in
                 EditFoodEntrySheet(entry: entry)
+                    .traiSheetBranding()
             }
             .overlay(alignment: .topLeading) {
                 Text("ready")

@@ -1,5 +1,5 @@
 //
-//  GeminiFunctionExecutor+Memory.swift
+//  AIFunctionExecutor+Memory.swift
 //  Trai
 //
 //  Memory-related function execution for AI coach
@@ -8,7 +8,7 @@
 import Foundation
 import SwiftData
 
-extension GeminiFunctionExecutor {
+extension AIFunctionExecutor {
 
     // MARK: - Memory Functions
 

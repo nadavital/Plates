@@ -109,12 +109,12 @@ extension OnboardingView {
             return
         }
 
-        let geminiService = GeminiService()
+        let aiService = AIService()
 
         // Parse each set of notes
         for (notes, context) in allNotes {
             do {
-                let parsedMemories = try await geminiService.parseNotesIntoMemories(
+                let parsedMemories = try await aiService.parseNotesIntoMemories(
                     notes: notes,
                     context: context
                 )

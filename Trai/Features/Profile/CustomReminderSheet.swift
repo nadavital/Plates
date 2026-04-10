@@ -96,6 +96,7 @@ struct CustomReminderSheet: View {
                 }
             }
         }
+        .traiSheetBranding()
     }
 
     // MARK: - Subviews

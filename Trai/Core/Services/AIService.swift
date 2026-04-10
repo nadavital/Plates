@@ -1,34 +1,32 @@
 //
-//  GeminiService.swift
+//  AIService.swift
 //  Trai
 //
-//  Core Gemini API service - types, configuration, and API helpers
-//  Extensions: GeminiService+Food.swift, GeminiService+Chat.swift,
-//              GeminiService+FunctionCalling.swift, GeminiService+Plan.swift
+//  Core AI backend service - types, configuration, and API helpers
+//  Extensions: AIService+Food.swift, AIService+Chat.swift,
+//              AIService+FunctionCalling.swift, AIService+Plan.swift
 //
 
 import Foundation
+import CryptoKit
 import os.log
 import SwiftData
 import SwiftUI
 
-/// Thinking level for Gemini 3 models - controls reasoning depth
-enum ThinkingLevel: String {
-    case minimal = "minimal"  // Fastest, for simple classification/greetings
-    case low = "low"          // Quick responses, math adjustments
-    case medium = "medium"    // Balanced, for advice and analysis
-}
-
-/// Service for interacting with Google's Gemini API
+/// Service for interacting with Trai's backend AI proxy
 @MainActor @Observable
-final class GeminiService {
-    let model = "gemini-3-flash-preview"
+final class AIService {
+    private struct AIProxyErrorPayload: Decodable {
+        let error: String?
+        let message: String?
+    }
+
     let appAccountService = AppAccountService.shared
     let accountSessionService = AccountSessionService.shared
     let backendClient = TraiBackendClient.shared
     let monetizationService = MonetizationService.shared
 
-    private let logger = Logger(subsystem: "com.plates.app", category: "GeminiService")
+    private let logger = Logger(subsystem: "com.plates.app", category: "AIService")
 
     /// Enable verbose console logging for debugging
     var debugLoggingEnabled = {
@@ -59,10 +57,10 @@ final class GeminiService {
         if debugLoggingEnabled {
             let prefix: String
             switch type {
-            case .error: prefix = "❌ [Gemini ERROR]"
-            case .fault: prefix = "💥 [Gemini FAULT]"
-            case .info: prefix = "ℹ️ [Gemini]"
-            default: prefix = "🤖 [Gemini]"
+            case .error: prefix = "❌ [AI ERROR]"
+            case .fault: prefix = "💥 [AI FAULT]"
+            case .info: prefix = "ℹ️ [AI]"
+            default: prefix = "🤖 [AI]"
             }
             print("\(prefix) \(message)")
         }
@@ -84,15 +82,33 @@ final class GeminiService {
         log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", type: .info)
     }
 
+    func logImagePayloadSummary(_ imageData: Data?, label: String) {
+        guard debugLoggingEnabled else { return }
+
+        guard let imageData else {
+            log("📷 \(label): no image attached", type: .info)
+            return
+        }
+
+        let digest = SHA256.hash(data: imageData)
+        let digestPrefix = digest.prefix(6).map { String(format: "%02x", $0) }.joined()
+        let estimatedBase64Characters = ((imageData.count + 2) / 3) * 4
+
+        log(
+            "📷 \(label): \(imageData.count) bytes, base64≈\(estimatedBase64Characters) chars, sha256=\(digestPrefix)…",
+            type: .info
+        )
+    }
+
     func beginAIRequest(for feature: AIFeature) throws -> AIRequestTicket {
         let decision = monetizationService.accessDecision(for: feature)
         guard decision.isAllowed else {
             let message = decision.reason ?? "This AI feature is not available right now."
             lastError = message
             if message.localizedCaseInsensitiveContains("limit") {
-                throw GeminiError.quotaExceeded(message)
+                throw AIServiceError.quotaExceeded(message)
             }
-            throw GeminiError.accessDenied(message)
+            throw AIServiceError.accessDenied(message)
         }
 
         let ticket = AIRequestTicket(id: UUID(), feature: feature)
@@ -129,6 +145,7 @@ final class GeminiService {
         do {
             let result = try await operation()
             if hasActiveAIRequest(ticket) {
+                monetizationService.recordSuccessfulAIRequest(feature)
                 completeAIRequest(ticket)
             }
             return result
@@ -145,7 +162,7 @@ final class GeminiService {
         guard accountSessionService.isAuthenticated else {
             let message = "Sign in is required before using server-backed AI features."
             lastError = message
-            throw GeminiError.accessDenied(message)
+            throw AIServiceError.accessDenied(message)
         }
 
         do {
@@ -157,7 +174,7 @@ final class GeminiService {
             )
         } catch {
             lastError = error.localizedDescription
-            throw GeminiError.accessDenied(error.localizedDescription)
+            throw AIServiceError.accessDenied(error.localizedDescription)
         }
     }
 
@@ -165,7 +182,7 @@ final class GeminiService {
         guard accountSessionService.isAuthenticated else {
             let message = "Sign in is required before using server-backed AI features."
             lastError = message
-            throw GeminiError.accessDenied(message)
+            throw AIServiceError.accessDenied(message)
         }
 
         let needsRefresh = accountSessionService.isSessionNearExpiry || accountSessionService.accessToken == nil
@@ -183,7 +200,7 @@ final class GeminiService {
 
         let message = accountSessionService.lastErrorMessage ?? "Your account session expired. Please sign in again."
         lastError = message
-        throw GeminiError.accessDenied(message)
+        throw AIServiceError.accessDenied(message)
     }
 
     func configureRequest(_ request: inout URLRequest) async throws {
@@ -194,45 +211,47 @@ final class GeminiService {
         guard let accessToken = accountSessionService.accessToken else {
             let message = "Your account session is missing. Please sign in again."
             lastError = message
-            throw GeminiError.accessDenied(message)
+            throw AIServiceError.accessDenied(message)
         }
 
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(appAccountService.appAccountToken, forHTTPHeaderField: "X-Trai-App-Account-Token")
         request.setValue(activeAIRequests.last?.feature.rawValue ?? AIFeature.coachChat.rawValue, forHTTPHeaderField: "X-Trai-AI-Feature")
+        #if DEBUG
+        if appAccountService.debugAIProviderOverride != .automatic {
+            request.setValue(
+                appAccountService.debugAIProviderOverride.rawValue,
+                forHTTPHeaderField: "X-Trai-AI-Provider-Override"
+            )
+        }
+        #endif
     }
 
     // MARK: - API Helpers
 
-    /// Build generation config with thinking level and optional schema
-    /// Note: maxTokens defaults to 16384 to avoid truncation issues
+    /// Build AI backend generation config with optional structured output hints.
     func buildGenerationConfig(
-        thinkingLevel: ThinkingLevel,
+        thinkingLevel: AIReasoningLevel,
         maxTokens: Int = 16384,
-        jsonSchema: [String: Any]? = nil
+        jsonSchema: [String: Any]? = nil,
+        imageResolution: AIImageResolution? = nil
     ) -> [String: Any] {
-        var config: [String: Any] = [
-            "temperature": 1.0,  // Recommended for Gemini 3
-            "topP": 0.95,
-            "maxOutputTokens": maxTokens,
-            "thinkingConfig": [
-                "thinkingLevel": thinkingLevel.rawValue.uppercased()
-            ]
-        ]
+        AIBackendPayloadBuilder.generationConfig(
+            reasoningLevel: thinkingLevel,
+            maxTokens: maxTokens,
+            jsonSchema: jsonSchema,
+            imageResolution: imageResolution
+        )
+    }
 
-        if let schema = jsonSchema {
-            config["responseMimeType"] = "application/json"
-            config["responseSchema"] = schema
-        }
-
-        return config
+    func makeRequest(request: TraiAIRequest) async throws -> String {
+        try await makeRequest(body: AIBackendPayloadBuilder.requestBody(from: request))
     }
 
     func makeRequest(body: [String: Any]) async throws -> String {
         let url = try serviceURL(action: "generateContent", streaming: false)
 
-        log("🌐 Making request to Gemini API...", type: .info)
-        log("   Model: \(model)", type: .debug)
+        log("🌐 Making request to Trai AI backend...", type: .info)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -247,16 +266,16 @@ final class GeminiService {
 
         guard let httpResponse = response as? HTTPURLResponse else {
             log("Invalid response type", type: .error)
-            throw GeminiError.invalidResponse
+            throw AIServiceError.invalidResponse
         }
 
         log("📡 HTTP Status: \(httpResponse.statusCode)", type: httpResponse.statusCode == 200 ? .info : .error)
 
         guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            log("API Error Response: \(errorBody)", type: .error)
-            lastError = "API Error: \(httpResponse.statusCode)"
-            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
+            let userError = parseAIProxyError(statusCode: httpResponse.statusCode, data: data)
+            log("API Error Response: \(userError.localizedDescription)", type: .error)
+            lastError = userError.localizedDescription
+            throw userError
         }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -270,17 +289,21 @@ final class GeminiService {
             if let rawJson = String(data: data, encoding: .utf8) {
                 log("Raw response: \(rawJson.prefix(500))...", type: .debug)
             }
-            throw GeminiError.invalidResponse
+            throw AIServiceError.invalidResponse
         }
 
         log("✅ Successfully extracted response text (\(text.count) characters)", type: .info)
         return text
     }
 
+    func makeStreamingRequest(request: TraiAIRequest, onChunk: @escaping (String) -> Void) async throws {
+        try await makeStreamingRequest(body: AIBackendPayloadBuilder.requestBody(from: request), onChunk: onChunk)
+    }
+
     func makeStreamingRequest(body: [String: Any], onChunk: @escaping (String) -> Void) async throws {
         let url = try serviceURL(action: "streamGenerateContent", streaming: true)
 
-        log("🌐 Making streaming request to Gemini API...", type: .info)
+        log("🌐 Making streaming request to Trai AI backend...", type: .info)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -290,12 +313,21 @@ final class GeminiService {
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw GeminiError.invalidResponse
+            throw AIServiceError.invalidResponse
         }
 
         guard httpResponse.statusCode == 200 else {
-            lastError = "API Error: \(httpResponse.statusCode)"
-            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: "Streaming request failed")
+            var data = Data()
+            for try await byte in bytes {
+                data.append(byte)
+            }
+            let userError = parseAIProxyError(
+                statusCode: httpResponse.statusCode,
+                data: data,
+                fallbackMessage: "Streaming request failed"
+            )
+            lastError = userError.localizedDescription
+            throw userError
         }
 
         // Parse SSE stream
@@ -329,5 +361,38 @@ final class GeminiService {
         }
 
         log("✅ Streaming complete (\(buffer.count) characters)", type: .info)
+    }
+
+    func parseAIProxyError(
+        statusCode: Int,
+        data: Data,
+        fallbackMessage: String? = nil
+    ) -> AIServiceError {
+        let payload = try? JSONDecoder().decode(AIProxyErrorPayload.self, from: data)
+        let rawMessage = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = payload?.message
+            ?? rawMessage.flatMap { $0.isEmpty ? nil : $0 }
+            ?? fallbackMessage
+            ?? "Unknown backend error."
+        let errorCode = payload?.error?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        if statusCode == 401 {
+            return .accessDenied(message)
+        }
+
+        if let errorCode, errorCode.hasPrefix("quota_exhausted") {
+            return .quotaExceeded(message)
+        }
+
+        if let errorCode, errorCode.hasPrefix("ai_rate_limited") {
+            return .accessDenied(message)
+        }
+
+        if statusCode == 403 {
+            return .accessDenied(message)
+        }
+
+        return .apiError(statusCode: statusCode, message: message)
     }
 }

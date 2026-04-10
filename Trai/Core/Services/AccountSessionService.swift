@@ -284,6 +284,28 @@ final class AccountSessionService {
         persist()
     }
 
+    #if DEBUG
+    func setDebugAuthenticatedSession(
+        userID: String = "ui-test-user",
+        displayName: String = "UI Test User"
+    ) {
+        sessionSnapshot = BackendSessionSnapshot(
+            userID: userID,
+            identityProvider: .anonymous,
+            email: nil,
+            displayName: displayName,
+            accessToken: "ui-test-access-token",
+            refreshToken: "ui-test-refresh-token",
+            expiresAt: Date().addingTimeInterval(24 * 60 * 60),
+            lastAuthenticatedAt: Date()
+        )
+        authState = .authenticated
+        lastErrorMessage = nil
+        clearPendingAppleNonce()
+        persist()
+    }
+    #endif
+
     func signOut() {
         invalidatePendingSessionOperations()
         sessionSnapshot = nil
@@ -342,7 +364,13 @@ final class AccountSessionService {
     }
 
     private func applyAuthenticatedBootstrap(_ bootstrap: BackendBootstrapResponse) {
-        sessionSnapshot = bootstrap.session
+        var resolvedSession = bootstrap.session
+        if resolvedSession.refreshToken == nil,
+           let existingSession = sessionSnapshot,
+           existingSession.userID == resolvedSession.userID {
+            resolvedSession.refreshToken = existingSession.refreshToken
+        }
+        sessionSnapshot = resolvedSession
         billingService.applyRemotePayload(bootstrap.billing)
     }
 

@@ -162,9 +162,9 @@ struct ProUpsellView: View {
         }
         .sheet(item: $presentedAccountSetupContext) { context in
             AccountSetupView(context: context)
+                .traiSheetBranding()
         }
-        .tint(TraiColors.brandAccent)
-        .accentColor(TraiColors.brandAccent)
+        .traiSheetBranding()
     }
 
     private func handlePurchase() {

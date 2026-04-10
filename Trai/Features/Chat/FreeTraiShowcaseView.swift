@@ -110,6 +110,7 @@ struct FreeTraiShowcaseView: View {
         }
         .sheet(item: $presentedAccountSetupContext) { context in
             AccountSetupView(context: context)
+                .traiSheetBranding()
         }
         .task {
             guard features.count > 1 else { return }

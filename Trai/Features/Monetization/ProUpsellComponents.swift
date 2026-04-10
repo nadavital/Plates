@@ -88,13 +88,11 @@ private struct ProUpsellPresenterModifier: ViewModifier {
             }
             .sheet(item: sheetRequestBinding) { request in
                 ProUpsellView(source: request.source)
-                    .tint(TraiColors.brandAccent)
-                    .accentColor(TraiColors.brandAccent)
+                    .traiSheetBranding()
             }
             .fullScreenCover(item: fullScreenRequestBinding) { request in
                 ProUpsellView(source: request.source)
-                    .tint(TraiColors.brandAccent)
-                    .accentColor(TraiColors.brandAccent)
+                    .traiSheetBranding()
             }
     }
 

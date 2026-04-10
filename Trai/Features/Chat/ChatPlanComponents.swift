@@ -341,6 +341,7 @@ struct PlanUpdateDetailSheet: View {
                 }
             }
         }
+        .traiSheetBranding()
     }
 }
 

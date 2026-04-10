@@ -137,6 +137,7 @@ struct FoodCameraViewfinder: View {
                         .foregroundStyle(.white)
                         .frame(width: 60, height: 60)
                     }
+                    .accessibilityIdentifier("foodCameraManualButton")
                 }
                 .padding(.top, 20)
                 .padding(.bottom, 40)
