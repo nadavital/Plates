@@ -6,6 +6,8 @@ Trai/Core/Services/Secrets.swift
 *.xcuserstate
 xcuserdata/
 DerivedData/
+.derived-data/
+.derived-data-*/
 .deriveddata/
 .deriveddata-*/
 *.xcresult

@@ -202,7 +202,8 @@ struct PlanChatView: View {
         activityLevel: .moderate,
         activityNotes: "",
         goal: .loseWeight,
-        additionalNotes: ""
+        additionalNotes: "",
+        enabledMacros: MacroType.defaultEnabled
     )
 
     PlanChatView(

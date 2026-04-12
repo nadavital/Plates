@@ -151,7 +151,7 @@ extension ProUpsellSource {
         case .foodAnalysis:
             "Unlock AI food logging"
         case .nutritionPlan:
-            "Unlock AI plan coaching"
+            "Unlock Trai plan coaching"
         case .workoutPlan:
             "Unlock workout coaching"
         case .exerciseAnalysis:
@@ -168,7 +168,7 @@ extension ProUpsellSource {
         case .foodAnalysis:
             "Snap meals and get fast calorie and macro estimates when you want the quickest path to logging."
         case .nutritionPlan:
-            "Review and refine your nutrition plan with coaching that adapts to your goals and routine."
+            "Have Trai build and refine your nutrition plan around your goals, routine, and progress."
         case .workoutPlan:
             "Build and refine workout plans around your schedule, goals, and available equipment."
         case .exerciseAnalysis:

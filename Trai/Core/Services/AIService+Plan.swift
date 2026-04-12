@@ -48,8 +48,9 @@ extension AIService {
                 decodeFailureLabel: "nutrition plan"
             )
             completeAIRequest(requestTicket)
-            log("✅ Successfully parsed nutrition plan - Calories: \(plan.dailyTargets.calories)", type: .info)
-            return plan
+            let sanitizedPlan = plan.sanitized(for: request)
+            log("✅ Successfully parsed nutrition plan - Calories: \(sanitizedPlan.dailyTargets.calories)", type: .info)
+            return sanitizedPlan
         } catch AIServiceError.parsingError {
             cancelAIRequest(requestTicket)
             log("Falling back to default nutrition plan after parse failure", type: .error)

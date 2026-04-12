@@ -90,9 +90,10 @@ struct WelcomeStepView: View {
 
     private var heroSection: some View {
         VStack(spacing: 14) {
-            TraiLensView(size: 64, state: .idle, palette: .energy)
-            .opacity(heroVisible ? 1 : 0)
-            .scaleEffect(heroVisible ? 1 : 0.9)
+            // The welcome slide uses the lens as a brand mark, so keep it static.
+            TraiLensIcon(size: 64, palette: .energy)
+                .opacity(heroVisible ? 1 : 0)
+                .scaleEffect(heroVisible ? 1 : 0.9)
 
             VStack(spacing: 6) {
                 Text("Welcome to")
@@ -122,24 +123,24 @@ struct WelcomeStepView: View {
             FeatureRow(
                 icon: "sparkles",
                 color: TraiColors.flame,
-                title: "AI-Powered Plans",
-                description: "Get personalized nutrition tailored to your body"
+                title: "Personal Plan, Built Fast",
+                description: "Answer a few questions and Trai builds targets that match your body and goal."
             )
             .opacity(feature1Visible ? 1 : 0)
 
             FeatureRow(
                 icon: "camera.fill",
                 color: TraiColors.blaze,
-                title: "Snap & Track",
-                description: "Just photograph your meals to log them"
+                title: "Log Meals in Seconds",
+                description: "Snap your food, save the meal, and keep your streak moving without manual entry."
             )
             .opacity(feature2Visible ? 1 : 0)
 
             FeatureRow(
                 icon: "chart.line.uptrend.xyaxis",
                 color: .accentColor,
-                title: "Smart Insights",
-                description: "Track progress with intelligent analytics"
+                title: "Coaching That Adapts",
+                description: "See clear progress trends and adjust your plan as your routine changes."
             )
             .opacity(feature3Visible ? 1 : 0)
         }
@@ -296,7 +297,8 @@ struct FeatureRow: View {
                 Text(description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()

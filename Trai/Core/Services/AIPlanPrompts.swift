@@ -13,7 +13,6 @@ extension AIPromptBuilder {
 
     static func buildPlanGenerationPrompt(
         request: PlanGenerationRequest,
-        enabledMacros: Set<MacroType>? = nil,
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
         var prompt = """
@@ -47,14 +46,11 @@ extension AIPromptBuilder {
         }
 
         // Add macro tracking preferences
-        if let macros = enabledMacros {
-            let macroNames = macros.map { $0.displayName }.sorted().joined(separator: ", ")
-            prompt += "\n- Tracking Macros: \(macroNames.isEmpty ? "Calories only" : macroNames)"
+        let macroNames = request.enabledMacros.map { $0.displayName }.sorted().joined(separator: ", ")
+        prompt += "\n- Tracking Macros: \(macroNames.isEmpty ? "Calories only" : macroNames)"
 
-            // Note if user is tracking sugar
-            if macros.contains(.sugar) {
-                prompt += "\n  (User wants to monitor sugar intake)"
-            }
+        if request.enabledMacros.contains(.sugar) {
+            prompt += "\n  (User wants to monitor sugar intake)"
         }
 
         prompt += """
@@ -64,9 +60,10 @@ extension AIPromptBuilder {
         - BMR (Mifflin-St Jeor): \(Int(request.bmr)) calories
         - TDEE: \(Int(request.tdee)) calories
         - Suggested starting calories: \(request.suggestedCalories) calories
+        - Safe starting calorie range: \(request.calorieTargetRange.lowerBound)-\(request.calorieTargetRange.upperBound) calories
 
         INSTRUCTIONS:
-        Create a personalized nutrition plan. You may adjust the suggested calories if you have good reason based on the user's specific situation.
+        Create a personalized nutrition plan. You may adjust the suggested calories if you have good reason based on the user's specific situation, but keep the calorie target inside the safe starting range unless there is an exceptionally strong reason.
 
         Include progress insights with realistic estimates:
         - estimatedWeeklyChange: Expected weekly weight change (e.g., "-0.5 kg" for deficit, "+0.2 kg" for surplus, "Maintain" for maintenance)

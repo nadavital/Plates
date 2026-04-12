@@ -116,6 +116,41 @@ struct PlanGenerationRequest {
     let activityNotes: String
     let goal: UserProfile.GoalType
     let additionalNotes: String
+    let enabledMacros: Set<MacroType>
+
+    private func clampedCalories(_ value: Int) -> Int {
+        let range = calorieTargetRange
+        return min(max(value, range.lowerBound), range.upperBound)
+    }
+
+    var calorieTargetRange: ClosedRange<Int> {
+        let maintenance = Int(tdee.rounded())
+        let lowerBound: Int
+        let upperBound: Int
+
+        switch goal {
+        case .loseWeight:
+            lowerBound = max(1_200, maintenance - 900)
+            upperBound = max(lowerBound, maintenance - 250)
+        case .loseFat:
+            lowerBound = max(1_300, maintenance - 700)
+            upperBound = max(lowerBound, maintenance - 150)
+        case .buildMuscle:
+            lowerBound = max(1_400, maintenance)
+            upperBound = max(lowerBound, max(maintenance + 350, Int((tdee * 1.12).rounded())))
+        case .recomposition:
+            lowerBound = max(1_350, maintenance - 200)
+            upperBound = max(lowerBound, maintenance + 150)
+        case .maintenance, .health:
+            lowerBound = max(1_400, maintenance - 150)
+            upperBound = max(lowerBound, maintenance + 150)
+        case .performance:
+            lowerBound = max(1_500, maintenance)
+            upperBound = max(lowerBound, max(maintenance + 300, Int((tdee * 1.10).rounded())))
+        }
+
+        return lowerBound...upperBound
+    }
 
     /// Calculate BMR using Mifflin-St Jeor equation
     var bmr: Double {
@@ -141,19 +176,19 @@ struct PlanGenerationRequest {
         let base = tdee
         switch goal {
         case .loseWeight:
-            return Int(base - 500) // ~1 lb/week loss
+            return clampedCalories(Int(base - 500)) // ~1 lb/week loss
         case .loseFat:
-            return Int(base - 400) // Slower for muscle preservation
+            return clampedCalories(Int(base - 400)) // Slower for muscle preservation
         case .buildMuscle:
-            return Int(base + 300) // Lean bulk
+            return clampedCalories(Int(base + 300)) // Lean bulk
         case .recomposition:
-            return Int(base) // Maintenance with recomp
+            return clampedCalories(Int(base)) // Maintenance with recomp
         case .maintenance:
-            return Int(base)
+            return clampedCalories(Int(base))
         case .performance:
-            return Int(base + 200) // Slight surplus for performance
+            return clampedCalories(Int(base + 200)) // Slight surplus for performance
         case .health:
-            return Int(base)
+            return clampedCalories(Int(base))
         }
     }
 }
@@ -196,6 +231,38 @@ extension NutritionPlan {
             weeklyAdjustments: nil,
             warnings: generateWarnings(for: request),
             progressInsights: generateProgressInsights(for: request, calories: calories)
+        )
+        .sanitized(for: request)
+    }
+
+    func sanitized(for request: PlanGenerationRequest) -> NutritionPlan {
+        let clampedCalories = min(
+            max(dailyTargets.calories, request.calorieTargetRange.lowerBound),
+            request.calorieTargetRange.upperBound
+        )
+
+        guard clampedCalories != dailyTargets.calories else {
+            return self
+        }
+
+        let normalizedTargets = DailyTargets(
+            calories: clampedCalories,
+            protein: Int((Double(clampedCalories) * Double(macroSplit.proteinPercent) / 100.0 / 4.0).rounded()),
+            carbs: Int((Double(clampedCalories) * Double(macroSplit.carbsPercent) / 100.0 / 4.0).rounded()),
+            fat: Int((Double(clampedCalories) * Double(macroSplit.fatPercent) / 100.0 / 9.0).rounded()),
+            fiber: dailyTargets.fiber,
+            sugar: dailyTargets.sugar
+        )
+
+        return NutritionPlan(
+            dailyTargets: normalizedTargets,
+            rationale: rationale,
+            macroSplit: macroSplit,
+            nutritionGuidelines: nutritionGuidelines,
+            mealTimingSuggestion: mealTimingSuggestion,
+            weeklyAdjustments: weeklyAdjustments,
+            warnings: warnings,
+            progressInsights: Self.generateProgressInsights(for: request, calories: clampedCalories)
         )
     }
 

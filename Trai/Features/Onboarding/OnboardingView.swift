@@ -52,6 +52,8 @@ struct OnboardingView: View {
     @State var adjustedProtein = ""
     @State var adjustedCarbs = ""
     @State var adjustedFat = ""
+    @State var lastGeneratedPlanInputSignature: String?
+    @State var showingPlanGenerationChoice = false
 
     // Step 7: Workout Plan (optional)
     @State var generatedWorkoutPlan: WorkoutPlan?
@@ -115,6 +117,23 @@ struct OnboardingView: View {
             }
         }
         .animation(.smooth(duration: 0.4), value: showingWorkoutSetup)
+        .onChange(of: currentPlanInputSignature, initial: false) { oldValue, newValue in
+            handlePlanInputChange(from: oldValue, to: newValue)
+        }
+        .onChange(of: monetizationService?.canAccessAIFeatures ?? false, initial: false) { _, hasAccess in
+            guard hasAccess, showingPlanGenerationChoice, currentStep == 5 else { return }
+            showingPlanGenerationChoice = false
+            advanceFromSummaryToPlanReview()
+        }
+        .sheet(isPresented: $showingPlanGenerationChoice) {
+            PlanGenerationChoiceSheet(
+                onContinueStandard: {
+                    showingPlanGenerationChoice = false
+                    advanceFromSummaryToPlanReview()
+                }
+            )
+            .traiSheetBranding()
+        }
         .traiBackground()
     }
 
@@ -284,7 +303,7 @@ struct OnboardingView: View {
     private var primaryButtonText: String {
         switch currentStep {
         case 0: return "Let's Go"
-        case 5: return "Generate My Plan"
+        case 5: return (monetizationService?.canAccessAIFeatures ?? true) ? "Generate My Plan" : "Choose Plan Type"
         case 6: return "Continue"
         case 7: return "Start Your Journey"
         default: return "Continue"
@@ -318,6 +337,7 @@ struct OnboardingView: View {
 
     private var canCompleteNutritionPlan: Bool {
         guard generatedPlan != nil && !isGeneratingPlan else { return false }
+        guard lastGeneratedPlanInputSignature == currentPlanInputSignature else { return false }
         guard let calories = Int(adjustedCalories), calories > 0 else { return false }
         return true
     }
@@ -325,6 +345,16 @@ struct OnboardingView: View {
     // MARK: - Navigation
 
     private func advanceToNextStep() {
+        if currentStep == 5 {
+            if monetizationService?.canAccessAIFeatures ?? true {
+                advanceFromSummaryToPlanReview()
+            } else {
+                HapticManager.lightTap()
+                showingPlanGenerationChoice = true
+            }
+            return
+        }
+
         HapticManager.stepCompleted()
         navigationDirection = .forward
 
@@ -333,7 +363,20 @@ struct OnboardingView: View {
         }
 
         // Trigger plan generation when entering the plan review step
-        if currentStep == 6 {
+        if currentStep == 6 && (generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature) {
+            generatePlan()
+        }
+    }
+
+    private func advanceFromSummaryToPlanReview() {
+        HapticManager.stepCompleted()
+        navigationDirection = .forward
+
+        withAnimation(.smooth(duration: 0.4)) {
+            currentStep = 6
+        }
+
+        if generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature {
             generatePlan()
         }
     }

@@ -6,8 +6,8 @@
 import SwiftUI
 
 struct PlanReviewStepView: View {
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
-    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     @Binding var plan: NutritionPlan?
     let planRequest: PlanGenerationRequest?
@@ -29,6 +29,8 @@ struct PlanReviewStepView: View {
     @State private var card3Visible = false
     @State private var card4Visible = false
     @State private var card5Visible = false
+    @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var showingNutritionUpsell = false
 
     private var planBinding: Binding<NutritionPlan> {
         Binding(
@@ -78,6 +80,11 @@ struct PlanReviewStepView: View {
                 triggerCelebration()
             }
         }
+        .onChange(of: isLoading, initial: false) { _, loading in
+            if loading {
+                resetCelebrationState()
+            }
+        }
         .onChange(of: plan != nil, initial: false) { _, hasPlan in
             if hasPlan && !isLoading {
                 triggerCelebration()
@@ -97,6 +104,14 @@ struct PlanReviewStepView: View {
                 )
                 .traiSheetBranding()
             }
+        }
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
+                .traiSheetBranding()
+        }
+        .fullScreenCover(isPresented: $showingNutritionUpsell) {
+            ProUpsellView(source: .nutritionPlan)
+                .traiSheetBranding()
         }
     }
 
@@ -136,6 +151,16 @@ struct PlanReviewStepView: View {
         }
     }
 
+    private func resetCelebrationState() {
+        headerVisible = false
+        card1Visible = false
+        card2Visible = false
+        card3Visible = false
+        card4Visible = false
+        card5Visible = false
+        showConfetti = false
+    }
+
     // MARK: - Loading Section
 
     private var loadingSection: some View {
@@ -145,10 +170,12 @@ struct PlanReviewStepView: View {
             TraiLensView(size: 72, state: .thinking, palette: .energy)
 
             VStack(spacing: 10) {
-                Text("Crafting Your Plan")
+                Text((monetizationService?.canAccessAIFeatures ?? true) ? "Building Your Plan" : "Setting Up Your Plan")
                     .font(.traiBold(26))
 
-                Text("Trai is analyzing your profile and\ncreating a personalized nutrition strategy")
+                Text((monetizationService?.canAccessAIFeatures ?? true)
+                     ? "Trai is reviewing your answers and building a personalized nutrition strategy."
+                     : "Trai is turning your answers into a personalized nutrition starting point.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -156,9 +183,9 @@ struct PlanReviewStepView: View {
             }
 
             VStack(alignment: .leading, spacing: 14) {
-                LoadingStep(text: "Calculating metabolism", stepIndex: 0)
-                LoadingStep(text: "Optimizing macros", stepIndex: 1)
-                LoadingStep(text: "Personalizing recommendations", stepIndex: 2)
+                LoadingStep(text: "Reviewing your profile", stepIndex: 0)
+                LoadingStep(text: "Calculating daily targets", stepIndex: 1)
+                LoadingStep(text: "Preparing your first plan", stepIndex: 2)
             }
             .padding(.vertical, 18)
             .padding(.horizontal, 20)
@@ -250,14 +277,17 @@ struct PlanReviewStepView: View {
                 HapticManager.lightTap()
                 if monetizationService?.canAccessAIFeatures ?? true {
                     showChat = true
+                } else if accountSessionService?.isAuthenticated != true {
+                    presentedAccountSetupContext = .billing
                 } else {
-                    proUpsellCoordinator?.present(source: .nutritionPlan)
+                    showingNutritionUpsell = true
                 }
             } label: {
                 HStack(spacing: 8) {
-                    TraiLensIcon(size: 16, palette: .energy)
+                    Image(systemName: (monetizationService?.canAccessAIFeatures ?? true) ? "bubble.left.and.sparkles.fill" : "sparkles")
+                        .font(.subheadline.weight(.semibold))
 
-                    Text((monetizationService?.canAccessAIFeatures ?? true) ? "Ask About Your Plan" : "Unlock AI Plan Coaching")
+                    Text((monetizationService?.canAccessAIFeatures ?? true) ? "Ask Trai About Your Plan" : "Unlock Trai Plan Coaching")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
@@ -339,7 +369,8 @@ struct PlanReviewStepView: View {
         activityLevel: .moderate,
         activityNotes: "",
         goal: .buildMuscle,
-        additionalNotes: ""
+        additionalNotes: "",
+        enabledMacros: MacroType.defaultEnabled
     )
 
     PlanReviewStepView(

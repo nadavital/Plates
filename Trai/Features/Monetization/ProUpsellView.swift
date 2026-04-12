@@ -192,7 +192,7 @@ struct ProUpsellView: View {
     }
 }
 
-private struct ProUpsellHero: View {
+struct ProUpsellHero: View {
     var body: some View {
         HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
@@ -218,7 +218,7 @@ private struct ProUpsellHero: View {
     }
 }
 
-private struct ProUpsellBenefitList: View {
+struct ProUpsellBenefitList: View {
     let benefits: [ProUpsellBenefit]
 
     var body: some View {
@@ -231,7 +231,7 @@ private struct ProUpsellBenefitList: View {
     }
 }
 
-private struct ProUpsellBenefitRow: View {
+struct ProUpsellBenefitRow: View {
     let benefit: ProUpsellBenefit
 
     var body: some View {
@@ -260,7 +260,7 @@ private struct ProUpsellBenefitRow: View {
     }
 }
 
-private struct ProUpsellPurchaseCard: View {
+struct ProUpsellPurchaseCard: View {
     let product: SubscriptionProductDefinition
     let primaryButtonTitle: String
     let isPurchaseDisabled: Bool
