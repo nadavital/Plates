@@ -11,14 +11,24 @@ import SwiftUI
 
 struct MacroRingItem: View {
     let name: String
+    var compactLabel: String? = nil
     let current: Double
     let goal: Double
     let color: Color
+    var diameter: CGFloat = 60
+    var prefersCompactLabel: Bool = false
 
     @State private var animatedProgress: Double = 0
 
     private var progress: Double {
         min(current / goal, 1.0)
+    }
+
+    private var labelText: String {
+        if prefersCompactLabel, let compactLabel, !compactLabel.isEmpty {
+            return compactLabel
+        }
+        return name
     }
 
     var body: some View {
@@ -37,14 +47,16 @@ struct MacroRingItem: View {
                     .shadow(color: color.opacity(0.3), radius: 3, y: 1)
 
                 Text("\(Int(current))g")
-                    .font(.traiLabel())
+                    .font(.traiLabel(diameter < 54 ? 11 : 12))
                     .bold()
             }
-            .frame(width: 60, height: 60)
+            .frame(width: diameter, height: diameter)
 
-            Text(name)
-                .font(.caption)
+            Text(labelText)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(prefersCompactLabel ? 0.9 : 0.7)
         }
         .onAppear {
             withAnimation(TraiAnimation.bouncy) {

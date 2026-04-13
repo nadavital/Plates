@@ -29,6 +29,7 @@ struct ChatView: View {
     private static let weightFetchLimit = 48
     private static let behaviorFetchLimit = 48
     private static let activeMemoriesFetchLimit = 48
+    private static let activeWorkoutGoalsFetchLimit = 24
     private static let activeSignalsFetchLimit = 48
     private static let suggestionUsageFetchLimit = 64
     private static let initialSessionPreviewMessageLimit = 20
@@ -58,6 +59,7 @@ struct ChatView: View {
     var recentWorkouts: [WorkoutSession]
     @Query(sort: \LiveWorkout.startedAt, order: .reverse)
     var liveWorkouts: [LiveWorkout]
+    @Query var activeWorkoutGoals: [WorkoutGoal]
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
     var weightEntries: [WeightEntry]
     @Query var activeMemories: [CoachMemory]
@@ -89,6 +91,8 @@ struct ChatView: View {
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest: Bool = false
+    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) var pendingChatPrompt: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) var pendingChatLaunchLabel: String = ""
     @AppStorage(TraiCoachTone.storageKey) var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
@@ -194,6 +198,13 @@ struct ChatView: View {
         )
         activeMemoriesDescriptor.fetchLimit = Self.activeMemoriesFetchLimit
         _activeMemories = Query(activeMemoriesDescriptor)
+
+        var activeWorkoutGoalsDescriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { $0.statusRaw == "active" },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        activeWorkoutGoalsDescriptor.fetchLimit = Self.activeWorkoutGoalsFetchLimit
+        _activeWorkoutGoals = Query(activeWorkoutGoalsDescriptor)
 
         var activeSignalsDescriptor = FetchDescriptor<CoachSignal>(
             predicate: #Predicate<CoachSignal> {
@@ -315,6 +326,7 @@ struct ChatView: View {
     private var hasPendingStartupActions: Bool {
         pendingPlanReviewRequest
             || pendingWorkoutPlanReviewRequest
+            || !pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var isChatTabActive: Bool {
@@ -897,7 +909,7 @@ struct ChatView: View {
                 let hadPendingStartupActions = hasPendingStartupActions
                 suppressAutomaticMessageCacheRebuild = true
                 checkSessionTimeout()
-                checkForPendingPlanReview()
+                checkForPendingStartupActions()
                 if !hadPendingStartupActions {
                     scheduleDeferredPlanRecommendationIfNeeded()
                 }

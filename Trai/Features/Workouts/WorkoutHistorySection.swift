@@ -12,6 +12,7 @@ import SwiftUI
 struct WorkoutHistorySection: View {
     let workoutsByDate: [(date: Date, workouts: [WorkoutSession])]
     let liveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])]
+    let activeGoals: [WorkoutGoal]
     let onWorkoutTap: (WorkoutSession) -> Void
     let onLiveWorkoutTap: (LiveWorkout) -> Void
     let onDelete: (WorkoutSession) -> Void
@@ -103,6 +104,7 @@ struct WorkoutHistorySection: View {
                             date: date,
                             sessions: sessions(for: date),
                             liveWorkouts: liveWorkouts(for: date),
+                            activeGoals: activeGoals,
                             onSessionTap: onWorkoutTap,
                             onLiveWorkoutTap: onLiveWorkoutTap
                         )
@@ -115,6 +117,7 @@ struct WorkoutHistorySection: View {
             AllWorkoutsSheet(
                 workoutsByDate: workoutsByDate,
                 liveWorkoutsByDate: liveWorkoutsByDate,
+                activeGoals: activeGoals,
                 onWorkoutTap: onWorkoutTap,
                 onLiveWorkoutTap: onLiveWorkoutTap,
                 onDelete: onDelete,
@@ -130,6 +133,7 @@ private struct CompactWorkoutDateGroup: View {
     let date: Date
     let sessions: [WorkoutSession]
     let liveWorkouts: [LiveWorkout]
+    let activeGoals: [WorkoutGoal]
     let onSessionTap: (WorkoutSession) -> Void
     let onLiveWorkoutTap: (LiveWorkout) -> Void
 
@@ -143,7 +147,11 @@ private struct CompactWorkoutDateGroup: View {
             VStack(spacing: 8) {
                 // Show first 2 workouts from this date
                 ForEach(liveWorkouts.prefix(2)) { workout in
-                    CompactLiveWorkoutRow(workout: workout, onTap: { onLiveWorkoutTap(workout) })
+                    CompactLiveWorkoutRow(
+                        workout: workout,
+                        activeGoals: activeGoals,
+                        onTap: { onLiveWorkoutTap(workout) }
+                    )
                 }
 
                 ForEach(sessions.prefix(max(0, 2 - liveWorkouts.count))) { workout in
@@ -158,17 +166,55 @@ private struct CompactWorkoutDateGroup: View {
 
 private struct CompactLiveWorkoutRow: View {
     let workout: LiveWorkout
+    let activeGoals: [WorkoutGoal]
     let onTap: () -> Void
 
-    private var exerciseCount: Int { workout.entries?.count ?? 0 }
+    private var entryCount: Int { workout.entries?.count ?? 0 }
+    private var strengthEntryCount: Int { workout.entries?.filter(\.isStrength).count ?? 0 }
     private var totalSets: Int { workout.entries?.reduce(0) { $0 + $1.sets.count } ?? 0 }
+    private var completedActivityCount: Int {
+        workout.entries?.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count ?? 0
+    }
     private var durationMinutes: Int { Int(workout.duration / 60) }
+    private var matchedGoalCount: Int { activeGoals.filter { $0.matches(workout: workout) }.count }
+
+    private var focusSummary: String? {
+        let summary = workout.displayFocusSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !summary.isEmpty, summary.caseInsensitiveCompare(workout.name) != .orderedSame else { return nil }
+        return summary
+    }
+
+    private var summarySegments: [String] {
+        var segments: [String] = []
+
+        if workout.type.prefersStructuredEntries || strengthEntryCount > 0 {
+            if entryCount > 0 {
+                segments.append("\(entryCount) \(entryCount == 1 ? "exercise" : "exercises")")
+            }
+            if totalSets > 0 {
+                segments.append("\(totalSets) \(totalSets == 1 ? "set" : "sets")")
+            }
+        } else {
+            if entryCount > 0 {
+                segments.append("\(entryCount) \(entryCount == 1 ? "activity" : "activities")")
+            }
+            if completedActivityCount > 0 {
+                segments.append("\(completedActivityCount) done")
+            }
+        }
+
+        if durationMinutes > 0 {
+            segments.append("\(durationMinutes) min")
+        }
+
+        return segments
+    }
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 // Icon with colored background
-                Image(systemName: workout.type == .cardio ? "figure.run" : "dumbbell.fill")
+                Image(systemName: workout.type.iconName)
                     .font(.body)
                     .foregroundStyle(.accent)
                     .frame(width: 32, height: 32)
@@ -180,19 +226,25 @@ private struct CompactLiveWorkoutRow: View {
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
+                    if let focusSummary {
+                        Text(focusSummary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    WorkoutHistoryInsightBadges(
+                        matchedGoalCount: matchedGoalCount,
+                        hasSignalNote: workout.hasHistorySignalNote
+                    )
+
                     HStack(spacing: 6) {
-                        if exerciseCount > 0 {
-                            Text("\(exerciseCount) exercises")
-                        }
-                        if totalSets > 0 {
-                            Text("•")
-                                .foregroundStyle(.tertiary)
-                            Text("\(totalSets) sets")
-                        }
-                        if durationMinutes > 0 {
-                            Text("•")
-                                .foregroundStyle(.tertiary)
-                            Text("\(durationMinutes) min")
+                        ForEach(Array(summarySegments.enumerated()), id: \.offset) { index, segment in
+                            if index > 0 {
+                                Text("•")
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Text(segment)
                         }
                     }
                     .font(.caption2)
@@ -220,11 +272,34 @@ private struct CompactWorkoutSessionRow: View {
     let workout: WorkoutSession
     let onTap: () -> Void
 
+    private var detailSegments: [String] {
+        var segments: [String] = []
+
+        if workout.isStrengthTraining {
+            segments.append("\(workout.sets)×\(workout.reps)")
+        } else {
+            segments.append(workout.displayTypeName)
+
+            if let duration = workout.formattedDuration {
+                segments.append(duration)
+            }
+            if let distance = workout.formattedDistance {
+                segments.append(distance)
+            }
+        }
+
+        if let calories = workout.caloriesBurned {
+            segments.append("\(calories) kcal")
+        }
+
+        return segments
+    }
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 // Icon with colored background
-                Image(systemName: workout.isStrengthTraining ? "dumbbell.fill" : "figure.run")
+                Image(systemName: workout.iconName)
                     .font(.body)
                     .foregroundStyle(workout.sourceIsHealthKit ? .red : .accent)
                     .frame(width: 32, height: 32)
@@ -236,17 +311,19 @@ private struct CompactWorkoutSessionRow: View {
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
-                    HStack(spacing: 6) {
-                        if workout.isStrengthTraining {
-                            Text("\(workout.sets)×\(workout.reps)")
-                        } else if let duration = workout.formattedDuration {
-                            Text(duration)
-                        }
+                    WorkoutHistoryInsightBadges(
+                        matchedGoalCount: 0,
+                        hasSignalNote: workout.hasSignalNote
+                    )
 
-                        if let calories = workout.caloriesBurned {
-                            Text("•")
-                                .foregroundStyle(.tertiary)
-                            Text("\(calories) kcal")
+                    HStack(spacing: 6) {
+                        ForEach(Array(detailSegments.enumerated()), id: \.offset) { index, segment in
+                            if index > 0 {
+                                Text("•")
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Text(segment)
+                                .foregroundStyle(segment.hasSuffix("kcal") ? .red : .secondary)
                         }
 
                         if workout.sourceIsHealthKit {

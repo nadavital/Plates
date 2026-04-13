@@ -94,6 +94,9 @@ extension AIPromptBuilder {
         5. Include a progression strategy appropriate for their experience level
         6. Add practical guidelines for warm-up, rest periods, and recovery
         7. Address any specific goals, weak points, or injuries mentioned
+        8. For EVERY workout template, set:
+           - sessionType: one of strength, cardio, hiit, climbing, yoga, pilates, flexibility, mobility, mixed, recovery, custom
+           - focusAreas: short labels describing the session focus (e.g. ["Push", "Chest"], ["Yoga Flow", "Recovery"], ["Climbing", "Technique"])
 
         EXERCISE SELECTION RULES:
         - For full gym: Use barbells, dumbbells, cables, and machines
@@ -154,6 +157,14 @@ extension AIPromptBuilder {
                         "properties": [
                             "id": ["type": "string"],
                             "name": ["type": "string"],
+                            "sessionType": [
+                                "type": "string",
+                                "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
+                            ],
+                            "focusAreas": [
+                                "type": "array",
+                                "items": ["type": "string"]
+                            ],
                             "targetMuscleGroups": [
                                 "type": "array",
                                 "items": ["type": "string"]
@@ -228,8 +239,8 @@ extension AIPromptBuilder {
         Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         RESPONSE TYPES - Choose ONE:
-        1. "message" - For questions, clarifications, or asking follow-ups. Use this MOST of the time.
-        2. "proposePlan" - When you want to SUGGEST changes to the plan. The user will see a preview and can accept/reject.
+        1. "message" - For questions, clarifications, or one short follow-up when absolutely needed.
+        2. "proposePlan" - When you want to SUGGEST changes to the plan. Prefer this when the user direction is already clear.
         3. "planUpdate" - ONLY use when you are 100% certain this matches what the user wants.
 
         CURRENT USER PROFILE:
@@ -284,10 +295,9 @@ extension AIPromptBuilder {
         GUIDELINES:
         - Keep responses SHORT and chat-like. No walls of text!
         - IMPORTANT: If they ask a QUESTION about the plan (e.g., "why did you pick this split?", "what muscles does this work?"), just ANSWER the question using "message" type - don't propose changes!
-        - Only use "proposePlan" when they EXPLICITLY ask for changes (e.g., "add more leg exercises", "I want 4 days instead")
-        - Ask follow-up questions to understand what they want before making changes
-        - If they ask to change exercises, ask which ones or for what muscle group
-        - If they want more/fewer days, ask about their schedule
+        - Use "proposePlan" whenever they clearly want a change, even if they did not specify every detail
+        - Ask AT MOST one short follow-up only when missing information would materially change the plan
+        - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
         - Keep the selected coach tone consistent with the rest of the app
         """
 
@@ -300,6 +310,14 @@ extension AIPromptBuilder {
             "properties": [
                 "id": ["type": "string"],
                 "name": ["type": "string"],
+                "sessionType": [
+                    "type": "string",
+                    "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
+                ],
+                "focusAreas": [
+                    "type": "array",
+                    "items": ["type": "string"]
+                ],
                 "targetMuscleGroups": [
                     "type": "array",
                     "items": ["type": "string"]

@@ -184,16 +184,25 @@ struct MacroBreakdownCard: View {
                 if orderedEnabledMacros.isEmpty {
                     emptyStateView
                 } else {
-                    HStack(spacing: TraiSpacing.md) {
-                        ForEach(orderedEnabledMacros) { macro in
-                            MacroRingItem(
-                                name: macro.displayName,
-                                current: macroValues[macro] ?? 0,
-                                goal: Double(macroGoals[macro] ?? 100),
-                                color: macro.color
-                            )
+                    GeometryReader { geometry in
+                        let layout = macroLayout(in: geometry.size.width)
+
+                        HStack(spacing: layout.spacing) {
+                            ForEach(orderedEnabledMacros) { macro in
+                                MacroRingItem(
+                                    name: macro.displayName,
+                                    compactLabel: macro.shortName,
+                                    current: macroValues[macro] ?? 0,
+                                    goal: Double(macroGoals[macro] ?? 100),
+                                    color: macro.color,
+                                    diameter: layout.diameter,
+                                    prefersCompactLabel: layout.useCompactLabels
+                                )
+                                .frame(width: layout.itemWidth)
+                            }
                         }
                     }
+                    .frame(height: macroLayoutHeight)
                 }
             }
             .traiCard()
@@ -213,6 +222,27 @@ struct MacroBreakdownCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
+    }
+
+    private var macroLayoutHeight: CGFloat {
+        let count = orderedEnabledMacros.count
+        if count >= 5 {
+            return 90
+        }
+        if count == 4 {
+            return 94
+        }
+        return 100
+    }
+
+    private func macroLayout(in availableWidth: CGFloat) -> (itemWidth: CGFloat, diameter: CGFloat, spacing: CGFloat, useCompactLabels: Bool) {
+        let count = max(CGFloat(orderedEnabledMacros.count), 1)
+        let spacing: CGFloat = count >= 5 ? 8 : 12
+        let totalSpacing = spacing * max(count - 1, 0)
+        let itemWidth = max((availableWidth - totalSpacing) / count, 44)
+        let diameter = min(60, max(44, itemWidth - 8))
+        let useCompactLabels = itemWidth < 62
+        return (itemWidth, diameter, spacing, useCompactLabels)
     }
 }
 
@@ -309,7 +339,6 @@ private struct ActivityMetricItem: View {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
-                .shadow(color: color.opacity(0.3), radius: 3, y: 1)
 
             Text(value)
                 .font(.traiBold(17))

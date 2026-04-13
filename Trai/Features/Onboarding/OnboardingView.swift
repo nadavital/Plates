@@ -10,10 +10,13 @@ import SwiftData
 
 struct OnboardingView: View {
     @Environment(\.modelContext) var modelContext
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @Environment(MonetizationService.self) var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @State var currentStep = 0
     @State var navigationDirection: NavigationDirection = .forward
+    @State var hasRestoredDraft = false
 
     // Step 0: Welcome
     @State var userName = ""
@@ -26,7 +29,7 @@ struct OnboardingView: View {
     @State var weightValue = ""
     @State var targetWeightValue = ""
     @State var usesMetricHeight = true
-    @State var usesMetricWeight = true
+    @State var usesMetricWeight = false
 
     // Step 2: Activity Level
     @State var activityLevel: UserProfile.ActivityLevel?
@@ -39,12 +42,20 @@ struct OnboardingView: View {
     // Step 4: Macro Preferences
     @State var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
 
+    // Step 5: Account Setup
+
+    // Step 6: Apple Health
+    @State var syncFoodToHealthKit = true
+    @State var syncWeightToHealthKit = true
+    @State var isRequestingHealthAccess = false
+    @State var healthSyncError: String?
+
     enum NavigationDirection {
         case forward, backward
     }
 
-    // Step 5: Summary (review before AI)
-    // Step 6: Plan Review
+    // Step 7: Summary (review before AI)
+    // Step 8: Plan Review
     @State var generatedPlan: NutritionPlan?
     @State var isGeneratingPlan = false
     @State var planError: String?
@@ -55,13 +66,13 @@ struct OnboardingView: View {
     @State var lastGeneratedPlanInputSignature: String?
     @State var showingPlanGenerationChoice = false
 
-    // Step 7: Workout Plan (optional)
+    // Step 9: Workout Plan (optional)
     @State var generatedWorkoutPlan: WorkoutPlan?
     @State var showingWorkoutSetup = false
 
     @State var aiService = AIService()
 
-    let totalSteps = 8
+    let totalSteps = 10
 
     var body: some View {
         ZStack {
@@ -117,11 +128,17 @@ struct OnboardingView: View {
             }
         }
         .animation(.smooth(duration: 0.4), value: showingWorkoutSetup)
+        .onAppear {
+            restoreDraftIfNeeded()
+        }
+        .onChange(of: onboardingDraftSnapshot, initial: false) { _, _ in
+            persistOnboardingDraft()
+        }
         .onChange(of: currentPlanInputSignature, initial: false) { oldValue, newValue in
             handlePlanInputChange(from: oldValue, to: newValue)
         }
         .onChange(of: monetizationService?.canAccessAIFeatures ?? false, initial: false) { _, hasAccess in
-            guard hasAccess, showingPlanGenerationChoice, currentStep == 5 else { return }
+            guard hasAccess, showingPlanGenerationChoice, currentStep == 7 else { return }
             showingPlanGenerationChoice = false
             advanceFromSummaryToPlanReview()
         }
@@ -195,6 +212,16 @@ struct OnboardingView: View {
             case 4:
                 MacroPreferencesStepView(enabledMacros: $enabledMacros)
             case 5:
+                AccountOnboardingStepView()
+            case 6:
+                HealthSyncStepView(
+                    syncFoodToHealthKit: $syncFoodToHealthKit,
+                    syncWeightToHealthKit: $syncWeightToHealthKit,
+                    isRequestingHealthAccess: $isRequestingHealthAccess,
+                    healthSyncError: $healthSyncError,
+                    onConnect: requestHealthAuthorization
+                )
+            case 7:
                 SummaryStepView(
                     userName: userName,
                     dateOfBirth: dateOfBirth,
@@ -209,7 +236,7 @@ struct OnboardingView: View {
                     selectedGoal: selectedGoal,
                     additionalNotes: additionalGoalNotes
                 )
-            case 6:
+            case 8:
                 PlanReviewStepView(
                     plan: $generatedPlan,
                     planRequest: buildPlanRequest(),
@@ -221,7 +248,7 @@ struct OnboardingView: View {
                     adjustedFat: $adjustedFat,
                     onRetry: generatePlan
                 )
-            case 7:
+            case 9:
                 WorkoutPlanDecisionView(
                     hasWorkoutPlan: generatedWorkoutPlan != nil,
                     workoutPlan: generatedWorkoutPlan,
@@ -284,7 +311,7 @@ struct OnboardingView: View {
                 Text(primaryButtonText)
                     .fontWeight(.semibold)
 
-                if currentStep < totalSteps - 1 && currentStep != 5 {
+                if currentStep < totalSteps - 1 && currentStep != 7 {
                     Image(systemName: "arrow.right")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -303,9 +330,9 @@ struct OnboardingView: View {
     private var primaryButtonText: String {
         switch currentStep {
         case 0: return "Let's Go"
-        case 5: return (monetizationService?.canAccessAIFeatures ?? true) ? "Generate My Plan" : "Choose Plan Type"
-        case 6: return "Continue"
-        case 7: return "Start Your Journey"
+        case 7: return (monetizationService?.canAccessAIFeatures ?? true) ? "Generate My Plan" : "Choose Plan Type"
+        case 8: return "Continue"
+        case 9: return "Start Your Journey"
         default: return "Continue"
         }
     }
@@ -325,10 +352,14 @@ struct OnboardingView: View {
         case 4:
             return true // Macro preferences step (always valid)
         case 5:
-            return true // Summary step
+            return true // Account step is optional
         case 6:
-            return canCompleteNutritionPlan
+            return true // Health step is optional
         case 7:
+            return true // Summary step
+        case 8:
+            return canCompleteNutritionPlan
+        case 9:
             return true  // Workout plan is optional
         default:
             return true
@@ -345,7 +376,7 @@ struct OnboardingView: View {
     // MARK: - Navigation
 
     private func advanceToNextStep() {
-        if currentStep == 5 {
+        if currentStep == 7 {
             if monetizationService?.canAccessAIFeatures ?? true {
                 advanceFromSummaryToPlanReview()
             } else {
@@ -363,7 +394,7 @@ struct OnboardingView: View {
         }
 
         // Trigger plan generation when entering the plan review step
-        if currentStep == 6 && (generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature) {
+        if currentStep == 8 && (generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature) {
             generatePlan()
         }
     }
@@ -373,11 +404,35 @@ struct OnboardingView: View {
         navigationDirection = .forward
 
         withAnimation(.smooth(duration: 0.4)) {
-            currentStep = 6
+            currentStep = 8
         }
 
         if generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature {
             generatePlan()
+        }
+    }
+
+    private func requestHealthAuthorization() {
+        guard !isRequestingHealthAccess else { return }
+
+        healthSyncError = nil
+
+        guard let healthKitService else {
+            healthSyncError = "Apple Health is unavailable on this device."
+            return
+        }
+
+        isRequestingHealthAccess = true
+
+        Task { @MainActor in
+            defer { isRequestingHealthAccess = false }
+
+            do {
+                try await healthKitService.requestAuthorization()
+                healthSyncError = nil
+            } catch {
+                healthSyncError = healthKitService.authorizationError ?? error.localizedDescription
+            }
         }
     }
 

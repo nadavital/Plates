@@ -130,4 +130,127 @@ extension WorkoutSession {
     var isCardio: Bool {
         exercise?.category == "cardio" || durationMinutes != nil || healthKitWorkoutType != nil
     }
+
+    var displayTypeName: String {
+        if isStrengthTraining {
+            return "Strength Training"
+        }
+
+        let rawType = healthKitWorkoutType ?? exercise?.category
+        let cleaned = rawType?
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        guard !cleaned.isEmpty else {
+            return isCardio ? "Cardio" : "Workout"
+        }
+
+        return cleaned
+            .split(separator: " ")
+            .map { $0.capitalized }
+            .joined(separator: " ")
+    }
+
+    var inferredWorkoutMode: WorkoutMode {
+        if isStrengthTraining {
+            return .strength
+        }
+
+        return WorkoutMode.infer(
+            from: displayName,
+            focusAreas: [healthKitWorkoutType ?? exercise?.category ?? displayTypeName],
+            targetMuscleGroups: []
+        )
+    }
+
+    var trimmedNotes: String {
+        (notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var hasSignalNote: Bool {
+        !trimmedNotes.isEmpty
+    }
+
+    var traiReviewPrompt: String {
+        var prompt = "Can you review my \(displayName) session from \(loggedAt.formatted(date: .abbreviated, time: .shortened))?"
+
+        var details: [String] = []
+        details.append(displayTypeName.lowercased())
+
+        if let formattedDuration {
+            details.append("duration \(formattedDuration)")
+        }
+        if let formattedDistance {
+            details.append("distance \(formattedDistance)")
+        }
+        if sets > 0 {
+            details.append("\(sets) sets")
+        }
+        if reps > 0 {
+            details.append("\(reps) reps")
+        }
+        if let caloriesBurned {
+            details.append("\(caloriesBurned) kcal")
+        }
+
+        if !details.isEmpty {
+            prompt += " It was a \(details.joined(separator: ", "))."
+        }
+
+        if hasSignalNote {
+            prompt += " I added these notes: \(trimmedNotes)."
+        } else if sourceIsHealthKit {
+            prompt += " This one was tracked on my Apple Watch, so please use the workout data that was imported."
+        }
+
+        prompt += " Tell me what this says about my progress and what I should focus on next."
+        return prompt
+    }
+
+    var goalMatchingTokens: Set<String> {
+        var tokens: Set<String> = []
+        [displayName, exerciseName, healthKitWorkoutType, exercise?.category, displayTypeName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .forEach { tokens.insert($0.goalNormalizedKey) }
+        return tokens
+    }
+
+    var iconName: String {
+        let token = (healthKitWorkoutType ?? exercise?.category ?? "")
+            .lowercased()
+
+        if isStrengthTraining || token.contains("strength") || token.contains("weight") {
+            return "dumbbell.fill"
+        }
+        if token.contains("run") {
+            return "figure.run"
+        }
+        if token.contains("cycle") || token.contains("bike") {
+            return "figure.outdoor.cycle"
+        }
+        if token.contains("swim") {
+            return "figure.pool.swim"
+        }
+        if token.contains("walk") || token.contains("hike") {
+            return "figure.walk"
+        }
+        if token.contains("row") {
+            return "figure.rower"
+        }
+        if token.contains("yoga") {
+            return "figure.yoga"
+        }
+        if token.contains("pilates") || token.contains("stretch") || token.contains("flexibility") {
+            return "figure.flexibility"
+        }
+        if token.contains("climb") || token.contains("boulder") {
+            return "figure.climbing"
+        }
+        if token.contains("hiit") || token.contains("interval") || token.contains("conditioning") {
+            return "bolt.heart.fill"
+        }
+        return isCardio ? "figure.mixed.cardio" : "figure.run"
+    }
 }

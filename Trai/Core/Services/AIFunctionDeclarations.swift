@@ -21,6 +21,10 @@ enum AIFunctionDeclarations {
             getUserPlan,
             updateUserPlan,
             getRecentWorkouts,
+            getWorkoutGoals,
+            createWorkoutGoal,
+            updateWorkoutGoal,
+            updateWorkoutNotes,
             logWorkout,
             getMuscleRecoveryStatus,
             suggestWorkout,
@@ -268,6 +272,174 @@ enum AIFunctionDeclarations {
         ]
     }
 
+    static var getWorkoutGoals: [String: Any] {
+        [
+            "name": "get_workout_goals",
+            "description": "Get the user's workout goals and their current status. Use this before creating, updating, or reviewing workout goals so you can avoid duplicates and reference the right goal.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "status": [
+                        "type": "string",
+                        "description": "Optional status filter",
+                        "enum": ["active", "completed", "paused", "all"]
+                    ]
+                ],
+                "required": []
+            ]
+        ]
+    }
+
+    static var createWorkoutGoal: [String: Any] {
+        [
+            "name": "create_workout_goal",
+            "description": "Create a new workout goal directly for the user. Use this when the user clearly wants to set or save a workout goal.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "title": [
+                        "type": "string",
+                        "description": "Goal title"
+                    ],
+                    "goal_kind": [
+                        "type": "string",
+                        "enum": ["milestone", "frequency", "duration", "distance", "weight"]
+                    ],
+                    "workout_type": [
+                        "type": "string",
+                        "description": "Optional broad workout type scope",
+                        "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
+                    ],
+                    "activity_name": [
+                        "type": "string",
+                        "description": "Optional specific exercise or activity name"
+                    ],
+                    "target_value": [
+                        "type": "number",
+                        "description": "Numeric target when relevant"
+                    ],
+                    "target_unit": [
+                        "type": "string",
+                        "description": "Unit for the target value when relevant"
+                    ],
+                    "period_unit": [
+                        "type": "string",
+                        "description": "Optional cadence period for frequency goals",
+                        "enum": ["day", "week", "month"]
+                    ],
+                    "period_count": [
+                        "type": "integer",
+                        "description": "Optional number of period units, e.g. 1 week or 4 weeks"
+                    ],
+                    "target_date": [
+                        "type": "string",
+                        "description": "Optional soft target date in YYYY-MM-DD format"
+                    ],
+                    "check_in_cadence_days": [
+                        "type": "integer",
+                        "description": "Optional number of days before Trai should nudge for a check-in"
+                    ],
+                    "notes": [
+                        "type": "string",
+                        "description": "Optional notes or rationale"
+                    ]
+                ],
+                "required": ["title", "goal_kind"]
+            ]
+        ]
+    }
+
+    static var updateWorkoutGoal: [String: Any] {
+        [
+            "name": "update_workout_goal",
+            "description": "Update an existing workout goal. Use this after get_workout_goals when the user wants to change, pause, complete, reactivate, or refine a goal.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "goal_id": [
+                        "type": "string",
+                        "description": "UUID of the workout goal to update"
+                    ],
+                    "title": [
+                        "type": "string",
+                        "description": "Updated title"
+                    ],
+                    "goal_kind": [
+                        "type": "string",
+                        "enum": ["milestone", "frequency", "duration", "distance", "weight"]
+                    ],
+                    "status": [
+                        "type": "string",
+                        "enum": ["active", "completed", "paused"]
+                    ],
+                    "workout_type": [
+                        "type": "string",
+                        "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom", ""]
+                    ],
+                    "activity_name": [
+                        "type": "string",
+                        "description": "Updated linked activity name. Pass empty string to clear it."
+                    ],
+                    "target_value": [
+                        "type": "number",
+                        "description": "Updated numeric target"
+                    ],
+                    "target_unit": [
+                        "type": "string",
+                        "description": "Updated target unit"
+                    ],
+                    "period_unit": [
+                        "type": "string",
+                        "enum": ["day", "week", "month", ""]
+                    ],
+                    "period_count": [
+                        "type": "integer",
+                        "description": "Updated period count"
+                    ],
+                    "target_date": [
+                        "type": "string",
+                        "description": "Updated soft target date in YYYY-MM-DD format. Pass empty string to clear."
+                    ],
+                    "check_in_cadence_days": [
+                        "type": "integer",
+                        "description": "Updated check-in cadence in days"
+                    ],
+                    "notes": [
+                        "type": "string",
+                        "description": "Updated notes"
+                    ]
+                ],
+                "required": ["goal_id"]
+            ]
+        ]
+    }
+
+    /// Update notes on an existing workout session
+    static var updateWorkoutNotes: [String: Any] {
+        [
+            "name": "update_workout_notes",
+            "description": "Update notes on an existing workout. Use this when the user wants to add context to a past workout, including Apple Health or watch-imported sessions. First call get_recent_workouts to identify the correct workout id, then use that id here.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "workout_id": [
+                        "type": "string",
+                        "description": "The UUID of the workout to update, returned by get_recent_workouts"
+                    ],
+                    "notes": [
+                        "type": "string",
+                        "description": "The note text to save onto the workout"
+                    ],
+                    "append": [
+                        "type": "boolean",
+                        "description": "If true, append to the existing note instead of replacing it"
+                    ]
+                ],
+                "required": ["workout_id", "notes"]
+            ]
+        ]
+    }
+
     /// Log a workout session
     static var logWorkout: [String: Any] {
         [
@@ -349,7 +521,7 @@ enum AIFunctionDeclarations {
                     "workout_type": [
                         "type": "string",
                         "description": "Preferred workout type (optional - will auto-select if not specified)",
-                        "enum": ["strength", "cardio", "mixed"]
+                        "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
                     ],
                     "target_muscle_groups": [
                         "type": "array",
@@ -386,7 +558,7 @@ enum AIFunctionDeclarations {
                     "workout_type": [
                         "type": "string",
                         "description": "Type of workout",
-                        "enum": ["strength", "cardio", "mixed"]
+                        "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
                     ],
                     "target_muscle_groups": [
                         "type": "array",

@@ -22,13 +22,18 @@ struct WorkoutSummarySheet: View {
     var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
     let onDismiss: () -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @Query private var profiles: [UserProfile]
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    @Query(sort: \LiveWorkout.startedAt, order: .reverse) private var allLiveWorkouts: [LiveWorkout]
+    @Query(sort: \WorkoutSession.loggedAt, order: .reverse) private var allWorkoutSessions: [WorkoutSession]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
     @State private var showConfetti = false
     @State private var showCelebration = false
     @State private var selectedExercise: IdentifiableExerciseName?
+    @State private var selectedGoal: WorkoutGoal?
 
     /// Whether to use metric (kg) based on user profile
     private var usesMetric: Bool {
@@ -37,6 +42,52 @@ struct WorkoutSummarySheet: View {
 
     private var volumePRMode: UserProfile.VolumePRMode {
         profiles.first?.volumePRModeValue ?? .perSet
+    }
+
+    private var sortedEntries: [LiveWorkoutEntry] {
+        (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    private var usesFlexibleSessionPresentation: Bool {
+        !workout.type.prefersStructuredEntries && workout.totalSets == 0
+    }
+
+    private var completedActivityCount: Int {
+        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+    }
+
+    private var summaryTitle: String {
+        usesFlexibleSessionPresentation ? "Session Complete!" : "Workout Complete!"
+    }
+
+    private var entriesTitle: String {
+        if usesFlexibleSessionPresentation {
+            return "Activities"
+        }
+        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+    }
+
+    private var goalInsights: [WorkoutGoalInsight] {
+        WorkoutGoalProgressResolver.insights(
+            for: workout,
+            goals: workoutGoals,
+            workouts: allLiveWorkouts,
+            sessions: goalProgressSessions,
+            exerciseHistory: allExerciseHistory,
+            useLbs: !usesMetric
+        )
+    }
+
+    private var goalProgressSessions: [WorkoutSession] {
+        let mergedHealthKitIDs = Set(
+            allLiveWorkouts
+                .filter { $0.completedAt != nil }
+                .compactMap(\.mergedHealthKitWorkoutID)
+        )
+        return allWorkoutSessions.filter { session in
+            guard let healthKitWorkoutID = session.healthKitWorkoutID else { return true }
+            return !mergedHealthKitIDs.contains(healthKitWorkoutID)
+        }
     }
 
     var body: some View {
@@ -54,10 +105,27 @@ struct WorkoutSummarySheet: View {
                             .symbolEffect(.bounce, value: showConfetti)
                     }
 
-                    Text("Workout Complete!")
+                    Text(summaryTitle)
                         .font(.title)
                         .bold()
                         .traiGradientText()
+
+                    if usesFlexibleSessionPresentation {
+                        Text(workout.displayFocusSummary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    if !goalInsights.isEmpty {
+                        WorkoutGoalProgressCard(
+                            insights: goalInsights,
+                            showsAddGoal: false,
+                            onAddGoal: {},
+                            onToggleCompletion: toggleGoalCompletion,
+                            onGoalTap: { selectedGoal = $0 }
+                        )
+                    }
 
                     // PRs achieved (if any)
                     if !achievedPRs.isEmpty {
@@ -90,29 +158,33 @@ struct WorkoutSummarySheet: View {
                         )
 
                         SummaryStatRow(
-                            label: "Exercises",
-                            value: "\(workout.entries?.count ?? 0)",
-                            icon: "dumbbell.fill"
+                            label: usesFlexibleSessionPresentation ? "Activities" : "Exercises",
+                            value: "\(sortedEntries.count)",
+                            icon: usesFlexibleSessionPresentation ? "list.bullet.rectangle" : "dumbbell.fill"
                         )
 
                         SummaryStatRow(
-                            label: "Total Sets",
-                            value: "\(workout.totalSets)",
-                            icon: "square.stack.3d.up.fill"
+                            label: usesFlexibleSessionPresentation ? "Completed" : "Total Sets",
+                            value: usesFlexibleSessionPresentation ? "\(completedActivityCount)" : "\(workout.totalSets)",
+                            icon: usesFlexibleSessionPresentation ? "checkmark.circle.fill" : "square.stack.3d.up.fill"
                         )
                     }
                     .traiCard()
 
                     // Exercises completed with full detail
-                    if let entries = workout.entries, !entries.isEmpty {
+                    if !sortedEntries.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Exercises")
+                            Text(entriesTitle)
                                 .font(.headline)
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            ForEach(entries.sorted { $0.orderIndex < $1.orderIndex }) { entry in
-                                ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
-                                    selectedExercise = IdentifiableExerciseName(id: entry.exerciseName)
+                            ForEach(sortedEntries) { entry in
+                                if entry.isStrength {
+                                    ExerciseSummaryRow(entry: entry, usesMetric: usesMetric) {
+                                        selectedExercise = IdentifiableExerciseName(id: entry.exerciseName)
+                                    }
+                                } else {
+                                    ActivitySummaryRow(entry: entry)
                                 }
                             }
                         }
@@ -139,6 +211,17 @@ struct WorkoutSummarySheet: View {
             .sheet(item: $selectedExercise) { exercise in
                 exercisePRSheet(for: exercise.name)
                     .traiSheetBranding()
+            }
+            .sheet(item: $selectedGoal) { goal in
+                WorkoutGoalDetailSheet(
+                    goal: goal,
+                    workouts: allLiveWorkouts,
+                    sessions: goalProgressSessions,
+                    exerciseHistory: allExerciseHistory,
+                    useLbs: !usesMetric,
+                    onToggleCompletion: toggleGoalCompletion
+                )
+                .traiSheetBranding()
             }
         }
         .overlay {
@@ -191,6 +274,16 @@ struct WorkoutSummarySheet: View {
             }
         }
     }
+
+    private func toggleGoalCompletion(_ goal: WorkoutGoal) {
+        if goal.status == .completed {
+            goal.markActive()
+        } else {
+            goal.markCompleted()
+        }
+        try? modelContext.save()
+        HapticManager.selectionChanged()
+    }
 }
 
 // MARK: - Workout Summary Content (for inline display)
@@ -201,13 +294,66 @@ struct WorkoutSummaryContent: View {
     var achievedPRs: [String: LiveWorkoutViewModel.PRValue] = [:]
     let onDismiss: () -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @Query private var profiles: [UserProfile]
+    @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
+    private var allExerciseHistory: [ExerciseHistory]
+    @Query(sort: \LiveWorkout.startedAt, order: .reverse) private var allLiveWorkouts: [LiveWorkout]
+    @Query(sort: \WorkoutSession.loggedAt, order: .reverse) private var allWorkoutSessions: [WorkoutSession]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
     @State private var showConfetti = false
     @State private var showCelebration = false
+    @State private var selectedGoal: WorkoutGoal?
 
     /// Whether to use metric (kg) based on user profile
     private var usesMetric: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
+    }
+
+    private var sortedEntries: [LiveWorkoutEntry] {
+        (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    private var usesFlexibleSessionPresentation: Bool {
+        !workout.type.prefersStructuredEntries && workout.totalSets == 0
+    }
+
+    private var completedActivityCount: Int {
+        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+    }
+
+    private var summaryTitle: String {
+        usesFlexibleSessionPresentation ? "Session Complete!" : "Workout Complete!"
+    }
+
+    private var entriesTitle: String {
+        if usesFlexibleSessionPresentation {
+            return "Activities"
+        }
+        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+    }
+
+    private var goalInsights: [WorkoutGoalInsight] {
+        WorkoutGoalProgressResolver.insights(
+            for: workout,
+            goals: workoutGoals,
+            workouts: allLiveWorkouts,
+            sessions: goalProgressSessions,
+            exerciseHistory: allExerciseHistory,
+            useLbs: !usesMetric
+        )
+    }
+
+    private var goalProgressSessions: [WorkoutSession] {
+        let mergedHealthKitIDs = Set(
+            allLiveWorkouts
+                .filter { $0.completedAt != nil }
+                .compactMap(\.mergedHealthKitWorkoutID)
+        )
+        return allWorkoutSessions.filter { session in
+            guard let healthKitWorkoutID = session.healthKitWorkoutID else { return true }
+            return !mergedHealthKitIDs.contains(healthKitWorkoutID)
+        }
     }
 
     var body: some View {
@@ -224,10 +370,27 @@ struct WorkoutSummaryContent: View {
                         .symbolEffect(.bounce, value: showConfetti)
                 }
 
-                Text("Workout Complete!")
+                Text(summaryTitle)
                     .font(.title)
                     .bold()
                     .traiGradientText()
+
+                if usesFlexibleSessionPresentation {
+                    Text(workout.displayFocusSummary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                if !goalInsights.isEmpty {
+                    WorkoutGoalProgressCard(
+                        insights: goalInsights,
+                        showsAddGoal: false,
+                        onAddGoal: {},
+                        onToggleCompletion: toggleGoalCompletion,
+                        onGoalTap: { selectedGoal = $0 }
+                    )
+                }
 
                 // PRs achieved (if any)
                 if !achievedPRs.isEmpty {
@@ -260,28 +423,32 @@ struct WorkoutSummaryContent: View {
                     )
 
                     SummaryStatRow(
-                        label: "Exercises",
-                        value: "\(workout.entries?.count ?? 0)",
-                        icon: "dumbbell.fill"
+                        label: usesFlexibleSessionPresentation ? "Activities" : "Exercises",
+                        value: "\(sortedEntries.count)",
+                        icon: usesFlexibleSessionPresentation ? "list.bullet.rectangle" : "dumbbell.fill"
                     )
 
                     SummaryStatRow(
-                        label: "Total Sets",
-                        value: "\(workout.totalSets)",
-                        icon: "square.stack.3d.up.fill"
+                        label: usesFlexibleSessionPresentation ? "Completed" : "Total Sets",
+                        value: usesFlexibleSessionPresentation ? "\(completedActivityCount)" : "\(workout.totalSets)",
+                        icon: usesFlexibleSessionPresentation ? "checkmark.circle.fill" : "square.stack.3d.up.fill"
                     )
                 }
                 .traiCard()
 
                 // Exercises completed with full detail
-                if let entries = workout.entries, !entries.isEmpty {
+                if !sortedEntries.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Exercises")
+                        Text(entriesTitle)
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        ForEach(entries.sorted { $0.orderIndex < $1.orderIndex }) { entry in
-                            ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
+                        ForEach(sortedEntries) { entry in
+                            if entry.isStrength {
+                                ExerciseSummaryRow(entry: entry, usesMetric: usesMetric)
+                            } else {
+                                ActivitySummaryRow(entry: entry)
+                            }
                         }
                     }
                     .traiCard()
@@ -303,6 +470,27 @@ struct WorkoutSummaryContent: View {
             try? await Task.sleep(for: .milliseconds(300))
             showCelebration = true
         }
+        .sheet(item: $selectedGoal) { goal in
+            WorkoutGoalDetailSheet(
+                goal: goal,
+                workouts: allLiveWorkouts,
+                sessions: goalProgressSessions,
+                exerciseHistory: allExerciseHistory,
+                useLbs: !usesMetric,
+                onToggleCompletion: toggleGoalCompletion
+            )
+            .traiSheetBranding()
+        }
+    }
+
+    private func toggleGoalCompletion(_ goal: WorkoutGoal) {
+        if goal.status == .completed {
+            goal.markActive()
+        } else {
+            goal.markCompleted()
+        }
+        try? modelContext.save()
+        HapticManager.selectionChanged()
     }
 }
 
@@ -498,6 +686,63 @@ struct ExerciseSummaryRow: View {
         .onTapGesture {
             onTap?()
         }
+    }
+}
+
+struct ActivitySummaryRow: View {
+    let entry: LiveWorkoutEntry
+
+    private var subtitleSegments: [String] {
+        var segments: [String] = []
+
+        if let duration = entry.formattedDuration {
+            segments.append(duration)
+        }
+
+        if let distance = entry.formattedDistance {
+            segments.append(distance)
+        }
+
+        if entry.completedAt != nil {
+            segments.append("Completed")
+        }
+
+        return segments
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: entry.activityIconName)
+                    .font(.subheadline)
+                    .foregroundStyle(entry.completedAt != nil ? .green : .secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.exerciseName)
+                        .font(.subheadline)
+                        .bold()
+
+                    if !subtitleSegments.isEmpty {
+                        Text(subtitleSegments.joined(separator: " • "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(entry.notes)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                    }
+                }
+
+                Spacer()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
     }
 }
 

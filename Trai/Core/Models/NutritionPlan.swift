@@ -70,6 +70,17 @@ struct NutritionPlan: Codable, Equatable {
         let longTermOutlook: String // e.g., "Sustainable progress toward your goal"
     }
 
+    static func isNearMaintenance(goal: UserProfile.GoalType, deficitOrSurplus: Int) -> Bool {
+        switch goal {
+        case .recomposition:
+            return abs(deficitOrSurplus) <= 150
+        case .maintenance, .health:
+            return abs(deficitOrSurplus) <= 120
+        default:
+            return false
+        }
+    }
+
     /// Placeholder plan used for binding when actual plan is nil
     static let placeholder = NutritionPlan(
         dailyTargets: DailyTargets(calories: 2000, protein: 150, carbs: 200, fat: 65, fiber: 30, sugar: 50),
@@ -348,13 +359,23 @@ extension NutritionPlan {
 
     private static func generateProgressInsights(for request: PlanGenerationRequest, calories: Int) -> ProgressInsights {
         let deficitOrSurplus = calories - Int(request.tdee)
+        let isNearMaintenance = isNearMaintenance(goal: request.goal, deficitOrSurplus: deficitOrSurplus)
 
         // Calculate weekly change (~7700 kcal = 1kg)
         let weeklyCalorieDiff = deficitOrSurplus * 7
         let weeklyKgChange = Double(weeklyCalorieDiff) / 7700.0
 
         let weeklyChangeStr: String
-        if weeklyKgChange < -0.05 {
+        if isNearMaintenance {
+            switch request.goal {
+            case .recomposition:
+                weeklyChangeStr = "Roughly weight-stable"
+            case .maintenance, .health:
+                weeklyChangeStr = "Maintain current weight"
+            default:
+                weeklyChangeStr = "Maintain current weight"
+            }
+        } else if weeklyKgChange < -0.05 {
             weeklyChangeStr = String(format: "%.1f kg", weeklyKgChange)
         } else if weeklyKgChange > 0.05 {
             weeklyChangeStr = String(format: "+%.1f kg", weeklyKgChange)
@@ -364,7 +385,7 @@ extension NutritionPlan {
 
         // Estimate time to goal
         var timeToGoal: String? = nil
-        if let targetWeight = request.targetWeightKg {
+        if let targetWeight = request.targetWeightKg, !isNearMaintenance {
             let weightDiff = request.weightKg - targetWeight
             if abs(weightDiff) > 0.5 && abs(weeklyKgChange) > 0.1 {
                 let weeksNeeded = abs(weightDiff / weeklyKgChange)

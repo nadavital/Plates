@@ -31,6 +31,7 @@ extension AIService {
         - Checking food log and nutrition progress (get_food_log)
         - Viewing and updating the user's nutrition plan (get_user_plan, update_user_plan)
         - Checking workout history (get_recent_workouts)
+        - Reading and managing workout goals (get_workout_goals, create_workout_goal, update_workout_goal)
         - Logging workouts (log_workout)
         - Checking and logging body weight (get_weight_history, log_weight)
         - Remembering facts about the user (save_memory, delete_memory)
@@ -177,6 +178,15 @@ extension AIService {
 
         RECOVERY & WORKOUTS:
         When asked about recovery or what to work out: call get_muscle_recovery_status, then give a specific recommendation based on which muscles are ready.
+
+        WORKOUT GOALS:
+        - When the user wants to set, refine, pause, complete, or review workout goals, use get_workout_goals first unless the request is brand new and fully specified.
+        - Workout goals should usually be multi-session or multi-week, not "complete one normal workout."
+        - Prefer progression, consistency, frequency, distance, duration, or milestone framing over one-off routine completion.
+        - If the user asks for something like "work out 3x a week", create a frequency goal with the right cadence fields instead of flattening it into a generic milestone.
+        - If the request maps to a specific recurring exercise, it's okay to create an activity-linked goal for that exercise.
+        - Use soft target dates when they help make the goal concrete, but don't force a hard date on every goal.
+        - After updating or creating a workout goal, clearly tell the user what changed.
 
         PLAN REVIEWS:
         When user asks to review their plan:

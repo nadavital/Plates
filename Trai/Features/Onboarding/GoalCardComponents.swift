@@ -14,8 +14,6 @@ struct GoalCard: View {
     let isSelected: Bool
     let action: () -> Void
 
-    @State private var isPressed = false
-
     var body: some View {
         Button(action: action) {
             VStack(spacing: 12) {
@@ -73,15 +71,9 @@ struct GoalCard: View {
                 radius: isSelected ? 10 : 4,
                 y: isSelected ? 5 : 2
             )
-            .scaleEffect(isPressed ? 0.96 : 1)
         }
         .buttonStyle(.plain)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-        .pressEvents {
-            withAnimation(.easeInOut(duration: 0.1)) { isPressed = true }
-        } onRelease: {
-            withAnimation(.easeInOut(duration: 0.1)) { isPressed = false }
-        }
     }
 
     private var colorForGoal: Color {
@@ -103,8 +95,6 @@ struct GoalCardWithDescription: View {
     let goal: UserProfile.GoalType
     let isSelected: Bool
     let action: () -> Void
-
-    @State private var isPressed = false
 
     var body: some View {
         Button(action: action) {
@@ -172,23 +162,17 @@ struct GoalCardWithDescription: View {
                 radius: isSelected ? 10 : 4,
                 y: isSelected ? 5 : 2
             )
-            .scaleEffect(isPressed ? 0.96 : 1)
         }
         .buttonStyle(.plain)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-        .pressEvents {
-            withAnimation(.easeInOut(duration: 0.1)) { isPressed = true }
-        } onRelease: {
-            withAnimation(.easeInOut(duration: 0.1)) { isPressed = false }
-        }
     }
 
     private var shortDescription: String {
         switch goal {
         case .loseWeight: "Reduce overall weight"
         case .loseFat: "Preserve muscle mass"
-        case .buildMuscle: "Strength & size gains"
-        case .recomposition: "Lose fat, gain muscle"
+        case .buildMuscle: "Gain size in a surplus"
+        case .recomposition: "Lean out near maintenance"
         case .maintenance: "Keep current weight"
         case .performance: "Optimize for athletics"
         case .health: "Balanced nutrition"

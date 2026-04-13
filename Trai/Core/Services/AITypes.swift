@@ -343,7 +343,10 @@ struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
 
     /// Whether this is a strength workout
     var isStrength: Bool {
-        ["strength", "weights", "lifting"].contains(workoutType.lowercased())
+        if let mode = WorkoutMode(rawValue: workoutType.lowercased()) {
+            return mode.supportsMuscleTargets
+        }
+        return ["strength", "weights", "lifting"].contains(workoutType.lowercased())
     }
 }
 

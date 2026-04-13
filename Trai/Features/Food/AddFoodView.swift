@@ -376,6 +376,8 @@ struct AddFoodView: View {
             fatGrams: result.fatGrams
         )
 
+        entry.fiberGrams = result.fiberGrams
+        entry.sugarGrams = result.sugarGrams
         entry.servingSize = result.servingSize
         entry.imageData = selectedImageData
         entry.userDescription = foodDescription
@@ -384,6 +386,7 @@ struct AddFoodView: View {
         entry.ensureDisplayMetadata()
 
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         saveMacrosToHealthKit(entry)
         dismiss()
     }
@@ -407,6 +410,7 @@ struct AddFoodView: View {
         entry.ensureDisplayMetadata()
 
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         saveMacrosToHealthKit(entry)
         dismiss()
     }

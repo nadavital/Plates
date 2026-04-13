@@ -96,7 +96,7 @@ struct PlanGenerationChoiceSheet: View {
                         .font(.traiBold(30))
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Start with a solid standard plan now, or unlock Trai Pro so Trai can build and refine it with you from day one.")
+                    Text("Start with a solid standard plan now, or unlock Trai Pro so Trai can personalize your targets, ask smart follow-ups, and keep refining your plan with you from day one.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -118,19 +118,25 @@ struct PlanGenerationChoiceSheet: View {
 
     private var standardPlanCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Start with the standard plan", systemImage: "chart.bar.doc.horizontal")
+            Label("Prefer to start simple?", systemImage: "chart.bar.doc.horizontal")
                 .font(.headline)
 
-            Text("Trai will still build your first nutrition targets from your profile, and you can unlock Trai coaching later whenever you want deeper refinements.")
+            Text("You’ll still get a solid first set of nutrition targets from your profile. Upgrade later if you want Trai to tailor the plan more closely and help you iterate on it.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button(action: onContinueStandard) {
                 Text("Continue with Standard Plan")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true, fillOpacity: 0.12))
+            .buttonStyle(
+                .traiTertiary(
+                    color: TraiColors.brandAccent,
+                    size: .compact,
+                    fullWidth: false,
+                    backgroundColor: Color(.tertiarySystemBackground)
+                )
+            )
         }
         .padding(20)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))

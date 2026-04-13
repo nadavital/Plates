@@ -49,7 +49,7 @@ struct WorkoutPlanChatFlow: View {
     // MARK: - Question Flow
 
     private var allQuestions: [WorkoutPlanQuestion] {
-        [.workoutType, .experience, .equipment, .schedule, .split, .cardio, .goals, .weakPoints, .injuries, .preferences]
+        [.workoutType, .experience, .equipment, .schedule, .cardio, .goals, .injuries]
     }
 
     private var visibleQuestions: [WorkoutPlanQuestion] {
@@ -188,7 +188,7 @@ struct WorkoutPlanChatFlow: View {
         HStack(alignment: .top, spacing: 12) {
             TraiLensView(size: 36, state: .idle, palette: .energy)
 
-            Text("Let's build your perfect workout plan! I'll ask you a few questions to personalize everything.")
+            Text("Let's build a plan around the kinds of sessions you actually want to do. I’ll ask only the essentials, then put together a first version you can tweak.")
                 .font(.subheadline)
 
             Spacer()
@@ -543,13 +543,21 @@ struct WorkoutPlanChatFlow: View {
         } else if workoutTypes.contains("Strength") {
             return "Based on your goals, I've designed a \(splitName) split - \(days) days per week focused on building strength and muscle."
         } else if workoutTypes.contains("Cardio") {
-            return "Here's a \(days)-day plan that'll keep your cardio on track while building overall fitness."
+            return "Here's a \(days)-day plan built around the conditioning work you want while keeping the week balanced."
+        } else if workoutTypes.contains("Climbing") || workoutTypes.contains("Yoga") || workoutTypes.contains("Pilates") || workoutTypes.contains("Mobility") {
+            let customFocus = workoutTypes.joined(separator: ", ")
+            return "I've mapped out a \(days)-day plan centered on \(customFocus.lowercased()) with enough structure to keep it sustainable week to week."
         } else {
             return "I've created a \(splitName) program for you - \(days) days per week tailored to your goals and schedule."
         }
     }
 
     private func acceptPlan() {
+        if isOnboarding {
+            savePlan()
+            return
+        }
+
         HapticManager.success()
 
         withAnimation(.spring(response: 0.3)) {
@@ -678,13 +686,16 @@ struct WorkoutPlanChatFlow: View {
         let experience = parseExperience(from: collectedAnswers.answers(for: "experience"))
         let equipment = parseEquipment(from: collectedAnswers.answers(for: "equipment"))
         let days = parseDays(from: collectedAnswers.answers(for: "schedule"))
-        let split = parseSplit(from: collectedAnswers.answers(for: "split"))
         let cardioTypes = parseCardioTypes(from: collectedAnswers.answers(for: "cardio"))
 
         // Custom text from non-standard answers
-        let customWorkoutType = workoutTypeAnswers.first { !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed"].contains($0) }
+        let customWorkoutTypes = workoutTypeAnswers.filter { !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed"].contains($0) }
+        let customWorkoutType = customWorkoutTypes.isEmpty ? nil : customWorkoutTypes.joined(separator: ", ")
         let customExperience = collectedAnswers.answers(for: "experience").first { !["Beginner", "Intermediate", "Advanced"].contains($0) }
         let customEquipment = collectedAnswers.answers(for: "equipment").first { !["Full Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"].contains($0) }
+        let customModalities = collectedAnswers.answers(for: "cardio").filter {
+            !["Running", "Cycling", "Swimming", "Climbing", "Rowing", "Walking", "Jump Rope", "Anything works"].contains($0)
+        }
 
         return WorkoutPlanGenerationRequest(
             name: profile?.name ?? "User",
@@ -698,16 +709,16 @@ struct WorkoutPlanChatFlow: View {
             equipmentAccess: equipment,
             availableDays: days,
             timePerWorkout: 45,
-            preferredSplit: split,
+            preferredSplit: nil,
             cardioTypes: cardioTypes.isEmpty ? nil : cardioTypes,
             customWorkoutType: customWorkoutType,
             customExperience: customExperience,
             customEquipment: customEquipment,
-            customCardioType: nil,
+            customCardioType: customModalities.isEmpty ? nil : customModalities.joined(separator: ", "),
             specificGoals: collectedAnswers.answers(for: "goals").isEmpty ? nil : collectedAnswers.answers(for: "goals"),
-            weakPoints: collectedAnswers.answers(for: "weakPoints").isEmpty ? nil : collectedAnswers.answers(for: "weakPoints"),
+            weakPoints: nil,
             injuries: collectedAnswers.answers(for: "injuries").first,
-            preferences: collectedAnswers.answers(for: "preferences").first
+            preferences: nil
         )
     }
 
@@ -719,7 +730,8 @@ struct WorkoutPlanChatFlow: View {
             case "Strength": return .strength
             case "Cardio": return .cardio
             case "HIIT": return .hiit
-            case "Flexibility": return .flexibility
+            case "Yoga", "Pilates", "Mobility", "Flexibility": return .flexibility
+            case "Climbing": return .cardio
             case "Mixed": return .mixed
             default: return nil
             }
@@ -755,24 +767,14 @@ struct WorkoutPlanChatFlow: View {
         return Int(digits)
     }
 
-    private func parseSplit(from answers: [String]) -> WorkoutPlanGenerationRequest.PreferredSplit? {
-        guard let answer = answers.first else { return nil }
-        switch answer {
-        case "Push/Pull/Legs": return .pushPullLegs
-        case "Upper/Lower": return .upperLower
-        case "Full Body": return .fullBody
-        case "Bro Split": return .broSplit
-        case "Let Trai decide": return .letTraiDecide
-        default: return nil
-        }
-    }
-
     private func parseCardioTypes(from answers: [String]) -> [WorkoutPlanGenerationRequest.CardioType] {
         answers.compactMap { answer in
             switch answer {
             case "Running": return .running
             case "Cycling": return .cycling
             case "Swimming": return .swimming
+            case "Climbing": return .climbing
+            case "Walking": return .walking
             case "Rowing": return .rowing
             case "Jump Rope": return .jumpRope
             case "Anything works": return .anyCardio

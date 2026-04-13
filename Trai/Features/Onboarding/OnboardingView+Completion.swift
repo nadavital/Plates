@@ -38,6 +38,8 @@ extension OnboardingView {
 
         // Macro tracking preferences
         profile.enabledMacros = enabledMacros
+        profile.syncFoodToHealthKit = syncFoodToHealthKit
+        profile.syncWeightToHealthKit = syncWeightToHealthKit
 
         // Nutrition targets (from adjusted values or plan)
         profile.dailyCalorieGoal = Int(adjustedCalories) ?? 2000
@@ -72,6 +74,7 @@ extension OnboardingView {
         do {
             try modelContext.save()
             UserDefaults.standard.set(true, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
+            clearOnboardingDraft()
         } catch {
             print("Failed to persist onboarding profile: \(error)")
         }

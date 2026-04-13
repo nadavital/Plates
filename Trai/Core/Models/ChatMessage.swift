@@ -162,6 +162,14 @@ final class ChatMessage {
         }
     }
 
+    /// Replace an existing suggested meal while preserving logged/dismissed state keyed by ID.
+    func replaceSuggestedMeal(_ updatedMeal: SuggestedFoodEntry) {
+        var meals = suggestedMeals
+        guard let index = meals.firstIndex(where: { $0.id == updatedMeal.id }) else { return }
+        meals[index] = updatedMeal
+        suggestedMealsData = try? JSONEncoder().encode(meals)
+    }
+
     /// Mapping from meal ID to actual FoodEntry ID
     var loggedFoodEntryIds: [String: String] {
         get {

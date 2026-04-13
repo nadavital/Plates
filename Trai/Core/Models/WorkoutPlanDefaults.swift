@@ -18,13 +18,14 @@ extension WorkoutPlan {
 
         let templates = generateDefaultTemplates(
             for: splitType,
+            request: request,
             equipment: equipment,
             experience: experience,
             duration: request.timePerWorkout
         )
 
         let rationale = buildDefaultRationale(request: request, splitType: splitType)
-        let guidelines = defaultGuidelines(for: experience)
+        let guidelines = defaultGuidelines(for: experience, workoutType: request.workoutType)
 
         return WorkoutPlan(
             splitType: splitType,
@@ -32,13 +33,14 @@ extension WorkoutPlan {
             templates: templates,
             rationale: rationale,
             guidelines: guidelines,
-            progressionStrategy: progressionStrategy(for: experience),
+            progressionStrategy: progressionStrategy(for: experience, workoutType: request.workoutType),
             warnings: generateWarnings(for: request)
         )
     }
 
     private static func generateDefaultTemplates(
         for split: SplitType,
+        request: WorkoutPlanGenerationRequest,
         equipment: WorkoutPlanGenerationRequest.EquipmentAccess,
         experience: WorkoutPlanGenerationRequest.ExperienceLevel,
         duration: Int
@@ -53,7 +55,23 @@ extension WorkoutPlan {
         case .bodyPartSplit:
             return generateBodyPartTemplates(equipment: equipment, experience: experience, duration: duration)
         case .custom:
-            return generateFullBodyTemplates(equipment: equipment, experience: experience, duration: duration)
+            switch request.workoutType {
+            case .cardio:
+                return generateCardioTemplates(request: request, duration: duration)
+            case .hiit:
+                return generateHIITTemplates(duration: duration)
+            case .flexibility:
+                return generateFlexibilityTemplates(duration: duration)
+            case .mixed:
+                return generateMixedTemplates(
+                    equipment: equipment,
+                    experience: experience,
+                    request: request,
+                    duration: duration
+                )
+            case .strength:
+                return generateFullBodyTemplates(equipment: equipment, experience: experience, duration: duration)
+            }
         }
     }
 
@@ -261,7 +279,11 @@ extension WorkoutPlan {
         let daysText = request.availableDays.map { "\($0) days per week" } ?? "flexible"
         let experienceText = request.experienceLevel?.displayName.lowercased() ?? "your"
         parts.append("Based on your \(daysText) availability and \(experienceText) experience level,")
-        parts.append("I've designed a \(splitType.displayName) program.")
+        if splitType == .custom && request.workoutType != .strength {
+            parts.append("I've designed a custom \(request.workoutType.displayName.lowercased()) plan.")
+        } else {
+            parts.append("I've designed a \(splitType.displayName) program.")
+        }
 
         switch request.goal {
         case .buildMuscle:
@@ -277,7 +299,36 @@ extension WorkoutPlan {
         return parts.joined(separator: " ")
     }
 
-    private static func defaultGuidelines(for experience: WorkoutPlanGenerationRequest.ExperienceLevel) -> [String] {
+    private static func defaultGuidelines(
+        for experience: WorkoutPlanGenerationRequest.ExperienceLevel,
+        workoutType: WorkoutPlanGenerationRequest.WorkoutType
+    ) -> [String] {
+        switch workoutType {
+        case .cardio:
+            return [
+                "Start each session with 5-10 minutes of easy movement to warm up",
+                "Keep most sessions conversational and easy enough to recover from",
+                "Increase weekly volume gradually instead of making big jumps",
+                "Use one harder interval day at most until recovery feels consistent"
+            ]
+        case .hiit:
+            return [
+                "Warm up thoroughly before each interval session",
+                "Keep work intervals sharp and stop before your form breaks down",
+                "Take full recovery between hard rounds so intensity stays high",
+                "Balance HIIT with at least 1-2 easier recovery days each week"
+            ]
+        case .flexibility:
+            return [
+                "Move slowly and stay in pain-free ranges of motion",
+                "Focus on steady breathing during mobility and stretch work",
+                "Aim for consistency across the week instead of chasing intensity",
+                "Treat recovery and technique as the main progression drivers"
+            ]
+        case .mixed, .strength:
+            break
+        }
+
         var guidelines = [
             "Warm up for 5-10 minutes before each workout",
             "Rest 2-3 minutes between heavy compound sets",
@@ -300,8 +351,35 @@ extension WorkoutPlan {
     }
 
     private static func progressionStrategy(
-        for experience: WorkoutPlanGenerationRequest.ExperienceLevel
+        for experience: WorkoutPlanGenerationRequest.ExperienceLevel,
+        workoutType: WorkoutPlanGenerationRequest.WorkoutType
     ) -> ProgressionStrategy {
+        switch workoutType {
+        case .cardio:
+            return ProgressionStrategy(
+                type: .periodized,
+                weightIncrementKg: 0,
+                repsTrigger: nil,
+                description: "Progress by gradually adding time, distance, or pace while keeping easy days easy"
+            )
+        case .hiit:
+            return ProgressionStrategy(
+                type: .periodized,
+                weightIncrementKg: 0,
+                repsTrigger: nil,
+                description: "Progress by adding rounds, sharpening work intervals, or reducing rest only when recovery stays solid"
+            )
+        case .flexibility:
+            return ProgressionStrategy(
+                type: .periodized,
+                weightIncrementKg: 0,
+                repsTrigger: nil,
+                description: "Progress by improving control, range of motion, and total hold time before increasing difficulty"
+            )
+        case .mixed, .strength:
+            break
+        }
+
         switch experience {
         case .beginner:
             return ProgressionStrategy(
@@ -339,5 +417,184 @@ extension WorkoutPlan {
         }
 
         return warnings.isEmpty ? nil : warnings
+    }
+
+    private static func generateCardioTemplates(
+        request: WorkoutPlanGenerationRequest,
+        duration: Int
+    ) -> [WorkoutTemplate] {
+        let preferred = request.cardioTypes?.filter { $0 != .anyCardio } ?? []
+        let primary = preferred.first ?? .running
+        let secondary = preferred.dropFirst().first ?? .cycling
+        let days = max(request.availableDays ?? 3, 2)
+
+        var templates: [WorkoutTemplate] = [
+            WorkoutTemplate(
+                name: "\(primary.displayName) Endurance",
+                sessionType: primary == .climbing ? .climbing : .cardio,
+                focusAreas: [primary.displayName, "Endurance"],
+                targetMuscleGroups: [primary.displayName.lowercased(), "cardio"],
+                exercises: [
+                    ExerciseTemplate(exerciseName: "Easy Warm-Up", muscleGroup: "cardio", defaultSets: 1, defaultReps: 10, notes: "10 minutes easy", order: 0),
+                    ExerciseTemplate(exerciseName: "\(primary.displayName) Base Work", muscleGroup: primary.displayName.lowercased(), defaultSets: 1, defaultReps: max(duration - 15, 20), notes: "Steady conversational pace", order: 1),
+                    ExerciseTemplate(exerciseName: "Cool Down", muscleGroup: "cardio", defaultSets: 1, defaultReps: 5, notes: "5 minutes easy", order: 2)
+                ],
+                estimatedDurationMinutes: duration,
+                order: 0
+            ),
+            WorkoutTemplate(
+                name: "Intervals",
+                sessionType: .hiit,
+                focusAreas: [secondary.displayName, "Intervals"],
+                targetMuscleGroups: ["conditioning", "cardio"],
+                exercises: [
+                    ExerciseTemplate(exerciseName: "Warm-Up", muscleGroup: "cardio", defaultSets: 1, defaultReps: 10, notes: "Build to moderate effort", order: 0),
+                    ExerciseTemplate(exerciseName: "\(secondary.displayName) Intervals", muscleGroup: secondary.displayName.lowercased(), defaultSets: 6, defaultReps: 2, notes: "2 hard minutes, 2 easy minutes", order: 1),
+                    ExerciseTemplate(exerciseName: "Cool Down", muscleGroup: "cardio", defaultSets: 1, defaultReps: 5, notes: "Return to easy pace", order: 2)
+                ],
+                estimatedDurationMinutes: duration,
+                order: 1
+            )
+        ]
+
+        if days >= 3 {
+            let recoveryFocus = preferred.contains(.climbing) ? "Climbing Technique" : "Recovery Cardio"
+            let recoveryTarget = preferred.contains(.climbing) ? "climbing" : "cardio"
+            templates.append(
+                WorkoutTemplate(
+                    name: recoveryFocus,
+                    sessionType: preferred.contains(.climbing) ? .climbing : .recovery,
+                    focusAreas: [recoveryFocus],
+                    targetMuscleGroups: [recoveryTarget, "recovery"],
+                    exercises: [
+                        ExerciseTemplate(exerciseName: "Skill Warm-Up", muscleGroup: recoveryTarget, defaultSets: 1, defaultReps: 10, notes: "Easy ramp-up", order: 0),
+                        ExerciseTemplate(exerciseName: recoveryFocus, muscleGroup: recoveryTarget, defaultSets: 1, defaultReps: max(duration - 20, 15), notes: "Keep effort smooth and repeatable", order: 1),
+                        ExerciseTemplate(exerciseName: "Mobility Finish", muscleGroup: "mobility", defaultSets: 1, defaultReps: 10, notes: "Reset hips, ankles, and upper back", order: 2)
+                    ],
+                    estimatedDurationMinutes: duration,
+                    order: 2
+                )
+            )
+        }
+
+        return templates
+    }
+
+    private static func generateHIITTemplates(duration: Int) -> [WorkoutTemplate] {
+        [
+            WorkoutTemplate(
+                name: "Power Intervals",
+                sessionType: .hiit,
+                focusAreas: ["Power", "Intervals"],
+                targetMuscleGroups: ["hiit", "conditioning"],
+                exercises: [
+                    ExerciseTemplate(exerciseName: "Dynamic Warm-Up", muscleGroup: "mobility", defaultSets: 1, defaultReps: 8, notes: "8 minutes", order: 0),
+                    ExerciseTemplate(exerciseName: "Sprint Intervals", muscleGroup: "hiit", defaultSets: 8, defaultReps: 30, notes: "30 sec hard, 90 sec easy", order: 1),
+                    ExerciseTemplate(exerciseName: "Cool Down Walk", muscleGroup: "cardio", defaultSets: 1, defaultReps: 8, notes: "8 minutes easy", order: 2)
+                ],
+                estimatedDurationMinutes: duration,
+                order: 0
+            ),
+            WorkoutTemplate(
+                name: "Conditioning Circuit",
+                sessionType: .hiit,
+                focusAreas: ["Conditioning", "Circuit"],
+                targetMuscleGroups: ["conditioning", "fullBody"],
+                exercises: [
+                    ExerciseTemplate(exerciseName: "Jump Rope", muscleGroup: "conditioning", defaultSets: 5, defaultReps: 60, notes: "60 sec on", order: 0),
+                    ExerciseTemplate(exerciseName: "Burpees", muscleGroup: "conditioning", defaultSets: 5, defaultReps: 10, order: 1),
+                    ExerciseTemplate(exerciseName: "Mountain Climbers", muscleGroup: "conditioning", defaultSets: 5, defaultReps: 30, order: 2),
+                    ExerciseTemplate(exerciseName: "Bodyweight Squats", muscleGroup: "legs", defaultSets: 5, defaultReps: 15, order: 3)
+                ],
+                estimatedDurationMinutes: duration,
+                order: 1
+            )
+        ]
+    }
+
+    private static func generateFlexibilityTemplates(duration: Int) -> [WorkoutTemplate] {
+        [
+            WorkoutTemplate(
+                name: "Full-Body Mobility",
+                sessionType: .mobility,
+                focusAreas: ["Mobility", "Full Body"],
+                targetMuscleGroups: ["mobility", "fullBody"],
+                exercises: [
+                    ExerciseTemplate(exerciseName: "Cat-Cow", muscleGroup: "mobility", defaultSets: 2, defaultReps: 8, order: 0),
+                    ExerciseTemplate(exerciseName: "World's Greatest Stretch", muscleGroup: "mobility", defaultSets: 2, defaultReps: 6, order: 1),
+                    ExerciseTemplate(exerciseName: "90/90 Hip Flow", muscleGroup: "mobility", defaultSets: 2, defaultReps: 8, order: 2),
+                    ExerciseTemplate(exerciseName: "Thoracic Rotations", muscleGroup: "mobility", defaultSets: 2, defaultReps: 8, order: 3)
+                ],
+                estimatedDurationMinutes: duration,
+                order: 0
+            ),
+            WorkoutTemplate(
+                name: "Recovery Flow",
+                sessionType: .flexibility,
+                focusAreas: ["Recovery", "Flow"],
+                targetMuscleGroups: ["flexibility", "recovery"],
+                exercises: [
+                    ExerciseTemplate(exerciseName: "Breath-Led Warm-Up", muscleGroup: "flexibility", defaultSets: 1, defaultReps: 5, notes: "5 minutes", order: 0),
+                    ExerciseTemplate(exerciseName: "Hamstring Stretch", muscleGroup: "flexibility", defaultSets: 2, defaultReps: 45, notes: "45 sec each side", order: 1),
+                    ExerciseTemplate(exerciseName: "Hip Flexor Stretch", muscleGroup: "flexibility", defaultSets: 2, defaultReps: 45, notes: "45 sec each side", order: 2),
+                    ExerciseTemplate(exerciseName: "Child's Pose", muscleGroup: "recovery", defaultSets: 2, defaultReps: 60, notes: "60 sec hold", order: 3)
+                ],
+                estimatedDurationMinutes: duration,
+                order: 1
+            )
+        ]
+    }
+
+    private static func generateMixedTemplates(
+        equipment: WorkoutPlanGenerationRequest.EquipmentAccess,
+        experience: WorkoutPlanGenerationRequest.ExperienceLevel,
+        request: WorkoutPlanGenerationRequest,
+        duration: Int
+    ) -> [WorkoutTemplate] {
+        let strengthTemplates = generateFullBodyTemplates(equipment: equipment, experience: experience, duration: duration)
+        let cardioTemplates = generateCardioTemplates(request: request, duration: duration)
+
+        return [
+            strengthTemplates.first.map { template in
+                WorkoutTemplate(
+                    id: template.id,
+                    name: "Strength A",
+                    sessionType: .strength,
+                    focusAreas: template.targetMuscleGroups,
+                    targetMuscleGroups: template.targetMuscleGroups,
+                    exercises: template.exercises,
+                    estimatedDurationMinutes: template.estimatedDurationMinutes,
+                    order: 0,
+                    notes: template.notes
+                )
+            },
+            cardioTemplates.first.map { template in
+                WorkoutTemplate(
+                    id: template.id,
+                    name: template.name,
+                    sessionType: template.sessionType,
+                    focusAreas: template.focusAreas,
+                    targetMuscleGroups: template.targetMuscleGroups,
+                    exercises: template.exercises,
+                    estimatedDurationMinutes: template.estimatedDurationMinutes,
+                    order: 1,
+                    notes: template.notes
+                )
+            },
+            strengthTemplates.dropFirst().first.map { template in
+                WorkoutTemplate(
+                    id: template.id,
+                    name: "Strength B",
+                    sessionType: .strength,
+                    focusAreas: template.targetMuscleGroups,
+                    targetMuscleGroups: template.targetMuscleGroups,
+                    exercises: template.exercises,
+                    estimatedDurationMinutes: template.estimatedDurationMinutes,
+                    order: 2,
+                    notes: template.notes
+                )
+            }
+        ]
+        .compactMap { $0 }
     }
 }

@@ -101,6 +101,7 @@ struct TraiApp: App {
                 CoachSignal.self,
                 NutritionPlanVersion.self,
                 WorkoutPlanVersion.self,
+                WorkoutGoal.self,
                 CustomReminder.self,
                 ReminderCompletion.self,
                 SuggestionUsage.self,

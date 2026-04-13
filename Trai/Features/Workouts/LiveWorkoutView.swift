@@ -18,9 +18,30 @@ struct LiveWorkoutView: View {
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @Query private var profiles: [UserProfile]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
 
     private var usesMetricExerciseWeight: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
+    }
+
+    private var relevantSessionGoals: [WorkoutGoal] {
+        WorkoutGoalProgressResolver.relevantGoals(
+            for: viewModel.workout,
+            goals: workoutGoals,
+            includeCompleted: false
+        )
+    }
+
+    private var activitySuggestions: [String] {
+        Array(
+            Set(
+                viewModel.entries
+                    .map(\.exerciseName)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        )
+        .sorted()
     }
 
     // Heart rate update timer
@@ -35,6 +56,8 @@ struct LiveWorkoutView: View {
     @State private var showingExerciseReplacement = false
     @State private var entryToReplace: LiveWorkoutEntry?
     @State private var showingLiveActivityDisabledAlert = false
+    @State private var showingGeneralActivitySheet = false
+    @State private var showingGoalSheet = false
 
     // MARK: - Initialization
 
@@ -143,6 +166,25 @@ struct LiveWorkoutView: View {
                         }
                 }
             }
+            .sheet(isPresented: $showingGeneralActivitySheet) {
+                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds in
+                    viewModel.addGeneralActivity(
+                        name: name,
+                        notes: notes,
+                        durationSeconds: durationSeconds
+                    )
+                }
+            }
+            .sheet(isPresented: $showingGoalSheet) {
+                AddWorkoutGoalSheet(
+                    workoutType: viewModel.workout.type,
+                    activitySuggestions: activitySuggestions,
+                    prefersMetricWeight: usesMetricExerciseWeight
+                ) { goal in
+                    modelContext.insert(goal)
+                    try? modelContext.save()
+                }
+            }
             .confirmationDialog(
                 "Cancel Workout",
                 isPresented: $showingCancelConfirmation,
@@ -193,7 +235,116 @@ struct LiveWorkoutView: View {
 
     // MARK: - Workout Content
 
+    @ViewBuilder
     private var workoutContent: some View {
+        if viewModel.usesGeneralSessionWorkspace {
+            generalWorkoutContent
+        } else {
+            structuredWorkoutContent
+        }
+    }
+
+    private var generalWorkoutContent: some View {
+        ZStack(alignment: .bottom) {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 16) {
+                    WorkoutTimerHeader(
+                        workoutStartedAt: viewModel.workout.startedAt,
+                        isTimerRunning: viewModel.isTimerRunning,
+                        totalPauseDuration: viewModel.totalPauseDuration,
+                        totalVolume: viewModel.totalVolume,
+                        onTogglePause: {
+                            if viewModel.isTimerRunning {
+                                viewModel.pauseTimer()
+                            } else {
+                                viewModel.resumeTimer()
+                            }
+                        },
+                        heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
+                        calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
+                    )
+
+                    if let watchHint = viewModel.watchConnectionHint {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(watchHint)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            if !viewModel.isWatchConnected {
+                                Button {
+                                    viewModel.retryWatchSync()
+                                } label: {
+                                    if viewModel.isRetryingWatchSync {
+                                        HStack(spacing: 8) {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                            Text("Syncing...")
+                                        }
+                                    } else {
+                                        Label("Try syncing now", systemImage: "arrow.clockwise")
+                                    }
+                                }
+                                .font(.caption)
+                                .buttonStyle(.traiSecondary())
+                                .disabled(viewModel.isRetryingWatchSync)
+                            }
+                        }
+                    }
+
+                    GeneralSessionOverviewCard(workout: viewModel.workout)
+
+                    SessionGoalsCard(
+                        goals: relevantSessionGoals,
+                        onAddGoal: { showingGoalSheet = true },
+                        onToggleCompletion: toggleGoalCompletion
+                    )
+
+                    SessionNotesCard(
+                        notes: Binding(
+                            get: { viewModel.workout.notes },
+                            set: { viewModel.updateWorkoutNotes($0) }
+                        )
+                    )
+
+                    if viewModel.entries.isEmpty {
+                        ContentUnavailableView(
+                            "No Activities Yet",
+                            systemImage: viewModel.workout.type.iconName,
+                            description: Text("Add freeform activities, jot down notes, and use Trai chat for in-session guidance.")
+                        )
+                        .padding(.top, 8)
+                    } else {
+                        ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
+                            GeneralActivityCard(
+                                entry: entry,
+                                onUpdateNotes: { viewModel.updateEntryNotes(for: entry, notes: $0) },
+                                onUpdateDuration: { viewModel.updateEntryDuration(for: entry, seconds: $0) },
+                                onToggleComplete: { viewModel.toggleGeneralEntryCompletion(for: entry) },
+                                onDelete: { viewModel.removeExercise(at: index) }
+                            )
+                        }
+                    }
+
+                    Color.clear.frame(height: 100)
+                }
+                .padding()
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                dismissKeyboard()
+            }
+
+            WorkoutBottomBar(
+                onAddExercise: { showingGeneralActivitySheet = true },
+                onAskTrai: { showingChat = true },
+                addLabel: "Add Activity",
+                addSystemImage: "square.and.pencil"
+            )
+        }
+    }
+
+    private var structuredWorkoutContent: some View {
         ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
                 let entries = viewModel.entries
@@ -249,27 +400,29 @@ struct LiveWorkoutView: View {
                     }
 
                     // Target muscles selector (editable for custom workouts)
-                    MuscleGroupSelector(
-                        selectedMuscles: Binding(
-                            get: { Set(viewModel.workout.muscleGroups) },
-                            set: { viewModel.updateMuscleGroups(Array($0)) }
-                        ),
-                        isCustomWorkout: viewModel.exerciseSuggestions.isEmpty
-                    )
+                    if viewModel.workout.type.supportsMuscleTargets {
+                        MuscleGroupSelector(
+                            selectedMuscles: Binding(
+                                get: { Set(viewModel.workout.muscleGroups) },
+                                set: { viewModel.updateMuscleGroups(Array($0)) }
+                            ),
+                            isCustomWorkout: viewModel.exerciseSuggestions.isEmpty
+                        )
 
-                    if !viewModel.workout.muscleGroups.isEmpty {
-                        HStack {
-                            Spacer()
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    viewModel.refreshSuggestions()
+                        if !viewModel.workout.muscleGroups.isEmpty {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        viewModel.refreshSuggestions()
+                                    }
+                                } label: {
+                                    Label("Refresh Suggestions", systemImage: "arrow.clockwise")
+                                        .font(.caption)
                                 }
-                            } label: {
-                                Label("Refresh Suggestions", systemImage: "arrow.clockwise")
-                                    .font(.caption)
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
                         }
                     }
 
@@ -352,7 +505,8 @@ struct LiveWorkoutView: View {
             // Bottom bar
             WorkoutBottomBar(
                 onAddExercise: { showingExerciseList = true },
-                onAskTrai: { showingChat = true }
+                onAskTrai: { showingChat = true },
+                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise"
             )
         }
     }
@@ -397,36 +551,59 @@ struct LiveWorkoutView: View {
     private func buildWorkoutContext() -> AIService.WorkoutContext {
         let entries = viewModel.entries
 
-        // Count exercises with ALL sets having data entered as "completed"
         let completedExercises = entries.filter { entry in
-            !entry.sets.isEmpty && entry.sets.allSatisfy { $0.reps > 0 }
+            if entry.isCardio {
+                return entry.completedAt != nil || (entry.durationSeconds ?? 0) > 0 || (entry.distanceMeters ?? 0) > 0
+            }
+            if entry.isGeneralActivity {
+                return entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0
+            }
+            return !entry.sets.isEmpty && entry.sets.allSatisfy { $0.reps > 0 }
         }.count
 
-        // Find current exercise (first with sets that don't have data yet)
         let currentExercise = entries.first { entry in
-            entry.sets.isEmpty || entry.sets.contains { $0.reps == 0 }
-        }?.exerciseName ?? entries.last?.exerciseName  // Default to last if all have data
+            if entry.isCardio || entry.isGeneralActivity {
+                return entry.completedAt == nil
+            }
+            return entry.sets.isEmpty || entry.sets.contains { $0.reps == 0 }
+        }?.exerciseName ?? entries.last?.exerciseName
 
-        // Count sets with data entered (reps > 0) as completed for context
         let setsWithData = entries.reduce(0) { total, entry in
-            total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count
+            if entry.isCardio || entry.isGeneralActivity {
+                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0) ? 1 : 0)
+            }
+            return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count
         }
 
-        // Calculate volume from sets with data
         let volumeWithData = entries.reduce(0.0) { total, entry in
-            total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
+            guard !entry.isCardio, !entry.isGeneralActivity else { return total }
+            return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.reduce(0.0) { $0 + $1.volume }
         }
 
         return AIService.WorkoutContext(
             workoutName: viewModel.workoutName,
+            workoutType: viewModel.workout.type.displayName,
+            focusAreas: viewModel.sessionFocusAreas,
             elapsedMinutes: Int(viewModel.elapsedTime / 60),
             exercisesCompleted: completedExercises,
             exercisesTotal: entries.count,
             currentExercise: currentExercise,
             setsCompleted: setsWithData,
             totalVolume: volumeWithData,
-            targetMuscleGroups: viewModel.targetMuscleGroups
+            targetMuscleGroups: viewModel.targetMuscleGroups,
+            sessionNotes: viewModel.workout.notes.isEmpty ? nil : viewModel.workout.notes,
+            activeGoals: relevantSessionGoals.map(\.trimmedTitle)
         )
+    }
+
+    private func toggleGoalCompletion(_ goal: WorkoutGoal) {
+        if goal.status == .completed {
+            goal.markActive()
+        } else {
+            goal.markCompleted()
+        }
+        try? modelContext.save()
+        HapticManager.selectionChanged()
     }
 
 }

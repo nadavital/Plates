@@ -2,7 +2,7 @@
 //  CustomWorkoutSetupSheet.swift
 //  Trai
 //
-//  Sheet for setting up a custom workout with name, type, and target muscles
+//  Sheet for setting up a custom workout with optional workout type, focus, and target muscles
 //
 
 import SwiftUI
@@ -10,37 +10,119 @@ import SwiftUI
 // MARK: - Custom Workout Setup Sheet
 
 struct CustomWorkoutSetupSheet: View {
+    struct SessionSuggestion: Identifiable, Hashable {
+        let id: String
+        let title: String
+        let workoutType: LiveWorkout.WorkoutType
+        let focusAreas: [String]
+        let targetMuscles: [LiveWorkout.MuscleGroup]
+
+        init(
+            id: String,
+            title: String,
+            workoutType: LiveWorkout.WorkoutType,
+            focusAreas: [String] = [],
+            targetMuscles: [LiveWorkout.MuscleGroup] = []
+        ) {
+            self.id = id
+            self.title = title
+            self.workoutType = workoutType
+            self.focusAreas = focusAreas
+            self.targetMuscles = targetMuscles
+        }
+
+        var subtitle: String {
+            let primaryDetails = focusAreas.isEmpty
+                ? targetMuscles.map(\.displayName)
+                : focusAreas
+
+            if primaryDetails.isEmpty {
+                return workoutType.displayName
+            }
+
+            return primaryDetails.prefix(2).joined(separator: " • ")
+        }
+    }
+
     @Environment(\.dismiss) private var dismiss
-    let onStart: (String, LiveWorkout.WorkoutType, [LiveWorkout.MuscleGroup]) -> Void
+    let onStart: (String, LiveWorkout.WorkoutType, [LiveWorkout.MuscleGroup], [String]) -> Void
+    var orderedWorkoutTypes: [LiveWorkout.WorkoutType] = LiveWorkout.WorkoutType.allCases
+    var sessionSuggestions: [SessionSuggestion] = []
 
     @State private var workoutName = ""
     @State private var selectedType: LiveWorkout.WorkoutType = .strength
     @State private var selectedMuscles: Set<LiveWorkout.MuscleGroup> = []
+    @State private var focusAreasText = ""
 
     private var defaultName: String {
-        if selectedMuscles.isEmpty {
+        if selectedType.supportsMuscleTargets, !selectedMuscles.isEmpty {
+            let muscleNames = selectedMuscles.sorted { $0.displayName < $1.displayName }
+                .prefix(3)
+                .map { $0.displayName }
+                .joined(separator: " + ")
+            return muscleNames
+        }
+
+        if !parsedFocusAreas.isEmpty {
+            return parsedFocusAreas
+                .prefix(2)
+                .joined(separator: " + ")
+        }
+
+        if selectedType == .custom {
             return "Custom Workout"
         }
-        let muscleNames = selectedMuscles.sorted { $0.displayName < $1.displayName }
+
+        return "\(selectedType.displayName) Workout"
+    }
+
+    private var parsedFocusAreas: [String] {
+        focusAreasText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var resolvedFocusAreas: [String] {
+        if !parsedFocusAreas.isEmpty {
+            return parsedFocusAreas
+        }
+
+        if selectedType.supportsMuscleTargets {
+            return selectedMuscles.sorted { $0.displayName < $1.displayName }.map(\.displayName)
+        }
+
+        return []
+    }
+
+    private var suggestedName: String {
+        if selectedType.supportsMuscleTargets {
+            let muscleNames = selectedMuscles.sorted { $0.displayName < $1.displayName }
             .prefix(3)
             .map { $0.displayName }
             .joined(separator: " + ")
-        return muscleNames
+            return muscleNames.isEmpty ? defaultName : muscleNames
+        }
+        return defaultName
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    setupHeaderCard
+                    if !sessionSuggestions.isEmpty {
+                        suggestionCard
+                    }
 
                     nameCard
 
                     workoutTypeCard
 
-                    if selectedType != .cardio {
+                    if selectedType.supportsMuscleTargets {
                         targetMusclesCard
                     }
+
+                    focusAreasCard
 
                     Spacer(minLength: 24)
                 }
@@ -61,7 +143,7 @@ struct CustomWorkoutSetupSheet: View {
                     Button("Start", systemImage: "checkmark") {
                         let name = workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
                         let finalName = name.isEmpty ? defaultName : name
-                        onStart(finalName, selectedType, Array(selectedMuscles))
+                        onStart(finalName, selectedType, Array(selectedMuscles), resolvedFocusAreas)
                         dismiss()
                     }
                     .labelStyle(.iconOnly)
@@ -71,41 +153,66 @@ struct CustomWorkoutSetupSheet: View {
         .traiSheetBranding()
     }
 
-    private var setupHeaderCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "figure.run.circle.fill")
-                .font(.traiBold(24))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 40, height: 40)
-                .background(Color.accentColor.opacity(0.12), in: Circle())
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Build Your Session")
-                    .font(.traiHeadline())
-
-                Text("Pick a type, set targets, and start quickly.")
-                    .font(.traiLabel(12))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .traiCard(cornerRadius: 16)
-    }
-
     private var nameCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Workout Name", systemImage: "textformat")
                 .font(.traiHeadline())
 
-            TextField("e.g. Push Day, Legs, Arm Focus", text: $workoutName)
+            TextField("e.g. Bouldering, Morning Flow, Long Run", text: $workoutName)
                 .padding(12)
                 .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
 
             if workoutName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Suggested: \(defaultName)")
+                Text("Suggested: \(suggestedName)")
                     .font(.traiLabel(12))
                     .foregroundStyle(.secondary)
+            }
+        }
+        .traiCard(cornerRadius: 16)
+    }
+
+    private var suggestionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Suggested for You", systemImage: "sparkles")
+                .font(.traiHeadline())
+
+            Text("Pulled from your plan and recent sessions so you can jump in faster.")
+                .font(.traiLabel(12))
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 10, alignment: .top),
+                    GridItem(.flexible(), spacing: 10, alignment: .top)
+                ],
+                spacing: 10
+            ) {
+                ForEach(sessionSuggestions.prefix(4)) { suggestion in
+                    Button {
+                        applySuggestion(suggestion)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(suggestion.workoutType.displayName, systemImage: suggestion.workoutType.iconName)
+                                .font(.traiLabel(11))
+                                .foregroundStyle(.secondary)
+
+                            Text(suggestion.title)
+                                .font(.traiHeadline(15))
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Text(suggestion.subtitle)
+                                .font(.traiLabel(12))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+                    }
+                    .buttonStyle(.traiTertiary(size: .compact, fullWidth: true))
+                }
             }
         }
         .traiCard(cornerRadius: 16)
@@ -116,8 +223,12 @@ struct CustomWorkoutSetupSheet: View {
             Label("Workout Type", systemImage: "square.grid.2x2.fill")
                 .font(.traiHeadline())
 
-            HStack(spacing: 8) {
-                ForEach(LiveWorkout.WorkoutType.allCases) { type in
+            Text("Pick the closest fit. The order adapts to your plan and recent sessions.")
+                .font(.traiLabel(12))
+                .foregroundStyle(.secondary)
+
+            FlowLayout(spacing: 8) {
+                ForEach(orderedWorkoutTypes) { type in
                     WorkoutTypeButton(
                         type: type,
                         isSelected: selectedType == type
@@ -133,14 +244,14 @@ struct CustomWorkoutSetupSheet: View {
 
     private var targetMusclesCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Target Muscles", systemImage: "figure.strengthtraining.traditional")
+            Label("Target Areas", systemImage: "figure.strengthtraining.traditional")
                 .font(.traiHeadline())
 
-            Text("Select what you want to train today")
+            Text("Optional for strength workouts")
                 .font(.traiLabel(12))
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 6) {
+            FlowLayout(spacing: 6) {
                 PresetButton(title: "Push", isSelected: isPushSelected) {
                     togglePreset(LiveWorkout.MuscleGroup.pushMuscles)
                 }
@@ -170,6 +281,30 @@ struct CustomWorkoutSetupSheet: View {
                 Text("\(selectedMuscles.count) selected")
                     .font(.traiLabel(12))
                     .foregroundStyle(.secondary)
+            }
+        }
+        .traiCard(cornerRadius: 16)
+    }
+
+    private var focusAreasCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Focus", systemImage: selectedType.iconName)
+                .font(.traiHeadline())
+
+            Text(selectedType.supportsMuscleTargets
+                 ? "Optional notes for the style or goal of the workout"
+                 : "Optional notes for the style, intent, or format of the workout")
+                .font(.traiLabel(12))
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("e.g. Yoga Flow, Recovery, Technique, Hills", text: $focusAreasText)
+                    .padding(12)
+                    .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+                Text("Separate multiple items with commas")
+                    .font(.traiLabel(11))
+                    .foregroundStyle(.tertiary)
             }
         }
         .traiCard(cornerRadius: 16)
@@ -217,6 +352,14 @@ struct CustomWorkoutSetupSheet: View {
         }
         HapticManager.selectionChanged()
     }
+
+    private func applySuggestion(_ suggestion: SessionSuggestion) {
+        workoutName = suggestion.title
+        selectedType = suggestion.workoutType
+        selectedMuscles = Set(suggestion.targetMuscles)
+        focusAreasText = suggestion.focusAreas.joined(separator: ", ")
+        HapticManager.selectionChanged()
+    }
 }
 
 // MARK: - Workout Type Button
@@ -231,23 +374,22 @@ private struct WorkoutTypeButton: View {
             Button(action: action) {
                 label
             }
-            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.18))
+            .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fillOpacity: 0.18))
         } else {
             Button(action: action) {
                 label
             }
-            .buttonStyle(.traiTertiary(color: .secondary, fullWidth: true))
+            .buttonStyle(.traiTertiary(color: .secondary, size: .compact))
         }
     }
 
     private var label: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 6) {
             Image(systemName: type.iconName)
-                .font(.traiHeadline(18))
+                .font(.traiLabel(12))
             Text(type.displayName)
                 .font(.traiLabel(12))
         }
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -309,7 +451,7 @@ private struct WorkoutMuscleChip: View {
 // MARK: - Preview
 
 #Preview {
-    CustomWorkoutSetupSheet { name, type, muscles in
-        print("Starting: \(name), \(type), \(muscles)")
+    CustomWorkoutSetupSheet { name, type, muscles, focusAreas in
+        print("Starting: \(name), \(type), \(muscles), \(focusAreas)")
     }
 }

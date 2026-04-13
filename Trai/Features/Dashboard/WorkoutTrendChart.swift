@@ -26,6 +26,7 @@ struct WorkoutTrendChart: View {
 
     enum WorkoutMetric {
         case frequency
+        case items
         case volume
         case sets
         case duration
@@ -33,6 +34,7 @@ struct WorkoutTrendChart: View {
         var keyPath: KeyPath<TrendsService.DailyWorkout, Double> {
             switch self {
             case .frequency: \.workoutCountDouble
+            case .items: \.totalEntriesDouble
             case .volume: \.totalVolume
             case .sets: \.totalSetsDouble
             case .duration: \.totalDurationDouble
@@ -42,7 +44,8 @@ struct WorkoutTrendChart: View {
         var displayTitle: String {
             switch self {
             case .frequency: "Workouts"
-            case .volume: "Volume"
+            case .items: "Items"
+            case .volume: "Strength Volume"
             case .sets: "Sets"
             case .duration: "Duration"
             }
@@ -51,6 +54,7 @@ struct WorkoutTrendChart: View {
         var unit: String {
             switch self {
             case .frequency: "workouts"
+            case .items: "items"
             case .volume: "kg"
             case .sets: "sets"
             case .duration: "min"
@@ -60,6 +64,7 @@ struct WorkoutTrendChart: View {
         var color: Color {
             switch self {
             case .frequency: .orange
+            case .items: .blue
             case .volume: .purple
             case .sets: .blue
             case .duration: .green
@@ -178,7 +183,7 @@ struct WorkoutTrendChart: View {
 
     private var emptyStateView: some View {
         VStack(spacing: 8) {
-            Image(systemName: "figure.run")
+            Image(systemName: "figure.mixed.cardio")
                 .font(.title)
                 .foregroundStyle(.tertiary)
             Text("Complete more workouts to see trends")
@@ -201,7 +206,7 @@ struct WorkoutTrendChart: View {
                     .font(.caption)
                     .bold()
             } else {
-                Text("Avg per workout")
+                Text("Avg active day")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -249,6 +254,10 @@ extension TrendsService.DailyWorkout {
         Double(workoutCount)
     }
 
+    var totalEntriesDouble: Double {
+        Double(totalEntries)
+    }
+
     var totalSetsDouble: Double {
         Double(totalSets)
     }
@@ -263,6 +272,7 @@ extension TrendsService.DailyWorkout {
         TrendsService.DailyWorkout(
             date: Calendar.current.date(byAdding: .day, value: -6 + offset, to: Date())!,
             workoutCount: offset % 2 == 0 ? 1 : 0,
+            totalEntries: Int.random(in: 2...8),
             totalVolume: Double.random(in: 5000...15000),
             totalSets: Int.random(in: 15...30),
             totalDurationMinutes: Int.random(in: 45...90)
@@ -271,7 +281,7 @@ extension TrendsService.DailyWorkout {
 
     return VStack {
         WorkoutTrendChart(data: sampleData, metric: .frequency)
-        WorkoutTrendChart(data: sampleData, metric: .volume)
+        WorkoutTrendChart(data: sampleData, metric: .items)
     }
     .padding()
 }

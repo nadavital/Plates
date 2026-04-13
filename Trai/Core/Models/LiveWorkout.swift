@@ -21,6 +21,9 @@ final class LiveWorkout {
     /// e.g., "chest,triceps,shoulders"
     var targetMuscleGroups: String = ""
 
+    /// Flexible focus labels for non-strength sessions, e.g. "Yoga Flow, Recovery"
+    var sessionFocus: String = ""
+
     /// Notes added by user during workout
     var notes: String = ""
 
@@ -39,39 +42,23 @@ final class LiveWorkout {
 
     init() {}
 
-    init(name: String, workoutType: WorkoutType, targetMuscleGroups: [MuscleGroup] = []) {
+    init(
+        name: String,
+        workoutType: WorkoutType,
+        targetMuscleGroups: [MuscleGroup] = [],
+        focusAreas: [String] = []
+    ) {
         self.name = name
         self.workoutType = workoutType.rawValue
         self.targetMuscleGroups = targetMuscleGroups.map(\.rawValue).joined(separator: ",")
+        self.focusAreas = focusAreas
     }
 }
 
 // MARK: - Workout Type
 
 extension LiveWorkout {
-    enum WorkoutType: String, CaseIterable, Identifiable {
-        case strength = "strength"
-        case cardio = "cardio"
-        case mixed = "mixed"
-
-        var id: String { rawValue }
-
-        var displayName: String {
-            switch self {
-            case .strength: "Strength"
-            case .cardio: "Cardio"
-            case .mixed: "Mixed"
-            }
-        }
-
-        var iconName: String {
-            switch self {
-            case .strength: "dumbbell.fill"
-            case .cardio: "heart.fill"
-            case .mixed: "figure.mixed.cardio"
-            }
-        }
-    }
+    typealias WorkoutType = WorkoutMode
 
     var type: WorkoutType {
         get { WorkoutType(rawValue: workoutType) ?? .strength }
@@ -174,6 +161,8 @@ extension LiveWorkout {
             case "legs", "lowerbody", "lower": return legMuscles
             case "upperbody", "upper": return upperBodyMuscles
             case "arms", "arm": return [.biceps, .triceps, .forearms]
+            case "cardio", "conditioning", "hiit", "intervals", "running", "cycling", "swimming", "rowing", "climbing", "walking", "mobility", "flexibility", "recovery", "zone2", "zone 2":
+                return [.fullBody]
             case "fullbody": return [.fullBody]
             default:
                 return []
@@ -215,6 +204,68 @@ extension LiveWorkout {
         set {
             targetMuscleGroups = newValue.map(\.rawValue).joined(separator: ",")
         }
+    }
+
+    var focusAreas: [String] {
+        get {
+            sessionFocus
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            sessionFocus = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    var displayFocusSummary: String {
+        if !focusAreas.isEmpty {
+            return focusAreas.joined(separator: " • ")
+        }
+        let muscles = muscleGroups.map(\.displayName)
+        return muscles.isEmpty ? type.displayName : muscles.joined(separator: " • ")
+    }
+
+    var trimmedNotes: String {
+        notes.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var traiReviewPrompt: String {
+        var prompt = "Can you review my \(name) workout from \(startedAt.formatted(date: .abbreviated, time: .shortened))?"
+
+        var details: [String] = [type.displayName.lowercased()]
+
+        if !displayFocusSummary.isEmpty {
+            details.append("focus \(displayFocusSummary)")
+        }
+
+        let durationMinutes = Int(duration / 60)
+        if durationMinutes > 0 {
+            details.append("duration \(formattedDuration)")
+        }
+
+        let entryCount = entries?.count ?? 0
+        if entryCount > 0 {
+            details.append("\(entryCount) \(entryCount == 1 ? "item" : "items")")
+        }
+
+        if let healthKitCalories, healthKitCalories > 0 {
+            details.append("\(Int(healthKitCalories)) kcal")
+        }
+
+        if !details.isEmpty {
+            prompt += " It was a \(details.joined(separator: ", "))."
+        }
+
+        if !trimmedNotes.isEmpty {
+            prompt += " I added these notes: \(trimmedNotes)."
+        }
+
+        prompt += " Tell me what this says about my progress and what I should focus on next."
+        return prompt
     }
 }
 

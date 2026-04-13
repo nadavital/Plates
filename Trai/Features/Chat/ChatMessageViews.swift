@@ -283,6 +283,20 @@ struct SmartStarter: Identifiable, Equatable {
             ))
         }
 
+        if let daysSince = context.daysSinceLastWorkout,
+           daysSince >= 0,
+           daysSince <= 7,
+           !context.hasActiveWorkout {
+            starters.append(SmartStarter(
+                type: SuggestionType.reviewLastSession,
+                icon: "bubble.left.and.text.bubble.right.fill",
+                title: "Review last session",
+                prompt: "Can you review my most recent workout and tell me what it says about my progress and what I should focus on next?",
+                color: .accentColor,
+                isContextual: true
+            ))
+        }
+
         // Always available actions
         starters.append(SmartStarter(
             type: SuggestionType.startWorkout,

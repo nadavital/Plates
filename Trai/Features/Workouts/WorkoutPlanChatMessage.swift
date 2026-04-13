@@ -56,28 +56,28 @@ enum WorkoutPlanQuestion: String, CaseIterable {
     case experience
     case equipment
     case schedule
-    case split       // Conditional: only for strength/mixed
     case cardio      // Conditional: only for cardio/mixed/hiit
     case goals
-    case weakPoints
     case injuries
-    case preferences
 
     var config: TraiQuestionConfig {
         switch self {
         case .workoutType:
             return TraiQuestionConfig(
                 id: rawValue,
-                question: "What type of training are you into?",
+                question: "What kinds of sessions do you want in this plan?",
                 suggestions: [
-                    TraiSuggestion("Strength", subtitle: "Build muscle with weights"),
+                    TraiSuggestion("Strength", subtitle: "Lifting and progressive overload"),
                     TraiSuggestion("Cardio", subtitle: "Running, cycling, swimming"),
-                    TraiSuggestion("HIIT", subtitle: "High-intensity intervals"),
-                    TraiSuggestion("Flexibility", subtitle: "Stretching and mobility"),
-                    TraiSuggestion("Mixed", subtitle: "A bit of everything")
+                    TraiSuggestion("Climbing", subtitle: "Bouldering, rope, technique"),
+                    TraiSuggestion("Yoga", subtitle: "Flow, recovery, breathwork"),
+                    TraiSuggestion("Pilates", subtitle: "Core and control"),
+                    TraiSuggestion("HIIT", subtitle: "Intervals and conditioning"),
+                    TraiSuggestion("Mobility", subtitle: "Joint health and movement"),
+                    TraiSuggestion("Mixed", subtitle: "Blend multiple session types")
                 ],
                 selectionMode: .multiple,
-                placeholder: "Or describe your preferred style..."
+                placeholder: "Or describe any custom split or activity mix..."
             )
 
         case .experience:
@@ -123,35 +123,23 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 placeholder: "Or tell me about your schedule..."
             )
 
-        case .split:
-            return TraiQuestionConfig(
-                id: rawValue,
-                question: "Do you have a preferred training split?",
-                suggestions: [
-                    TraiSuggestion("Push/Pull/Legs", subtitle: "6 days: chest+shoulders, back+biceps, legs"),
-                    TraiSuggestion("Upper/Lower", subtitle: "4 days: alternate upper and lower body"),
-                    TraiSuggestion("Full Body", subtitle: "2-3 days: hit everything each session"),
-                    TraiSuggestion("Bro Split", subtitle: "5 days: one muscle group per day"),
-                    TraiSuggestion("Let Trai decide", subtitle: "I'll pick the best split for you", isSkip: true)
-                ],
-                selectionMode: .single,
-                placeholder: "Or describe your ideal split..."
-            )
-
         case .cardio:
             return TraiQuestionConfig(
                 id: rawValue,
-                question: "What type of cardio do you enjoy?",
+                question: "Any specific modalities you want included?",
                 suggestions: [
                     TraiSuggestion("Running"),
                     TraiSuggestion("Cycling"),
                     TraiSuggestion("Swimming"),
+                    TraiSuggestion("Climbing"),
+                    TraiSuggestion("Yoga"),
+                    TraiSuggestion("Pilates"),
                     TraiSuggestion("Rowing"),
-                    TraiSuggestion("Jump Rope"),
+                    TraiSuggestion("Walking"),
                     TraiSuggestion("Anything works", isSkip: true)
                 ],
                 selectionMode: .multiple,
-                placeholder: "Or tell me what you like..."
+                placeholder: "Or describe the modalities you want..."
             )
 
         case .goals:
@@ -162,16 +150,6 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 selectionMode: .multiple,
                 placeholder: "Type your goal...",
                 skipText: "No specific goal"
-            )
-
-        case .weakPoints:
-            return TraiQuestionConfig(
-                id: rawValue,
-                question: "Any areas you feel are weak or want to focus on?",
-                suggestions: weakPointSuggestions,
-                selectionMode: .multiple,
-                placeholder: "Type a focus area...",
-                skipText: "Nothing specific"
             )
 
         case .injuries:
@@ -189,15 +167,6 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 placeholder: "Describe any limitations..."
             )
 
-        case .preferences:
-            return TraiQuestionConfig(
-                id: rawValue,
-                question: "Anything else? Exercises you love or hate?",
-                suggestions: preferenceSuggestions,
-                selectionMode: .multiple,
-                placeholder: "Tell me what you enjoy or want to avoid...",
-                skipText: "No preference"
-            )
         }
     }
 
@@ -214,42 +183,14 @@ enum WorkoutPlanQuestion: String, CaseIterable {
         ]
     }
 
-    private var weakPointSuggestions: [TraiSuggestion] {
-        [
-            TraiSuggestion("Weak shoulders"),
-            TraiSuggestion("Small arms"),
-            TraiSuggestion("Lagging legs"),
-            TraiSuggestion("Weak core"),
-            TraiSuggestion("Poor posture"),
-            TraiSuggestion("Low endurance"),
-            TraiSuggestion("Nothing specific", isSkip: true)
-        ]
-    }
-
-    private var preferenceSuggestions: [TraiSuggestion] {
-        [
-            TraiSuggestion("Love deadlifts"),
-            TraiSuggestion("Hate leg day"),
-            TraiSuggestion("Prefer dumbbells"),
-            TraiSuggestion("Love compound lifts"),
-            TraiSuggestion("No preference", isSkip: true)
-        ]
-    }
-
     /// Whether this question should be shown based on user's previous answers
     func shouldShow(given answers: TraiCollectedAnswers) -> Bool {
         switch self {
-        case .split:
-            // Only show split question for strength/mixed training
-            let workoutTypes = answers.answers(for: WorkoutPlanQuestion.workoutType.rawValue)
-            return workoutTypes.contains("Strength") || workoutTypes.contains("Mixed")
-
         case .cardio:
-            // Only show cardio question for cardio/mixed/hiit
+            // Show the modality follow-up for anything beyond pure strength.
             let workoutTypes = answers.answers(for: WorkoutPlanQuestion.workoutType.rawValue)
-            return workoutTypes.contains("Cardio") ||
-                   workoutTypes.contains("Mixed") ||
-                   workoutTypes.contains("HIIT")
+            guard !workoutTypes.isEmpty else { return false }
+            return !workoutTypes.allSatisfy { $0 == "Strength" }
 
         default:
             return true

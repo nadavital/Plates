@@ -13,6 +13,7 @@ struct WorkoutsView: View {
         let name: String
         let type: LiveWorkout.WorkoutType
         let muscles: [LiveWorkout.MuscleGroup]
+        let focusAreas: [String]
     }
 
     // MARK: - Queries
@@ -23,6 +24,8 @@ struct WorkoutsView: View {
     @Query private var allWorkouts: [WorkoutSession]
 
     @Query private var allLiveWorkouts: [LiveWorkout]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
+    @Query(sort: \ExerciseHistory.performedAt, order: .reverse) private var allExerciseHistory: [ExerciseHistory]
 
     /// Completed in-app workouts (LiveWorkout with completedAt set)
     private var completedLiveWorkouts: [LiveWorkout] {
@@ -31,9 +34,14 @@ struct WorkoutsView: View {
 
     // MARK: - Environment
 
+    @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
+    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
 
     // MARK: - Services
 
@@ -47,6 +55,8 @@ struct WorkoutsView: View {
     @State private var recommendedTemplateId: UUID?
     @State private var cachedWorkoutsByDate: [(date: Date, workouts: [WorkoutSession])] = []
     @State private var cachedLiveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])] = []
+    @State private var suggestedWorkoutGoals: [WorkoutGoalSuggestion] = []
+    @State private var celebratedWorkoutGoal: WorkoutGoal?
 
     // MARK: - Sheet States
 
@@ -54,6 +64,8 @@ struct WorkoutsView: View {
     @State private var showingMuscleRecoveryDetail = false
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
+    @State private var showingWorkoutGoalDetail: WorkoutGoal?
+    @State private var showingWorkoutGoalAISetup = false
     @State private var showingWorkoutSheet = false
     @State private var showingCustomWorkoutSetup = false
     @State private var showingPersonalRecords = false
@@ -75,7 +87,9 @@ struct WorkoutsView: View {
     private static let workoutHistoryFetchLimit = 48
     private static let maxHistoryDayGroups = 56
     private static let sectionSnapshotUserDefaultsKey = "workouts_tab_cached_sections_v1"
+    private static let goalSuggestionSnapshotUserDefaultsKey = "workouts_goal_suggestions_v1"
     private static let sectionSnapshotTTLSeconds: TimeInterval = 7 * 24 * 60 * 60
+    private static let goalSuggestionSnapshotTTLSeconds: TimeInterval = 21 * 24 * 60 * 60
     private static let recoveryReadyThresholdHours: Double = 48
     private static let recoveryRecoveringThresholdHours: Double = 24
     private static var initialHistoryRefreshDelayMilliseconds: Int {
@@ -130,6 +144,9 @@ struct WorkoutsView: View {
             _templateScores = State(initialValue: Self.templateScores(from: cachedSnapshot))
             _recommendedTemplateId = State(initialValue: Self.recommendedTemplateId(from: cachedSnapshot))
         }
+        if let cachedGoalSuggestionSnapshot = Self.loadCachedGoalSuggestionSnapshot(now: now) {
+            _suggestedWorkoutGoals = State(initialValue: cachedGoalSuggestionSnapshot.suggestions)
+        }
     }
 
     // MARK: - Computed Properties
@@ -140,6 +157,126 @@ struct WorkoutsView: View {
 
     private var activeWorkout: LiveWorkout? {
         allLiveWorkouts.first { $0.isInProgress }
+    }
+
+    private var usesMetricExerciseWeight: Bool {
+        userProfile?.usesMetricExerciseWeight ?? true
+    }
+
+    private var canAccessAIFeatures: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var activeWorkoutGoals: [WorkoutGoal] {
+        workoutGoals
+            .filter { $0.status == .active }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
+    private var workoutGoalInsights: [WorkoutGoalInsight] {
+        WorkoutGoalProgressResolver.insights(
+            goals: activeWorkoutGoals,
+            workouts: completedLiveWorkouts,
+            sessions: workoutGoalSessions,
+            exerciseHistory: allExerciseHistory,
+            useLbs: !usesMetricExerciseWeight
+        )
+    }
+
+    private var workoutGoalSignals: [RecentWorkoutSignal] {
+        WorkoutGoalProgressResolver.globalRecentSignals(
+            from: completedLiveWorkouts,
+            sessions: workoutGoalSessions
+        )
+    }
+
+    private var staleWorkoutGoalNeedingCheckIn: WorkoutGoal? {
+        WorkoutGoalProgressResolver.staleGoalsNeedingCheckIn(
+            goals: activeWorkoutGoals,
+            workouts: completedLiveWorkouts,
+            sessions: workoutGoalSessions
+        ).first
+    }
+
+    private var workoutGoalSessions: [WorkoutSession] {
+        let mergedHealthKitIDs = Set(completedLiveWorkouts.compactMap(\.mergedHealthKitWorkoutID))
+        return allWorkouts.filter { workout in
+            guard let healthKitWorkoutID = workout.healthKitWorkoutID else { return true }
+            return !mergedHealthKitIDs.contains(healthKitWorkoutID)
+        }
+    }
+
+    private var recentWorkoutModes: [WorkoutMode] {
+        let liveModes = completedLiveWorkouts
+            .sorted { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }
+            .prefix(8)
+            .map(\.type)
+
+        let sessionModes = allWorkouts
+            .prefix(8)
+            .map(\.inferredWorkoutMode)
+
+        return liveModes + sessionModes
+    }
+
+    private var plannedWorkoutModes: [WorkoutMode] {
+        workoutPlan?.templates.map(\.sessionType) ?? []
+    }
+
+    private var personalizedWorkoutTypes: [WorkoutMode] {
+        WorkoutMode.personalizedOrder(
+            recentModes: recentWorkoutModes,
+            plannedModes: plannedWorkoutModes,
+            goalModes: activeWorkoutGoals.compactMap(\.linkedWorkoutType)
+        )
+    }
+
+    private var customWorkoutSuggestions: [CustomWorkoutSetupSheet.SessionSuggestion] {
+        var suggestions: [CustomWorkoutSetupSheet.SessionSuggestion] = []
+        var seen = Set<String>()
+
+        for template in workoutPlan?.templates ?? [] {
+            let normalizedTitle = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedFocus = template.focusAreas.map(\.goalNormalizedKey).joined(separator: "|")
+            let key = "\(normalizedTitle.goalNormalizedKey)|\(template.sessionType.rawValue)|\(normalizedFocus)"
+            guard !seen.contains(key) else { continue }
+
+            suggestions.append(
+                .init(
+                    id: key,
+                    title: normalizedTitle,
+                    workoutType: template.sessionType,
+                    focusAreas: template.focusAreas,
+                    targetMuscles: LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+                )
+            )
+            seen.insert(key)
+        }
+
+        for workout in completedLiveWorkouts.sorted(by: { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }) {
+            let normalizedTitle = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedFocus = workout.focusAreas.map(\.goalNormalizedKey).joined(separator: "|")
+            let key = "\(normalizedTitle.goalNormalizedKey)|\(workout.type.rawValue)|\(normalizedFocus)"
+            guard !seen.contains(key) else { continue }
+
+            suggestions.append(
+                .init(
+                    id: key,
+                    title: normalizedTitle,
+                    workoutType: workout.type,
+                    focusAreas: workout.focusAreas,
+                    targetMuscles: workout.muscleGroups
+                )
+            )
+            seen.insert(key)
+        }
+
+        return Array(suggestions.prefix(4))
     }
 
     private var workoutsByDate: [(date: Date, workouts: [WorkoutSession])] { cachedWorkoutsByDate }
@@ -209,6 +346,21 @@ struct WorkoutsView: View {
                         showingCustomWorkoutSetup = true
                     }
 
+                    WorkoutGoalsOverviewSection(
+                        insights: workoutGoalInsights,
+                        signals: workoutGoalSignals,
+                        celebratedGoal: celebratedWorkoutGoal,
+                        canCreateGoalsWithTrai: canAccessAIFeatures,
+                        onCreateGoalWithTrai: startWorkoutGoalsWithTrai,
+                        onUnlockPro: {
+                            proUpsellCoordinator?.present(source: .workoutPlan)
+                        },
+                        staleCheckInGoal: staleWorkoutGoalNeedingCheckIn,
+                        onCheckInWithTrai: startWorkoutGoalCheckIn,
+                        onGoalTap: { showingWorkoutGoalDetail = $0 },
+                        onToggleCompletion: toggleWorkoutGoalCompletion
+                    )
+
                     // 4. Muscle recovery card (compact view)
                     MuscleRecoveryCard(
                         recoveryInfo: recoveryInfo,
@@ -219,6 +371,7 @@ struct WorkoutsView: View {
                     WorkoutHistorySection(
                         workoutsByDate: workoutsByDate,
                         liveWorkoutsByDate: liveWorkoutsByDate,
+                        activeGoals: activeWorkoutGoals,
                         onWorkoutTap: { workout in
                             showingWorkoutDetail = workout
                         },
@@ -267,11 +420,19 @@ struct WorkoutsView: View {
                 seedHistoryCachesFromCurrentQueriesIfNeeded()
                 markHistoryRefreshNeeded()
                 markRecoveryRefreshNeeded()
+                autoCompleteEligibleGoalsIfNeeded()
             }
             .onChange(of: liveWorkoutsRefreshFingerprint) {
                 seedHistoryCachesFromCurrentQueriesIfNeeded()
                 markHistoryRefreshNeeded()
                 markRecoveryRefreshNeeded(forceRefresh: true)
+                autoCompleteEligibleGoalsIfNeeded()
+            }
+            .onChange(of: workoutGoals.count) {
+                if !activeWorkoutGoals.isEmpty {
+                    suggestedWorkoutGoals = []
+                    clearCachedGoalSuggestionSnapshot()
+                }
             }
             .onChange(of: activeWorkoutRuntimeState.isLiveWorkoutPresented) { _, isPresented in
                 if !isPresented {
@@ -312,6 +473,42 @@ struct WorkoutsView: View {
                 )
                 .traiSheetBranding()
             }
+            .sheet(item: $showingWorkoutGoalDetail) { goal in
+                WorkoutGoalDetailSheet(
+                    goal: goal,
+                    workouts: completedLiveWorkouts,
+                    sessions: workoutGoalSessions,
+                    exerciseHistory: allExerciseHistory,
+                    useLbs: !usesMetricExerciseWeight,
+                    onToggleCompletion: toggleWorkoutGoalCompletion
+                )
+            }
+            .sheet(isPresented: $showingWorkoutGoalAISetup) {
+                WorkoutGoalAISheet(
+                    userGoal: userProfile?.goal.displayName,
+                    workoutPlan: workoutPlan,
+                    workouts: completedLiveWorkouts,
+                    sessions: workoutGoalSessions,
+                    exerciseHistory: allExerciseHistory,
+                    memoryContext: workoutGoalMemoryContext(),
+                    existingGoals: workoutGoals,
+                    prefersMetricWeight: usesMetricExerciseWeight,
+                    initialSuggestions: suggestedWorkoutGoals,
+                    onSuggestionsGenerated: { suggestions in
+                        suggestedWorkoutGoals = suggestions
+                        persistCachedGoalSuggestionSnapshot(suggestions)
+                    }
+                ) { goals in
+                    for goal in goals {
+                        modelContext.insert(goal)
+                    }
+                    try? modelContext.save()
+                    suggestedWorkoutGoals = []
+                    clearCachedGoalSuggestionSnapshot()
+                    HapticManager.success()
+                }
+                .traiSheetBranding()
+            }
             .sheet(isPresented: $showingWorkoutSheet) {
                 if let workout = pendingWorkout {
                     LiveWorkoutView(workout: workout, template: pendingTemplate)
@@ -319,9 +516,13 @@ struct WorkoutsView: View {
                 }
             }
             .sheet(isPresented: $showingCustomWorkoutSetup) {
-                CustomWorkoutSetupSheet { name, type, muscles in
-                    queueCustomWorkoutStart(name: name, type: type, muscles: muscles)
-                }
+                CustomWorkoutSetupSheet(
+                    onStart: { name, type, muscles, focusAreas in
+                    queueCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
+                    },
+                    orderedWorkoutTypes: personalizedWorkoutTypes,
+                    sessionSuggestions: customWorkoutSuggestions
+                )
                 .traiSheetBranding()
             }
             .onChange(of: showingCustomWorkoutSetup) { _, isShowing in
@@ -330,7 +531,8 @@ struct WorkoutsView: View {
                 startCustomWorkout(
                     name: pendingCustomWorkoutStart.name,
                     type: pendingCustomWorkoutStart.type,
-                    muscles: pendingCustomWorkoutStart.muscles
+                    muscles: pendingCustomWorkoutStart.muscles,
+                    focusAreas: pendingCustomWorkoutStart.focusAreas
                 )
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
@@ -442,6 +644,7 @@ struct WorkoutsView: View {
         var bestScore = -Double.greatestFiniteMagnitude
 
         for template in plan.templates {
+            guard template.sessionType.supportsMuscleTargets else { continue }
             let scoredTemplate = recoveryService.scoreTemplate(template, recoveryInfo: latestRecoveryInfo)
             scores[template.id] = scoredTemplate
             if scoredTemplate.score > bestScore {
@@ -451,7 +654,7 @@ struct WorkoutsView: View {
         }
 
         templateScores = scores
-        recommendedTemplateId = bestTemplateId ?? plan.templates.first?.id
+        recommendedTemplateId = bestTemplateId
         hasPendingRecoveryRefresh = false
         pendingRecoveryRefreshShouldForce = false
         persistCachedSectionSnapshot()
@@ -616,6 +819,18 @@ struct WorkoutsView: View {
         return UUID(uuidString: rawValue)
     }
 
+    private static func loadCachedGoalSuggestionSnapshot(now: Date) -> CachedGoalSuggestionSnapshot? {
+        guard let json = UserDefaults.standard.string(forKey: goalSuggestionSnapshotUserDefaultsKey),
+              let data = json.data(using: .utf8),
+              let snapshot = try? JSONDecoder().decode(CachedGoalSuggestionSnapshot.self, from: data) else {
+            return nil
+        }
+
+        let age = now.timeIntervalSince(snapshot.generatedAt)
+        guard age >= 0, age <= goalSuggestionSnapshotTTLSeconds else { return nil }
+        return snapshot
+    }
+
     private struct CachedSectionSnapshot: Codable {
         struct RecoveryInfoItem: Codable {
             let muscleGroupRawValue: String
@@ -632,6 +847,11 @@ struct WorkoutsView: View {
         let recovery: [RecoveryInfoItem]
         let templateScores: [TemplateScoreItem]
         let recommendedTemplateId: String?
+    }
+
+    private struct CachedGoalSuggestionSnapshot: Codable {
+        let generatedAt: Date
+        let suggestions: [WorkoutGoalSuggestion]
     }
 
     private func historyWindowStartDate(now: Date = Date()) -> Date {
@@ -763,6 +983,112 @@ struct WorkoutsView: View {
             forceRefresh: pendingRecoveryRefreshShouldForce,
             delayMilliseconds: delayMilliseconds
         )
+    }
+
+    private func toggleWorkoutGoalCompletion(_ goal: WorkoutGoal) {
+        if goal.status == .completed {
+            goal.markActive()
+            goal.lastCelebratedAt = nil
+        } else {
+            goal.markCompleted()
+            goal.markCelebrated()
+            celebratedWorkoutGoal = goal
+            HapticManager.success()
+        }
+        try? modelContext.save()
+        HapticManager.selectionChanged()
+    }
+
+    private func autoCompleteEligibleGoalsIfNeeded() {
+        let eligibleInsights = workoutGoalInsights.filter { insight in
+            guard insight.goal.isActive else { return false }
+            guard insight.goal.goalKind != .milestone else { return false }
+            guard insight.goal.goalKind != .frequency else { return false }
+            guard let progressFraction = insight.progressFraction else { return false }
+            return progressFraction >= 1
+        }
+
+        guard let firstEligible = eligibleInsights.first else { return }
+        let goal = firstEligible.goal
+        guard goal.lastCelebratedAt == nil else { return }
+
+        goal.markCompleted()
+        goal.markCelebrated()
+        celebratedWorkoutGoal = goal
+        try? modelContext.save()
+        HapticManager.success()
+    }
+
+    private func startWorkoutGoalsWithTrai() {
+        guard canAccessAIFeatures else {
+            proUpsellCoordinator?.present(source: .workoutPlan)
+            return
+        }
+        showingWorkoutGoalAISetup = true
+        HapticManager.selectionChanged()
+    }
+
+    private func startWorkoutGoalCheckIn(_ goal: WorkoutGoal) {
+        guard canAccessAIFeatures else {
+            proUpsellCoordinator?.present(source: .workoutPlan)
+            return
+        }
+
+        goal.markCheckedIn()
+        try? modelContext.save()
+
+        let context = [
+            "Goal: \(goal.trimmedTitle)",
+            "Scope: \(goal.scopeSummary)",
+            goal.trackingSummary.map { "Tracking: \($0)" },
+            goal.horizonSummary,
+            goal.trimmedNotes.isEmpty ? nil : "Notes: \(goal.trimmedNotes)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n")
+
+        pendingChatPrompt = """
+        Can you check in on this workout goal and help me assess whether it still makes sense, how it has been going lately, and whether it should be refined or updated?
+
+        \(context)
+        """
+        pendingChatLaunchLabel = "Checking in on your workout goal..."
+        appTabSelection.wrappedValue = .trai
+        HapticManager.selectionChanged()
+    }
+
+    private func persistCachedGoalSuggestionSnapshot(_ suggestions: [WorkoutGoalSuggestion]) {
+        let snapshot = CachedGoalSuggestionSnapshot(generatedAt: Date(), suggestions: suggestions)
+        guard let data = try? JSONEncoder().encode(snapshot),
+              let json = String(data: data, encoding: .utf8) else {
+            return
+        }
+        UserDefaults.standard.set(json, forKey: Self.goalSuggestionSnapshotUserDefaultsKey)
+    }
+
+    private func clearCachedGoalSuggestionSnapshot() {
+        UserDefaults.standard.removeObject(forKey: Self.goalSuggestionSnapshotUserDefaultsKey)
+    }
+
+    private func workoutGoalMemoryContext() -> [String] {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { memory in
+                memory.isActive
+            },
+            sortBy: [
+                SortDescriptor(\CoachMemory.importance, order: .reverse),
+                SortDescriptor(\CoachMemory.createdAt, order: .reverse)
+            ]
+        )
+
+        let memories = (try? modelContext.fetch(descriptor)) ?? []
+
+        return memories
+            .filter {
+                $0.topic == .workout || $0.topic == .general || $0.category == .goal || $0.category == .context || $0.category == .restriction
+            }
+            .prefix(8)
+            .map(\.promptFormat)
     }
 
     private func schedulePendingRefreshesIfNeeded() {
@@ -915,12 +1241,14 @@ struct WorkoutsView: View {
     private func startCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = []
+        muscles: [LiveWorkout.MuscleGroup] = [],
+        focusAreas: [String] = []
     ) {
         let workout = templateService.createCustomWorkout(
             name: name,
             type: type,
-            muscles: muscles
+            muscles: muscles,
+            focusAreas: focusAreas
         )
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
@@ -944,11 +1272,17 @@ struct WorkoutsView: View {
     private func queueCustomWorkoutStart(
         name: String,
         type: LiveWorkout.WorkoutType,
-        muscles: [LiveWorkout.MuscleGroup]
+        muscles: [LiveWorkout.MuscleGroup],
+        focusAreas: [String]
     ) {
-        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles)
+        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
         guard showingCustomWorkoutSetup else {
-            startCustomWorkout(name: request.name, type: request.type, muscles: request.muscles)
+            startCustomWorkout(
+                name: request.name,
+                type: request.type,
+                muscles: request.muscles,
+                focusAreas: request.focusAreas
+            )
             return
         }
         pendingCustomWorkoutStart = request

@@ -25,18 +25,27 @@ struct WorkoutTemplateService {
     func createCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = []
+        muscles: [LiveWorkout.MuscleGroup] = [],
+        focusAreas: [String] = []
     ) -> LiveWorkout {
-        LiveWorkout(name: name, workoutType: type, targetMuscleGroups: muscles)
+        LiveWorkout(
+            name: name,
+            workoutType: type,
+            targetMuscleGroups: muscles,
+            focusAreas: focusAreas
+        )
     }
 
     /// Create a startable workout from a plan template (without pre-filled entries).
     func createStartWorkout(from template: WorkoutPlan.WorkoutTemplate) -> LiveWorkout {
-        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+        let muscleGroups = template.sessionType.supportsMuscleTargets
+            ? LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+            : []
         return LiveWorkout(
             name: template.name,
-            workoutType: .strength,
-            targetMuscleGroups: muscleGroups
+            workoutType: template.sessionType,
+            targetMuscleGroups: muscleGroups,
+            focusAreas: template.focusAreas
         )
     }
 
@@ -81,9 +90,14 @@ struct WorkoutTemplateService {
 
         let workout = LiveWorkout(
             name: template.name,
-            workoutType: .strength,
-            targetMuscleGroups: muscleGroups
+            workoutType: template.sessionType,
+            targetMuscleGroups: template.sessionType.supportsMuscleTargets ? muscleGroups : [],
+            focusAreas: template.focusAreas
         )
+
+        guard template.sessionType.prefersStructuredEntries else {
+            return workout
+        }
 
         // Create entries from exercise templates
         var entries: [LiveWorkoutEntry] = []

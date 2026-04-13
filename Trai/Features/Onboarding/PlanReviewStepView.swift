@@ -317,7 +317,10 @@ struct PlanReviewStepView: View {
                 .opacity(card2Visible ? 1 : 0)
 
             if let insights = plan.progressInsights {
-                ProgressInsightsCard(insights: insights)
+                ProgressInsightsCard(
+                    insights: insights,
+                    goal: planRequest?.goal
+                )
                     .offset(y: card3Visible ? 0 : 30)
                     .opacity(card3Visible ? 1 : 0)
             }

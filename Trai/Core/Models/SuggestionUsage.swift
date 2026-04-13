@@ -90,6 +90,7 @@ enum SuggestionType {
     static let healthySnacks = "healthy_snacks"
     static let logWeight = "log_weight"
     static let reviewPlan = "review_plan"
+    static let reviewLastSession = "review_last_session"
     static let caloriesLeft = "calories_left"
     static let proteinToGo = "protein_to_go"
     static let myPRs = "my_prs"

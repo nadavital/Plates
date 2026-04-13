@@ -223,6 +223,18 @@ final class LiveWorkoutViewModel {
         volumePRModePreference
     }
 
+    var usesGeneralSessionWorkspace: Bool {
+        !workout.type.prefersStructuredEntries && workout.type != .cardio
+    }
+
+    var usesFocusedCardioWorkspace: Bool {
+        workout.type == .cardio
+    }
+
+    var sessionFocusAreas: [String] {
+        workout.focusAreas
+    }
+
     /// Target muscle groups for this workout
     var targetMuscleGroups: [String] {
         workout.muscleGroups.map(\.rawValue)
@@ -1191,7 +1203,66 @@ final class LiveWorkoutViewModel {
         saveDebounced(updateLiveActivity: false)
     }
 
+    func updateWorkoutNotes(_ notes: String) {
+        guard workout.notes != notes else { return }
+        workout.notes = notes
+        saveDebounced(updateLiveActivity: false)
+    }
+
+    func updateEntryNotes(for entry: LiveWorkoutEntry, notes: String) {
+        guard entry.notes != notes else { return }
+        entry.notes = notes
+        saveDebounced(updateLiveActivity: false)
+    }
+
+    func updateEntryDuration(for entry: LiveWorkoutEntry, seconds: Int?) {
+        guard entry.durationSeconds != seconds else { return }
+        entry.durationSeconds = seconds
+        saveDebounced(updateLiveActivity: false)
+    }
+
     func toggleCardioCompletion(for entry: LiveWorkoutEntry) {
+        if entry.completedAt != nil {
+            entry.completedAt = nil
+        } else {
+            entry.completedAt = Date()
+        }
+        refreshEntriesAndMetrics()
+        saveImmediately()
+        HapticManager.selectionChanged()
+    }
+
+    func addGeneralActivity(name: String, notes: String = "", durationSeconds: Int? = nil) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        let activityType: String
+        switch workout.type {
+        case .yoga, .pilates, .flexibility, .mobility, .recovery:
+            activityType = "flexibility"
+        case .cardio, .climbing:
+            activityType = "cardio"
+        default:
+            activityType = "general"
+        }
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: trimmedName,
+            orderIndex: entries.count,
+            exerciseType: activityType
+        )
+        entry.notes = notes
+        entry.durationSeconds = durationSeconds
+
+        if workout.entries == nil {
+            workout.entries = []
+        }
+        workout.entries?.append(entry)
+        refreshEntriesAndMetrics()
+        saveImmediately()
+    }
+
+    func toggleGeneralEntryCompletion(for entry: LiveWorkoutEntry) {
         if entry.completedAt != nil {
             entry.completedAt = nil
         } else {

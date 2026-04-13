@@ -19,30 +19,49 @@ struct LiveWorkoutDetailSheet: View {
     @Bindable var workout: LiveWorkout
     var useLbs: Bool = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) private var modelContext
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
+    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
     @Query(sort: \ExerciseHistory.performedAt, order: .reverse)
     private var allExerciseHistory: [ExerciseHistory]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
+    @Query(sort: \LiveWorkout.startedAt, order: .reverse) private var allLiveWorkouts: [LiveWorkout]
+    @Query(sort: \WorkoutSession.loggedAt, order: .reverse) private var allWorkoutSessions: [WorkoutSession]
+    @Query(sort: \WorkoutGoal.createdAt, order: .reverse) private var workoutGoals: [WorkoutGoal]
     @Query private var profiles: [UserProfile]
     @State private var isEditing = false
     @State private var selectedExercise: IdentifiableExercise?
     @State private var showingExercisePicker = false
+    @State private var showingGeneralActivitySheet = false
+    @State private var showingGoalSheet = false
+    @State private var selectedGoal: WorkoutGoal?
     @State private var originalEntryIDs: Set<UUID> = []
 
-    private var exerciseCount: Int {
-        workout.entries?.count ?? 0
+    private var sortedEntries: [LiveWorkoutEntry] {
+        (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
+    }
+
+    private var entryCount: Int {
+        sortedEntries.count
     }
 
     private var totalSets: Int {
-        workout.entries?.reduce(0) { $0 + $1.sets.count } ?? 0
+        sortedEntries.reduce(0) { $0 + $1.sets.count }
     }
 
     private var completedSets: Int {
-        workout.entries?.reduce(0) { $0 + ($1.completedSets?.count ?? 0) } ?? 0
+        sortedEntries.reduce(0) { $0 + ($1.completedSets?.count ?? 0) }
+    }
+
+    private var completedActivities: Int {
+        sortedEntries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
     }
 
     private var maxWeightKg: Double? {
-        workout.entries?.flatMap { $0.sets }.compactMap { $0.weightKg }.filter { $0 > 0 }.max()
+        sortedEntries.flatMap(\.sets).compactMap(\.weightKg).filter { $0 > 0 }.max()
     }
 
     private var durationMinutes: Int {
@@ -53,6 +72,72 @@ struct LiveWorkoutDetailSheet: View {
         profiles.first?.volumePRModeValue ?? .perSet
     }
 
+    private var usesFlexibleSessionPresentation: Bool {
+        !workout.type.prefersStructuredEntries && totalSets == 0
+    }
+
+    private var sectionTitle: String {
+        if usesFlexibleSessionPresentation {
+            return "Activities"
+        }
+        return sortedEntries.contains(where: { !$0.isStrength }) ? "Workout Items" : "Exercises"
+    }
+
+    private var addButtonLabel: String {
+        usesFlexibleSessionPresentation ? "Add Activity" : "Add Exercise"
+    }
+
+    private var activitySuggestions: [String] {
+        Array(
+            Set(
+                sortedEntries
+                    .map(\.exerciseName)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        )
+        .sorted()
+    }
+
+    private var goalInsights: [WorkoutGoalInsight] {
+        WorkoutGoalProgressResolver.insights(
+            for: workout,
+            goals: workoutGoals,
+            workouts: allLiveWorkouts,
+            sessions: goalProgressSessions,
+            exerciseHistory: allExerciseHistory,
+            useLbs: useLbs
+        )
+    }
+
+    private var recentSignals: [RecentWorkoutSignal] {
+        WorkoutGoalProgressResolver.recentSignals(
+            for: workout,
+            workouts: allLiveWorkouts,
+            sessions: goalProgressSessions
+        )
+    }
+
+    private var goalProgressSessions: [WorkoutSession] {
+        let mergedHealthKitIDs = Set(
+            allLiveWorkouts
+                .filter { $0.completedAt != nil }
+                .compactMap(\.mergedHealthKitWorkoutID)
+        )
+        return allWorkoutSessions.filter { session in
+            guard let healthKitWorkoutID = session.healthKitWorkoutID else { return true }
+            return !mergedHealthKitIDs.contains(healthKitWorkoutID)
+        }
+    }
+
+    private var shouldShowRecentSignals: Bool {
+        !workout.type.supportsMuscleTargets || usesFlexibleSessionPresentation
+    }
+
+    private var canAccessTraiChat: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -60,14 +145,28 @@ struct LiveWorkoutDetailSheet: View {
                     // Header (includes stats)
                     headerSection
 
+                    traiReviewSection
+
+                    if !goalInsights.isEmpty {
+                        workoutGoalsSection
+                    }
+
                     // Exercises list
-                    if let entries = workout.entries, !entries.isEmpty {
-                        exercisesSection(entries: entries.sorted { $0.orderIndex < $1.orderIndex })
+                    if !sortedEntries.isEmpty {
+                        exercisesSection(entries: sortedEntries)
                     }
 
                     // Notes (if any)
                     if !workout.notes.isEmpty {
                         notesSection(workout.notes)
+                    }
+
+                    if goalInsights.isEmpty || shouldShowRecentSignals {
+                        workoutGoalsSection
+                    }
+
+                    if shouldShowRecentSignals {
+                        recentSignalsSection
                     }
 
                     if isEditing {
@@ -132,6 +231,32 @@ struct LiveWorkoutDetailSheet: View {
                     addExercise(exercise)
                 }
             }
+            .sheet(isPresented: $showingGeneralActivitySheet) {
+                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds in
+                    addGeneralActivity(name: name, notes: notes, durationSeconds: durationSeconds)
+                }
+            }
+            .sheet(isPresented: $showingGoalSheet) {
+                AddWorkoutGoalSheet(
+                    workoutType: workout.type,
+                    activitySuggestions: activitySuggestions,
+                    prefersMetricWeight: !useLbs
+                ) { goal in
+                    modelContext.insert(goal)
+                    try? modelContext.save()
+                }
+            }
+            .sheet(item: $selectedGoal) { goal in
+                WorkoutGoalDetailSheet(
+                    goal: goal,
+                    workouts: allLiveWorkouts,
+                    sessions: goalProgressSessions,
+                    exerciseHistory: allExerciseHistory,
+                    useLbs: useLbs,
+                    onToggleCompletion: toggleGoalCompletion
+                )
+                .traiSheetBranding()
+            }
         }
         .traiSheetBranding()
     }
@@ -182,7 +307,7 @@ struct LiveWorkoutDetailSheet: View {
         VStack(spacing: 16) {
             // Icon and title
             VStack(spacing: 8) {
-                Image(systemName: workout.type == .cardio ? "figure.run" : "dumbbell.fill")
+                Image(systemName: workout.type.iconName)
                     .font(.system(size: 40))
                     .foregroundStyle(.accent)
 
@@ -193,6 +318,13 @@ struct LiveWorkoutDetailSheet: View {
                 Text(workout.startedAt, format: .dateTime.weekday(.wide).month().day().hour().minute())
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+
+                if usesFlexibleSessionPresentation {
+                    Text(workout.displayFocusSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
 
             // Stats row
@@ -201,8 +333,33 @@ struct LiveWorkoutDetailSheet: View {
                     StatPill(icon: "clock.fill", value: formatDuration(Double(durationMinutes)), label: "time", color: .blue)
                 }
 
-                StatPill(icon: "dumbbell.fill", value: "\(exerciseCount)", label: exerciseCount == 1 ? "exercise" : "exercises", color: .green)
-                StatPill(icon: "square.stack.3d.up.fill", value: "\(totalSets)", label: totalSets == 1 ? "set" : "sets", color: .orange)
+                if usesFlexibleSessionPresentation {
+                    StatPill(
+                        icon: "list.bullet.rectangle",
+                        value: "\(entryCount)",
+                        label: entryCount == 1 ? "activity" : "activities",
+                        color: .green
+                    )
+                    StatPill(
+                        icon: "checkmark.circle.fill",
+                        value: "\(completedActivities)",
+                        label: completedActivities == 1 ? "done" : "done",
+                        color: .orange
+                    )
+                } else {
+                    StatPill(
+                        icon: "dumbbell.fill",
+                        value: "\(entryCount)",
+                        label: entryCount == 1 ? "exercise" : "exercises",
+                        color: .green
+                    )
+                    StatPill(
+                        icon: "square.stack.3d.up.fill",
+                        value: "\(totalSets)",
+                        label: totalSets == 1 ? "set" : "sets",
+                        color: .orange
+                    )
+                }
 
                 // Apple Watch merged data
                 if let calories = workout.healthKitCalories {
@@ -216,35 +373,81 @@ struct LiveWorkoutDetailSheet: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
+    private var traiReviewSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "circle.hexagongrid.circle")
+                    .font(.title3)
+                    .foregroundStyle(.accent)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Review This Workout with Trai")
+                        .font(.headline)
+
+                    Text("Jump into Trai with this completed workout queued for coaching and follow-up advice.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Button {
+                reviewWorkoutWithTrai()
+            } label: {
+                HStack {
+                    Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    Text(canAccessTraiChat ? "Ask Trai About This Workout" : "Unlock Trai Coaching")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
+        }
+        .traiCard()
+    }
+
     // MARK: - Exercises Section
 
     private func exercisesSection(entries: [LiveWorkoutEntry]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Exercises")
+            Text(sectionTitle)
                 .font(.headline)
 
             VStack(spacing: 12) {
                 ForEach(entries) { entry in
-                    LiveWorkoutExerciseCard(
-                        entry: entry,
-                        useLbs: useLbs,
-                        isEditing: isEditing,
-                        onTap: {
-                            selectedExercise = IdentifiableExercise(id: entry.exerciseName)
-                        },
-                        onAddSet: {
-                            addSet(to: entry)
-                        },
-                        onRemoveExercise: {
-                            removeExercise(entry)
-                        },
-                        onToggleWarmup: { setIndex in
-                            toggleWarmup(at: setIndex, in: entry)
-                        },
-                        onRemoveSet: { setIndex in
-                            removeSet(at: setIndex, from: entry)
-                        }
-                    )
+                    if usesFlexibleSessionPresentation || !entry.isStrength {
+                        GeneralActivityCard(
+                            entry: entry,
+                            allowsCompletionToggle: isEditing,
+                            allowsDeletion: isEditing,
+                            showsEditableFields: isEditing,
+                            onUpdateNotes: { updateNotes(for: entry, notes: $0) },
+                            onUpdateDuration: { updateDuration(for: entry, seconds: $0) },
+                            onToggleComplete: { toggleCompletion(for: entry) },
+                            onDelete: { removeExercise(entry) }
+                        )
+                    } else {
+                        LiveWorkoutExerciseCard(
+                            entry: entry,
+                            useLbs: useLbs,
+                            isEditing: isEditing,
+                            onTap: {
+                                selectedExercise = IdentifiableExercise(id: entry.exerciseName)
+                            },
+                            onAddSet: {
+                                addSet(to: entry)
+                            },
+                            onRemoveExercise: {
+                                removeExercise(entry)
+                            },
+                            onToggleWarmup: { setIndex in
+                                toggleWarmup(at: setIndex, in: entry)
+                            },
+                            onRemoveSet: { setIndex in
+                                removeSet(at: setIndex, from: entry)
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -252,9 +455,13 @@ struct LiveWorkoutDetailSheet: View {
 
     private var editActionsSection: some View {
         Button {
-            showingExercisePicker = true
+            if usesFlexibleSessionPresentation {
+                showingGeneralActivitySheet = true
+            } else {
+                showingExercisePicker = true
+            }
         } label: {
-            Label("Add Exercise", systemImage: "plus.circle.fill")
+            Label(addButtonLabel, systemImage: "plus.circle.fill")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.traiPrimary())
@@ -275,6 +482,19 @@ struct LiveWorkoutDetailSheet: View {
                 .background(Color(.secondarySystemBackground))
                 .clipShape(.rect(cornerRadius: 12))
         }
+    }
+
+    private var workoutGoalsSection: some View {
+        WorkoutGoalProgressCard(
+            insights: goalInsights,
+            onAddGoal: { showingGoalSheet = true },
+            onToggleCompletion: toggleGoalCompletion,
+            onGoalTap: { selectedGoal = $0 }
+        )
+    }
+
+    private var recentSignalsSection: some View {
+        RecentWorkoutSignalsCard(signals: recentSignals)
     }
 
     // MARK: - Helpers
@@ -321,6 +541,57 @@ struct LiveWorkoutDetailSheet: View {
 
         modelContext.insert(entry)
         workout.entries?.append(entry)
+        HapticManager.selectionChanged()
+    }
+
+    private func addGeneralActivity(name: String, notes: String, durationSeconds: Int?) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        if workout.entries == nil {
+            workout.entries = []
+        }
+
+        let entry = LiveWorkoutEntry(
+            exerciseName: trimmedName,
+            orderIndex: workout.entries?.count ?? 0,
+            exerciseType: exerciseTypeForWorkout
+        )
+        entry.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        entry.durationSeconds = durationSeconds
+        if durationSeconds != nil {
+            entry.completedAt = Date()
+        }
+
+        modelContext.insert(entry)
+        workout.entries?.append(entry)
+        HapticManager.selectionChanged()
+    }
+
+    private func reviewWorkoutWithTrai() {
+        guard canAccessTraiChat else {
+            proUpsellCoordinator?.present(source: .chat)
+            HapticManager.lightTap()
+            return
+        }
+
+        pendingChatPrompt = workout.traiReviewPrompt
+        pendingChatLaunchLabel = "Reviewing your latest workout..."
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
+            actionKey: "engagement.review_completed_workout_with_trai",
+            domain: .engagement,
+            surface: .workouts,
+            outcome: .opened,
+            relatedEntityId: workout.id,
+            metadata: [
+                "source": "completed_live_workout_detail",
+                "workout_name": workout.name
+            ]
+        )
+        dismiss()
+        DispatchQueue.main.async {
+            appTabSelection.wrappedValue = .trai
+        }
         HapticManager.selectionChanged()
     }
 
@@ -379,6 +650,42 @@ struct LiveWorkoutDetailSheet: View {
         var set = entry.sets[index]
         set.isWarmup.toggle()
         entry.updateSet(at: index, with: set)
+        HapticManager.selectionChanged()
+    }
+
+    private func updateNotes(for entry: LiveWorkoutEntry, notes: String) {
+        entry.notes = notes
+    }
+
+    private func updateDuration(for entry: LiveWorkoutEntry, seconds: Int?) {
+        entry.durationSeconds = seconds
+    }
+
+    private func toggleCompletion(for entry: LiveWorkoutEntry) {
+        entry.completedAt = entry.completedAt == nil ? Date() : nil
+        HapticManager.selectionChanged()
+    }
+
+    private var exerciseTypeForWorkout: String {
+        switch workout.type {
+        case .cardio, .climbing:
+            return "cardio"
+        case .yoga, .pilates, .flexibility, .mobility, .recovery:
+            return "flexibility"
+        case .strength, .mixed, .hiit:
+            return "strength"
+        case .custom:
+            return "general"
+        }
+    }
+
+    private func toggleGoalCompletion(_ goal: WorkoutGoal) {
+        if goal.status == .completed {
+            goal.markActive()
+        } else {
+            goal.markCompleted()
+        }
+        try? modelContext.save()
         HapticManager.selectionChanged()
     }
 

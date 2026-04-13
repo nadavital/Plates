@@ -71,6 +71,7 @@ extension AIPromptBuilder {
         - calorieDeficitOrSurplus: The daily calorie difference from TDEE (negative = deficit, positive = surplus)
         - shortTermMilestone: A specific, achievable 4-week milestone
         - longTermOutlook: What to expect over 3-6 months
+        - For body recomposition or maintenance-style plans, treat small calorie swings as effectively weight-stable. Do not emphasize tiny surpluses/deficits as "gaining" or "losing" if the plan is essentially near maintenance.
 
         Be specific to this person's profile. Don't give generic advice - tailor everything to their age, gender, activity level, goal, and any restrictions.
         """
@@ -156,8 +157,8 @@ extension AIPromptBuilder {
         Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         RESPONSE TYPES - Choose ONE:
-        1. "message" - For questions, clarifications, or asking follow-ups. Use this MOST of the time.
-        2. "proposePlan" - When you want to SUGGEST a new plan. The user will see a preview and can accept/reject.
+        1. "message" - For questions, clarifications, or one short follow-up when absolutely needed.
+        2. "proposePlan" - When you want to SUGGEST a new plan. Prefer this when the user intent is already clear.
         3. "planUpdate" - ONLY use when you are 100% certain this matches what the user wants (e.g., they explicitly confirmed a proposal).
 
         CURRENT USER PROFILE:
@@ -194,8 +195,9 @@ extension AIPromptBuilder {
 
         GUIDELINES:
         - Keep responses SHORT and chat-like. No walls of text!
-        - Ask follow-up questions to understand what they really want
-        - If they ask to change something, ask clarifying questions first (e.g., "How much lower would you like the calories?" or "Any specific reason?")
+        - Prefer making a reasonable proposal when the user intent is clear
+        - Ask AT MOST one short follow-up only when a missing detail would materially change the plan
+        - If they ask to change something directionally (lower calories, more protein, leaner, more filling, etc.), propose a concrete adjustment instead of asking for exact numbers first
         - Only use "proposePlan" when you have enough info to make a good suggestion
         - Only use "planUpdate" if the user explicitly accepts a proposal or gives very clear instructions
         - Keep the selected coach tone consistent with the rest of the app

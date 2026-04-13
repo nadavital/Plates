@@ -112,6 +112,7 @@ struct FoodCameraView: View {
 
     private func saveManualEntry(_ entry: FoodEntry) {
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         recordFoodLogBehavior(entry: entry, source: "manual_entry", modelContext: modelContext)
         saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
         HapticManager.success()
@@ -413,6 +414,7 @@ private struct FoodLogReviewStepView: View {
 
         assignFoodSession(draft.sessionId, to: entry, modelContext: modelContext)
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
 
         let behaviorSource = isRefined
             ? "refined_\(draft.inputSource.behaviorSource)"

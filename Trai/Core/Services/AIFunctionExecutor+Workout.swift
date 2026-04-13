@@ -29,7 +29,9 @@ extension AIFunctionExecutor {
 
         // Get workout preferences from args
         let workoutTypeString = args["workout_type"] as? String
-        let workoutType = workoutTypeString.flatMap { LiveWorkout.WorkoutType(rawValue: $0) } ?? .strength
+        let workoutType = workoutTypeString
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .flatMap { LiveWorkout.WorkoutType(rawValue: $0) } ?? .strength
         let durationMinutes = args["duration_minutes"] as? Int ?? 45
 
         // Get target muscles - either from args or from recovery recommendations
@@ -60,7 +62,7 @@ extension AIFunctionExecutor {
         durationMinutes: Int
     ) -> WorkoutSuggestion {
         // Generate workout name based on muscles
-        let name = generateWorkoutName(for: targetMuscles)
+        let name = generateWorkoutName(for: targetMuscles, workoutType: workoutType)
 
         // Get exercises for target muscles
         let exercises = getExercisesForMuscles(targetMuscles, workoutType: workoutType)
@@ -82,6 +84,17 @@ extension AIFunctionExecutor {
     }
 
     private func generateWorkoutName(for muscles: [LiveWorkout.MuscleGroup]) -> String {
+        generateWorkoutName(for: muscles, workoutType: .strength)
+    }
+
+    private func generateWorkoutName(
+        for muscles: [LiveWorkout.MuscleGroup],
+        workoutType: LiveWorkout.WorkoutType
+    ) -> String {
+        if muscles.isEmpty, workoutType != .strength {
+            return "\(workoutType.displayName) Session"
+        }
+
         let muscleSet = Set(muscles)
 
         // Check for common workout splits
@@ -106,7 +119,7 @@ extension AIFunctionExecutor {
             return "\(first.displayName) & More"
         }
 
-        return "Custom Workout"
+        return workoutType == .strength ? "Custom Workout" : "\(workoutType.displayName) Session"
     }
 
     private func getExercisesForMuscles(

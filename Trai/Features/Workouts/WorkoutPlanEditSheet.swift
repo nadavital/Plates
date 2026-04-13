@@ -21,6 +21,8 @@ struct WorkoutPlanEditSheet: View {
     @State private var showingDayEditor = false
     @State private var editingTemplateID: UUID?
     @State private var editorDayName = ""
+    @State private var editorSessionType: WorkoutMode = .strength
+    @State private var editorFocusAreasText = ""
     @State private var editorSelectedMuscles: Set<LiveWorkout.MuscleGroup> = [.fullBody]
     @State private var editedPlan: WorkoutPlan
     @State private var hasPendingChanges = false
@@ -84,13 +86,26 @@ struct WorkoutPlanEditSheet: View {
                 title: editingTemplateID == nil ? "Add Workout Day" : "Edit Workout Day",
                 confirmTitle: editingTemplateID == nil ? "Add" : "Save",
                 dayName: $editorDayName,
+                sessionType: $editorSessionType,
+                focusAreasText: $editorFocusAreasText,
                 selectedMuscles: $editorSelectedMuscles,
                 onCancel: { showingDayEditor = false },
                 onConfirm: {
                     if let templateID = editingTemplateID {
-                        updateWorkoutDay(templateID: templateID, name: editorDayName, muscles: editorSelectedMuscles)
+                        updateWorkoutDay(
+                            templateID: templateID,
+                            name: editorDayName,
+                            sessionType: editorSessionType,
+                            focusAreas: editorFocusAreas,
+                            muscles: editorSelectedMuscles
+                        )
                     } else {
-                        addWorkoutDay(name: editorDayName, muscles: editorSelectedMuscles)
+                        addWorkoutDay(
+                            name: editorDayName,
+                            sessionType: editorSessionType,
+                            focusAreas: editorFocusAreas,
+                            muscles: editorSelectedMuscles
+                        )
                     }
                     showingDayEditor = false
                 }
@@ -225,7 +240,9 @@ struct WorkoutPlanEditSheet: View {
                 LabeledContent("Rep target", value: "\(repsTrigger)")
             }
 
-            LabeledContent("Weight increment", value: weightIncrementDisplay)
+            if editedPlan.progressionStrategy.weightIncrementKg > 0 {
+                LabeledContent("Weight increment", value: weightIncrementDisplay)
+            }
 
             Text(editedPlan.progressionStrategy.description)
                 .font(.subheadline)
@@ -275,6 +292,8 @@ struct WorkoutPlanEditSheet: View {
     private func presentAddDaySheet() {
         editingTemplateID = nil
         editorDayName = ""
+        editorSessionType = orderedTemplates.last?.sessionType ?? .strength
+        editorFocusAreasText = ""
         editorSelectedMuscles = [.fullBody]
         showingDayEditor = true
     }
@@ -282,19 +301,38 @@ struct WorkoutPlanEditSheet: View {
     private func presentEditDaySheet(for template: WorkoutPlan.WorkoutTemplate) {
         editingTemplateID = template.id
         editorDayName = template.name
+        editorSessionType = template.sessionType
+        editorFocusAreasText = template.focusAreas.joined(separator: ", ")
         let selected = Set(template.targetMuscleGroups.compactMap(normalizeMuscleGroup))
         editorSelectedMuscles = selected.isEmpty ? [.fullBody] : selected
         showingDayEditor = true
     }
 
-    private func addWorkoutDay(name: String, muscles: Set<LiveWorkout.MuscleGroup>) {
-        let selectedMuscles = muscles.isEmpty ? [.fullBody] : muscles
-        let targetGroups = orderedTargetGroups(from: selectedMuscles)
+    private var editorFocusAreas: [String] {
+        sanitizeFocusAreas(editorFocusAreasText.components(separatedBy: ","))
+    }
+
+    private func addWorkoutDay(
+        name: String,
+        sessionType: WorkoutMode,
+        focusAreas: [String],
+        muscles: Set<LiveWorkout.MuscleGroup>
+    ) {
+        let targetGroups = targetGroupsForSessionType(sessionType, selectedMuscles: muscles)
+        let resolvedFocusAreas = sanitizeFocusAreas(focusAreas.isEmpty ? targetGroups : focusAreas)
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalName = trimmedName.isEmpty ? "Workout Day \(orderedTemplates.count + 1)" : trimmedName
+        let finalName = trimmedName.isEmpty
+            ? defaultDayName(
+                for: sessionType,
+                focusAreas: resolvedFocusAreas.isEmpty ? targetGroups : resolvedFocusAreas,
+                dayIndex: orderedTemplates.count + 1
+            )
+            : trimmedName
 
         let newTemplate = WorkoutPlan.WorkoutTemplate(
             name: finalName,
+            sessionType: sessionType,
+            focusAreas: resolvedFocusAreas,
             targetMuscleGroups: targetGroups,
             exercises: [],
             estimatedDurationMinutes: editedPlan.templates.first?.estimatedDurationMinutes ?? 45,
@@ -309,15 +347,33 @@ struct WorkoutPlanEditSheet: View {
         )
     }
 
-    private func updateWorkoutDay(templateID: UUID, name: String, muscles: Set<LiveWorkout.MuscleGroup>) {
-        let targetGroups = orderedTargetGroups(from: muscles)
+    private func updateWorkoutDay(
+        templateID: UUID,
+        name: String,
+        sessionType: WorkoutMode,
+        focusAreas: [String],
+        muscles: Set<LiveWorkout.MuscleGroup>
+    ) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let updated = orderedTemplates.map { template in
             guard template.id == templateID else { return template }
+            let targetGroups = targetGroupsForSessionType(
+                sessionType,
+                selectedMuscles: muscles
+            )
+            let resolvedFocusAreas = sanitizeFocusAreas(focusAreas.isEmpty ? targetGroups : focusAreas)
             return copyTemplate(
                 template,
-                name: trimmedName.isEmpty ? template.name : trimmedName,
+                name: trimmedName.isEmpty
+                    ? defaultDayName(
+                        for: sessionType,
+                        focusAreas: resolvedFocusAreas.isEmpty ? targetGroups : resolvedFocusAreas,
+                        dayIndex: template.order + 1
+                    )
+                    : trimmedName,
+                sessionType: sessionType,
+                focusAreas: resolvedFocusAreas,
                 targetMuscleGroups: targetGroups
             )
         }
@@ -383,9 +439,15 @@ struct WorkoutPlanEditSheet: View {
 
     private func normalizeTemplates(_ templates: [WorkoutPlan.WorkoutTemplate]) -> [WorkoutPlan.WorkoutTemplate] {
         templates.enumerated().map { index, template in
-            copyTemplate(
+            let targetGroups = template.sessionType.supportsMuscleTargets
+                ? sanitizeTargetGroups(template.targetMuscleGroups)
+                : []
+            let focusAreas = sanitizeFocusAreas(template.focusAreas.isEmpty ? targetGroups : template.focusAreas)
+            return copyTemplate(
                 template,
-                targetMuscleGroups: sanitizeTargetGroups(template.targetMuscleGroups),
+                sessionType: template.sessionType,
+                focusAreas: focusAreas,
+                targetMuscleGroups: targetGroups,
                 exercises: [],
                 order: index
             )
@@ -395,12 +457,20 @@ struct WorkoutPlanEditSheet: View {
     private func sanitizeTargetGroups(_ groups: [String]) -> [String] {
         var seen: Set<String> = []
         let normalized: [String] = groups.compactMap { raw in
-            guard let muscle = normalizeMuscleGroup(raw) else { return nil }
-            if seen.contains(muscle.rawValue) {
+            if let muscle = normalizeMuscleGroup(raw) {
+                if seen.contains(muscle.rawValue) {
+                    return nil
+                }
+                seen.insert(muscle.rawValue)
+                return muscle.rawValue
+            }
+
+            guard let customGroup = normalizeCustomTargetGroup(raw) else { return nil }
+            if seen.contains(customGroup) {
                 return nil
             }
-            seen.insert(muscle.rawValue)
-            return muscle.rawValue
+            seen.insert(customGroup)
+            return customGroup
         }
 
         if normalized.isEmpty {
@@ -412,6 +482,15 @@ struct WorkoutPlanEditSheet: View {
         }
 
         return normalized
+    }
+
+    private func sanitizeFocusAreas(_ focusAreas: [String]) -> [String] {
+        var seen: Set<String> = []
+        return focusAreas.compactMap { raw in
+            guard let normalized = normalizeCustomTargetGroup(raw) else { return nil }
+            guard seen.insert(normalized).inserted else { return nil }
+            return normalized
+        }
     }
 
     private func normalizeMuscleGroup(_ raw: String) -> LiveWorkout.MuscleGroup? {
@@ -427,9 +506,80 @@ struct WorkoutPlanEditSheet: View {
         return LiveWorkout.MuscleGroup(rawValue: lowered)
     }
 
+    private func normalizeCustomTargetGroup(_ raw: String) -> String? {
+        let normalized = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(
+                of: #"(?<=[a-z])(?=[A-Z])"#,
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .lowercased()
+
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func targetGroupsForSessionType(
+        _ sessionType: WorkoutMode,
+        selectedMuscles: Set<LiveWorkout.MuscleGroup>
+    ) -> [String] {
+        guard sessionType.supportsMuscleTargets else { return [] }
+        let selected = selectedMuscles.isEmpty ? Set([LiveWorkout.MuscleGroup.fullBody]) : selectedMuscles
+        return sanitizeTargetGroups(orderedTargetGroups(from: selected))
+    }
+
+    private func defaultDayName(
+        for sessionType: WorkoutMode,
+        focusAreas: [String],
+        dayIndex: Int
+    ) -> String {
+        if let primaryFocus = focusAreas.first {
+            let formatted = formatFocusAreaName(primaryFocus)
+            switch sessionType {
+            case .strength, .mixed:
+                if formatted.lowercased().contains("day") {
+                    return formatted
+                }
+                return "\(formatted) Day"
+            case .cardio, .hiit, .climbing, .yoga, .pilates, .flexibility, .mobility, .recovery, .custom:
+                return "\(formatted) \(sessionType == .custom ? "Session" : sessionType.displayName)"
+            }
+        }
+
+        switch sessionType {
+        case .strength:
+            return dayIndex == 1 ? "Strength Day" : "Strength Day \(dayIndex)"
+        case .mixed:
+            return dayIndex == 1 ? "Mixed Training" : "Mixed Training \(dayIndex)"
+        case .custom:
+            return dayIndex == 1 ? "Custom Session" : "Custom Session \(dayIndex)"
+        default:
+            return dayIndex == 1 ? sessionType.displayName : "\(sessionType.displayName) \(dayIndex)"
+        }
+    }
+
+    private func formatFocusAreaName(_ raw: String) -> String {
+        switch raw.lowercased() {
+        case "hiit":
+            return "HIIT"
+        case "fullbody":
+            return "Full Body"
+        default:
+            return raw
+                .replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: "-", with: " ")
+                .localizedCapitalized
+        }
+    }
+
     private func copyTemplate(
         _ template: WorkoutPlan.WorkoutTemplate,
         name: String? = nil,
+        sessionType: WorkoutMode? = nil,
+        focusAreas: [String]? = nil,
         targetMuscleGroups: [String]? = nil,
         exercises: [WorkoutPlan.ExerciseTemplate]? = nil,
         estimatedDurationMinutes: Int? = nil,
@@ -438,6 +588,8 @@ struct WorkoutPlanEditSheet: View {
         WorkoutPlan.WorkoutTemplate(
             id: template.id,
             name: name ?? template.name,
+            sessionType: sessionType ?? template.sessionType,
+            focusAreas: focusAreas ?? template.focusAreas,
             targetMuscleGroups: targetMuscleGroups ?? template.targetMuscleGroups,
             exercises: exercises ?? template.exercises,
             estimatedDurationMinutes: estimatedDurationMinutes ?? template.estimatedDurationMinutes,
@@ -449,7 +601,13 @@ struct WorkoutPlanEditSheet: View {
     private func normalizedPlanForSave(_ plan: WorkoutPlan) -> WorkoutPlan {
         let templates = normalizeTemplates(plan.templates).enumerated().map { index, template in
             let trimmedName = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let finalName = trimmedName.isEmpty ? "Workout Day \(index + 1)" : trimmedName
+            let finalName = trimmedName.isEmpty
+                ? defaultDayName(
+                    for: template.sessionType,
+                    focusAreas: template.focusAreas.isEmpty ? template.targetMuscleGroups : template.focusAreas,
+                    dayIndex: index + 1
+                )
+                : trimmedName
             return copyTemplate(template, name: finalName, exercises: [], order: index)
         }
 
@@ -488,9 +646,22 @@ private struct WorkoutDayRow: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
-                Text(template.muscleGroupsDisplay)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Label(template.sessionType.displayName, systemImage: template.sessionType.iconName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if !template.focusAreasDisplay.isEmpty {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+
+                        Text(template.focusAreasDisplay)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
 
             Spacer()
@@ -507,6 +678,8 @@ private struct WorkoutDayEditorSheet: View {
     let title: String
     let confirmTitle: String
     @Binding var dayName: String
+    @Binding var sessionType: WorkoutMode
+    @Binding var focusAreasText: String
     @Binding var selectedMuscles: Set<LiveWorkout.MuscleGroup>
     let onCancel: () -> Void
     let onConfirm: () -> Void
@@ -514,6 +687,44 @@ private struct WorkoutDayEditorSheet: View {
     private let upperBodyMuscles: [LiveWorkout.MuscleGroup] = [.chest, .back, .shoulders, .biceps, .triceps, .forearms]
     private let lowerBodyMuscles: [LiveWorkout.MuscleGroup] = [.quads, .hamstrings, .glutes, .calves]
     private let coreMuscles: [LiveWorkout.MuscleGroup] = [.core]
+
+    private var parsedFocusAreas: [String] {
+        focusAreasText
+            .components(separatedBy: ",")
+            .compactMap(normalizeFocusArea)
+            .reduce(into: []) { result, item in
+                if !result.contains(item) {
+                    result.append(item)
+                }
+            }
+    }
+
+    private var dayNamePlaceholder: String {
+        switch sessionType {
+        case .strength:
+            return "e.g., Push Day"
+        case .cardio:
+            return "e.g., Zone 2 Run"
+        case .hiit:
+            return "e.g., Conditioning Circuit"
+        case .climbing:
+            return "e.g., Bouldering Session"
+        case .yoga:
+            return "e.g., Morning Flow"
+        case .pilates:
+            return "e.g., Core Pilates"
+        case .flexibility:
+            return "e.g., Full Body Stretch"
+        case .mobility:
+            return "e.g., Hip Mobility"
+        case .mixed:
+            return "e.g., Strength + Cardio"
+        case .recovery:
+            return "e.g., Recovery Walk"
+        case .custom:
+            return "e.g., Skills Session"
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -529,7 +740,7 @@ private struct WorkoutDayEditorSheet: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Customize This Day")
                                 .font(.headline)
-                            Text("Set a day name and target muscles. Suggestions use your history.")
+                            Text("Choose a session type, then set the focus for that day. Strength days can still target specific muscles.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -548,7 +759,7 @@ private struct WorkoutDayEditorSheet: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
 
-                            TextField("e.g., Back + Arms", text: $dayName)
+                            TextField(dayNamePlaceholder, text: $dayName)
                                 .textInputAutocapitalization(.words)
                                 .disableAutocorrection(true)
                         }
@@ -566,18 +777,25 @@ private struct WorkoutDayEditorSheet: View {
                     .clipShape(.rect(cornerRadius: 12))
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Quick Presets")
+                        Text("Session Type")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
-                        FlowLayout(spacing: 8) {
-                            DayPresetChip(title: "Push") { applyPreset(LiveWorkout.MuscleGroup.pushMuscles) }
-                            DayPresetChip(title: "Pull") { applyPreset(LiveWorkout.MuscleGroup.pullMuscles) }
-                            DayPresetChip(title: "Legs") { applyPreset(LiveWorkout.MuscleGroup.legMuscles) }
-                            DayPresetChip(title: "Upper") {
-                                applyPreset([.chest, .back, .shoulders, .biceps, .triceps, .forearms])
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)
+                            ],
+                            spacing: 8
+                        ) {
+                            ForEach(WorkoutMode.allCases) { mode in
+                                SessionTypeTile(
+                                    mode: mode,
+                                    isSelected: sessionType == mode
+                                ) {
+                                    sessionType = mode
+                                }
                             }
-                            DayPresetChip(title: "Full Body") { applyPreset([.fullBody]) }
                         }
                     }
                     .padding(12)
@@ -585,20 +803,72 @@ private struct WorkoutDayEditorSheet: View {
                     .clipShape(.rect(cornerRadius: 12))
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Target Muscles")
+                        Text("Focus Areas")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text("Grouped by region for faster setup.")
+
+                        Text(sessionType.supportsMuscleTargets
+                             ? "Add a freeform focus like Push, Pull, Skills, or Performance."
+                             : "Describe the style of session, skill, or energy system you want this day to cover.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
 
-                        muscleTileGroup(title: "Upper Body", muscles: upperBodyMuscles)
-                        muscleTileGroup(title: "Lower Body", muscles: lowerBodyMuscles)
-                        muscleTileGroup(title: "Core", muscles: coreMuscles)
+                        FlowLayout(spacing: 8) {
+                            ForEach(sessionType.suggestedFocusPresets, id: \.self) { preset in
+                                DayPresetChip(
+                                    title: preset,
+                                    isSelected: parsedFocusAreas.contains(normalizeFocusArea(preset) ?? "")
+                                ) {
+                                    if sessionType.supportsMuscleTargets {
+                                        applyStrengthPreset(named: preset)
+                                    } else {
+                                        toggleFocusPreset(preset)
+                                    }
+                                }
+                            }
+                        }
+
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "tag")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 2)
+
+                            TextField("e.g., Flow, Bouldering, Zone 2, Conditioning", text: $focusAreasText, axis: .vertical)
+                                .lineLimit(2...4)
+                                .textInputAutocapitalization(.words)
+                                .disableAutocorrection(true)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color(.tertiarySystemFill))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.red.opacity(0.18), lineWidth: 1)
+                        }
+                        .clipShape(.rect(cornerRadius: 10))
                     }
                     .padding(12)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(.rect(cornerRadius: 12))
+
+                    if sessionType.supportsMuscleTargets {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Target Muscles")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text("Grouped by region for faster setup.")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+
+                            muscleTileGroup(title: "Upper Body", muscles: upperBodyMuscles)
+                            muscleTileGroup(title: "Lower Body", muscles: lowerBodyMuscles)
+                            muscleTileGroup(title: "Core", muscles: coreMuscles)
+                        }
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(.rect(cornerRadius: 12))
+                    }
                 }
                 .padding()
             }
@@ -617,10 +887,50 @@ private struct WorkoutDayEditorSheet: View {
             }
         }
         .traiSheetBranding()
+        .onChange(of: sessionType) { _, newValue in
+            if newValue.supportsMuscleTargets {
+                if selectedMuscles.isEmpty {
+                    selectedMuscles = [.fullBody]
+                }
+            } else {
+                selectedMuscles = []
+            }
+        }
     }
 
     private func applyPreset(_ muscles: [LiveWorkout.MuscleGroup]) {
         selectedMuscles = Set(muscles)
+    }
+
+    private func applyStrengthPreset(named preset: String) {
+        let normalizedPreset = preset.lowercased()
+        switch normalizedPreset {
+        case "push":
+            applyPreset(LiveWorkout.MuscleGroup.pushMuscles)
+        case "pull":
+            applyPreset(LiveWorkout.MuscleGroup.pullMuscles)
+        case "legs":
+            applyPreset(LiveWorkout.MuscleGroup.legMuscles)
+        case "upper":
+            applyPreset([.chest, .back, .shoulders, .biceps, .triceps, .forearms])
+        case "full body":
+            applyPreset([.fullBody])
+        default:
+            break
+        }
+
+        focusAreasText = preset
+    }
+
+    private func toggleFocusPreset(_ preset: String) {
+        guard let normalizedPreset = normalizeFocusArea(preset) else { return }
+        var updated = parsedFocusAreas
+        if let existingIndex = updated.firstIndex(of: normalizedPreset) {
+            updated.remove(at: existingIndex)
+        } else {
+            updated.append(normalizedPreset)
+        }
+        focusAreasText = updated.map(displayFocusArea).joined(separator: ", ")
     }
 
     private func toggleMuscle(_ muscle: LiveWorkout.MuscleGroup) {
@@ -636,6 +946,29 @@ private struct WorkoutDayEditorSheet: View {
 
         if selectedMuscles.isEmpty {
             selectedMuscles.insert(.fullBody)
+        }
+    }
+
+    private func normalizeFocusArea(_ raw: String) -> String? {
+        let normalized = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func displayFocusArea(_ raw: String) -> String {
+        switch raw {
+        case "hiit":
+            return "HIIT"
+        case "full body":
+            return "Full Body"
+        case "zone 2":
+            return "Zone 2"
+        default:
+            return raw.localizedCapitalized
         }
     }
 
@@ -698,6 +1031,7 @@ private struct DayMuscleTile: View {
 
 private struct DayPresetChip: View {
     let title: String
+    var isSelected: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -707,8 +1041,42 @@ private struct DayPresetChip: View {
                 .fontWeight(.medium)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color(.tertiarySystemFill))
+                .background(isSelected ? Color.accentColor.opacity(0.16) : Color(.tertiarySystemFill))
+                .foregroundStyle(isSelected ? Color.accentColor : .primary)
                 .clipShape(.capsule)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SessionTypeTile: View {
+    let mode: WorkoutMode
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: mode.iconName)
+                    .font(.subheadline)
+
+                Text(mode.displayName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.subheadline)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .clipShape(.rect(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }
@@ -722,6 +1090,8 @@ private struct DayPresetChip: View {
             templates: [
                 WorkoutPlan.WorkoutTemplate(
                     name: "Push Day",
+                    sessionType: .strength,
+                    focusAreas: ["push"],
                     targetMuscleGroups: ["chest", "shoulders", "triceps"],
                     exercises: [],
                     estimatedDurationMinutes: 45,
@@ -729,17 +1099,30 @@ private struct DayPresetChip: View {
                 ),
                 WorkoutPlan.WorkoutTemplate(
                     name: "Pull Day",
+                    sessionType: .strength,
+                    focusAreas: ["pull"],
                     targetMuscleGroups: ["back", "biceps"],
                     exercises: [],
                     estimatedDurationMinutes: 45,
                     order: 1
                 ),
                 WorkoutPlan.WorkoutTemplate(
+                    name: "Climbing Technique",
+                    sessionType: .climbing,
+                    focusAreas: ["bouldering", "technique"],
+                    targetMuscleGroups: [],
+                    exercises: [],
+                    estimatedDurationMinutes: 60,
+                    order: 2
+                ),
+                WorkoutPlan.WorkoutTemplate(
                     name: "Leg Day",
+                    sessionType: .strength,
+                    focusAreas: ["legs"],
                     targetMuscleGroups: ["quads", "hamstrings", "glutes", "calves"],
                     exercises: [],
                     estimatedDurationMinutes: 50,
-                    order: 2
+                    order: 3
                 )
             ],
             rationale: "A custom split based on your preferences and recovery.",

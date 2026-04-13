@@ -14,6 +14,8 @@ extension AIService {
     /// Context about an active workout for contextual chat
     struct WorkoutContext: Sendable {
         let workoutName: String
+        let workoutType: String
+        let focusAreas: [String]
         let elapsedMinutes: Int
         let exercisesCompleted: Int
         let exercisesTotal: Int
@@ -21,10 +23,16 @@ extension AIService {
         let setsCompleted: Int
         let totalVolume: Double
         let targetMuscleGroups: [String]
+        let sessionNotes: String?
+        let activeGoals: [String]
 
         var description: String {
             var parts: [String] = []
             parts.append("Currently doing: \(workoutName)")
+            parts.append("Workout type: \(workoutType)")
+            if !focusAreas.isEmpty {
+                parts.append("Focus areas: \(focusAreas.joined(separator: ", "))")
+            }
             parts.append("Time: \(elapsedMinutes) minutes")
             if !targetMuscleGroups.isEmpty {
                 parts.append("Target muscles: \(targetMuscleGroups.joined(separator: ", "))")
@@ -38,6 +46,12 @@ extension AIService {
             parts.append("Sets completed: \(setsCompleted)")
             if totalVolume > 0 {
                 parts.append("Total volume: \(Int(totalVolume)) kg")
+            }
+            if let sessionNotes, !sessionNotes.isEmpty {
+                parts.append("Session notes: \(sessionNotes)")
+            }
+            if !activeGoals.isEmpty {
+                parts.append("Active workout goals: \(activeGoals.joined(separator: ", "))")
             }
             return parts.joined(separator: "\n")
         }

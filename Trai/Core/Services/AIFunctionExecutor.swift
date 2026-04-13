@@ -112,6 +112,18 @@ final class AIFunctionExecutor {
         case "get_recent_workouts":
             return executeGetRecentWorkouts(call.arguments)
 
+        case "get_workout_goals":
+            return executeGetWorkoutGoals(call.arguments)
+
+        case "create_workout_goal":
+            return executeCreateWorkoutGoal(call.arguments)
+
+        case "update_workout_goal":
+            return executeUpdateWorkoutGoal(call.arguments)
+
+        case "update_workout_notes":
+            return executeUpdateWorkoutNotes(call.arguments)
+
         case "log_workout":
             return executeLogWorkout(call.arguments)
 
