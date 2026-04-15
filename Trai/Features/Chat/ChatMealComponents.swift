@@ -400,6 +400,7 @@ struct EditMealSuggestionSheet: View {
                             sugarGrams: sugarText.isEmpty ? nil : Double(sugarText),
                             servingSize: servingSize.isEmpty ? nil : servingSize,
                             emoji: meal.emoji,
+                            loggedAtDateString: meal.loggedAtDateString,
                             loggedAtTime: meal.loggedAtTime
                         )
                         onSave(updated)

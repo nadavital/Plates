@@ -11,8 +11,10 @@ import SwiftUI
 struct WorkoutPlanProposalCard: View {
     let plan: WorkoutPlan
     let message: String
-    let onAccept: () -> Void
+    let onAccept: (() -> Void)?
+    let acceptTitle: String
     let onCustomize: (() -> Void)?
+    let customizeTitle: String
 
     private struct PlanSummaryMetric {
         let value: String
@@ -48,6 +50,22 @@ struct WorkoutPlanProposalCard: View {
         )
     }
 
+    init(
+        plan: WorkoutPlan,
+        message: String,
+        onAccept: (() -> Void)?,
+        acceptTitle: String = "Use This Plan",
+        onCustomize: (() -> Void)?,
+        customizeTitle: String = "Adjust"
+    ) {
+        self.plan = plan
+        self.message = message
+        self.onAccept = onAccept
+        self.acceptTitle = acceptTitle
+        self.onCustomize = onCustomize
+        self.customizeTitle = customizeTitle
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Trai's message (only show if not empty)
@@ -67,8 +85,10 @@ struct WorkoutPlanProposalCard: View {
                 // Templates preview
                 templatesPreview
 
-                // Action buttons
-                actionButtons
+                if onAccept != nil || onCustomize != nil {
+                    // Action buttons
+                    actionButtons
+                }
             }
             .padding()
             .background(Color(.secondarySystemBackground))
@@ -167,18 +187,20 @@ struct WorkoutPlanProposalCard: View {
     private var actionButtons: some View {
         HStack(spacing: 12) {
             // Accept button
-            Button(action: onAccept) {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                    Text("Use This Plan")
-                        .fontWeight(.semibold)
+            if let accept = onAccept {
+                Button(action: accept) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                        Text(acceptTitle)
+                            .fontWeight(.semibold)
+                    }
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
                 }
-                .font(.subheadline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .buttonStyle(.traiPrimary(color: .accentColor))
             }
-            .buttonStyle(.traiPrimary(color: .accentColor))
 
             // Customize button (optional)
             if let customize = onCustomize {
@@ -186,7 +208,7 @@ struct WorkoutPlanProposalCard: View {
                     HStack(spacing: 6) {
                         Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 12, weight: .medium))
-                        Text("Adjust")
+                        Text(customizeTitle)
                     }
                     .font(.subheadline)
                     .fontWeight(.medium)

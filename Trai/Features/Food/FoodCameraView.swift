@@ -13,15 +13,18 @@ import PhotosUI
 final class FoodCameraPresentation: Identifiable {
     let id = UUID()
     let sessionId: UUID?
+    let targetDate: Date?
 
-    init(sessionId: UUID? = nil) {
+    init(sessionId: UUID? = nil, targetDate: Date? = nil) {
         self.sessionId = sessionId
+        self.targetDate = targetDate
     }
 }
 
 struct FoodCameraView: View {
     /// Session ID to add this food entry to (for grouping related entries)
     var sessionId: UUID?
+    var targetDate: Date?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -70,14 +73,15 @@ struct FoodCameraView: View {
                             draft: draftBinding,
                             enabledMacros: enabledMacros,
                             onRetake: { draft = nil },
-                            onFinish: { dismiss() }
+                            onFinish: { dismiss() },
+                            targetDate: targetDate
                         )
                     }
                 }
             }
         }
         .sheet(isPresented: $showingManualEntry) {
-            ManualFoodEntrySheet(sessionId: sessionId) { entry in
+            ManualFoodEntrySheet(sessionId: sessionId, targetDate: targetDate) { entry in
                 pendingManualEntry = entry
                 showingManualEntry = false
             }
@@ -255,6 +259,7 @@ private struct FoodLogReviewStepView: View {
     let enabledMacros: Set<MacroType>
     let onRetake: () -> Void
     let onFinish: () -> Void
+    var targetDate: Date?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
@@ -410,6 +415,7 @@ private struct FoodLogReviewStepView: View {
         entry.userDescription = trimmedDescription.isEmpty ? nil : trimmedDescription
         entry.aiAnalysis = isRefined ? "Refined from initial analysis" : draft.analysisResult?.notes
         entry.input = draft.inputSource.foodEntryInputMethod
+        entry.loggedAt = resolvedFoodLogDate(targetDate: targetDate, sessionId: draft.sessionId, modelContext: modelContext)
         entry.ensureDisplayMetadata()
 
         assignFoodSession(draft.sessionId, to: entry, modelContext: modelContext)
@@ -434,6 +440,32 @@ private func assignFoodSession(_ sessionId: UUID?, to entry: FoodEntry, modelCon
         FetchDescriptor<FoodEntry>(predicate: #Predicate { $0.sessionId == sessionId })
     )
     entry.sessionOrder = existingCount ?? 0
+}
+
+func resolvedFoodLogDate(targetDate: Date?, sessionId: UUID?, modelContext: ModelContext) -> Date {
+    if let sessionId {
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.sessionId == sessionId },
+            sortBy: [SortDescriptor(\FoodEntry.sessionOrder)]
+        )
+
+        if let sessionDate = try? modelContext.fetch(descriptor).first?.loggedAt {
+            return sessionDate
+        }
+    }
+
+    guard let targetDate else { return Date() }
+    return combineDay(targetDate, withTimeFrom: Date())
+}
+
+private func combineDay(_ day: Date, withTimeFrom timeSource: Date) -> Date {
+    let calendar = Calendar.current
+    var dateComponents = calendar.dateComponents([.year, .month, .day], from: day)
+    let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: timeSource)
+    dateComponents.hour = timeComponents.hour
+    dateComponents.minute = timeComponents.minute
+    dateComponents.second = timeComponents.second
+    return calendar.date(from: dateComponents) ?? day
 }
 
 private func saveFoodMacrosToHealthKit(_ entry: FoodEntry, healthKitService: HealthKitService?) {

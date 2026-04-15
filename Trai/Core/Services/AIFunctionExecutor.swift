@@ -31,6 +31,8 @@ final class AIFunctionExecutor {
     }
 
     enum ExecutionResult {
+        /// Direct text to return to the user without another follow-up model pass
+        case directMessage(String)
         /// Data to send back to the AI backend for final response
         case dataResponse(FunctionResult)
         /// Food suggestion to show user (needs confirmation)
@@ -39,6 +41,8 @@ final class AIFunctionExecutor {
         case suggestedPlanUpdate(PlanUpdateSuggestion)
         /// Food edit suggestion to show user (needs confirmation before applying)
         case suggestedFoodEdit(SuggestedFoodEdit)
+        /// Workout plan update suggestion (needs confirmation)
+        case suggestedWorkoutPlanUpdate(WorkoutPlanSuggestionEntry)
         /// Workout suggestion to show user (needs confirmation)
         case suggestedWorkout(WorkoutSuggestion)
         /// Workout start suggestion (needs user approval before starting)
@@ -74,17 +78,20 @@ final class AIFunctionExecutor {
 
     let modelContext: ModelContext
     let userProfile: UserProfile?
+    let pendingWorkoutPlan: WorkoutPlan?
     let isIncognitoMode: Bool
     let activityData: AIService.ActivityData
 
     init(
         modelContext: ModelContext,
         userProfile: UserProfile?,
+        pendingWorkoutPlan: WorkoutPlan? = nil,
         isIncognitoMode: Bool = false,
         activityData: AIService.ActivityData = .empty
     ) {
         self.modelContext = modelContext
         self.userProfile = userProfile
+        self.pendingWorkoutPlan = pendingWorkoutPlan
         self.isIncognitoMode = isIncognitoMode
         self.activityData = activityData
     }
@@ -92,7 +99,7 @@ final class AIFunctionExecutor {
     // MARK: - Execution
 
     /// Execute a function call and return the result
-    func execute(_ call: FunctionCall) -> ExecutionResult {
+    func execute(_ call: FunctionCall) async -> ExecutionResult {
         switch call.name {
         case "suggest_food_log":
             return executeSuggestFoodLog(call.arguments)
@@ -111,6 +118,9 @@ final class AIFunctionExecutor {
 
         case "get_recent_workouts":
             return executeGetRecentWorkouts(call.arguments)
+
+        case "revise_workout_plan":
+            return await executeReviseWorkoutPlan(call.arguments)
 
         case "get_workout_goals":
             return executeGetWorkoutGoals(call.arguments)

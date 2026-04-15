@@ -66,6 +66,7 @@ struct WorkoutsView: View {
     @State private var showingLiveWorkoutDetail: LiveWorkout?
     @State private var showingWorkoutGoalDetail: WorkoutGoal?
     @State private var showingWorkoutGoalAISetup = false
+    @State private var showingAllWorkouts = false
     @State private var showingWorkoutSheet = false
     @State private var showingCustomWorkoutSetup = false
     @State private var showingPersonalRecords = false
@@ -332,19 +333,21 @@ struct WorkoutsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Workout templates section (shows create CTA if no plan)
-                    WorkoutTemplatesSection(
+                    StartWorkoutSection(
                         templates: workoutPlan?.templates ?? [],
                         recoveryScores: templateScores,
                         recommendedTemplateId: recommendedTemplateId,
                         onStartTemplate: startWorkoutFromTemplate,
-                        onCreatePlan: workoutPlan == nil ? { showingPlanSetup = true } : nil
+                        onStartCustomWorkout: { showingCustomWorkoutSetup = true },
+                        onCreatePlan: workoutPlan == nil ? { showingPlanSetup = true } : nil,
+                        onEditPlan: workoutPlan != nil ? { showingPlanSetup = true } : nil
                     )
 
-                    // 3b. Quick start custom workout option
-                    QuickStartCard {
-                        showingCustomWorkoutSetup = true
-                    }
+                    WorkoutsQuickActionsRow(
+                        onPersonalRecords: { showingPersonalRecords = true },
+                        onHistory: { showingAllWorkouts = true },
+                        onRecovery: { showingMuscleRecoveryDetail = true }
+                    )
 
                     WorkoutGoalsOverviewSection(
                         insights: workoutGoalInsights,
@@ -356,42 +359,13 @@ struct WorkoutsView: View {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         },
                         staleCheckInGoal: staleWorkoutGoalNeedingCheckIn,
-                        onCheckInWithTrai: startWorkoutGoalCheckIn,
                         onGoalTap: { showingWorkoutGoalDetail = $0 },
                         onToggleCompletion: toggleWorkoutGoalCompletion
-                    )
-
-                    // 4. Muscle recovery card (compact view)
-                    MuscleRecoveryCard(
-                        recoveryInfo: recoveryInfo,
-                        onTap: { showingMuscleRecoveryDetail = true }
-                    )
-
-                    // 5. Recent workout history (includes both in-app and HealthKit workouts)
-                    WorkoutHistorySection(
-                        workoutsByDate: workoutsByDate,
-                        liveWorkoutsByDate: liveWorkoutsByDate,
-                        activeGoals: activeWorkoutGoals,
-                        onWorkoutTap: { workout in
-                            showingWorkoutDetail = workout
-                        },
-                        onLiveWorkoutTap: { workout in
-                            showingLiveWorkoutDetail = workout
-                        },
-                        onDelete: deleteWorkout,
-                        onDeleteLiveWorkout: deleteLiveWorkout
                     )
                 }
                 .padding()
             }
             .navigationTitle("Workouts")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Personal Records", systemImage: "trophy.fill") {
-                        showingPersonalRecords = true
-                    }
-                }
-            }
             .refreshable {
                 await syncHealthKit()
                 markHistoryRefreshNeeded(delayMilliseconds: 80)
@@ -451,7 +425,7 @@ struct WorkoutsView: View {
                 cloudKitHistoryReconciliationTask?.cancel()
             }
             .sheet(isPresented: $showingPlanSetup) {
-                WorkoutPlanChatFlow()
+                WorkoutPlanChatFlow(currentPlanToEdit: workoutPlan)
                     .traiSheetBranding()
             }
             .sheet(isPresented: $showingPersonalRecords) {
@@ -461,6 +435,21 @@ struct WorkoutsView: View {
             .sheet(isPresented: $showingMuscleRecoveryDetail) {
                 MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)
                     .traiSheetBranding()
+            }
+            .sheet(isPresented: $showingAllWorkouts) {
+                AllWorkoutsSheet(
+                    workoutsByDate: workoutsByDate,
+                    liveWorkoutsByDate: liveWorkoutsByDate,
+                    activeGoals: activeWorkoutGoals,
+                    onWorkoutTap: { workout in
+                        showingWorkoutDetail = workout
+                    },
+                    onLiveWorkoutTap: { workout in
+                        showingLiveWorkoutDetail = workout
+                    },
+                    onDelete: deleteWorkout,
+                    onDeleteLiveWorkout: deleteLiveWorkout
+                )
             }
             .sheet(item: $showingWorkoutDetail) { workout in
                 WorkoutDetailSheet(workout: workout)
@@ -542,6 +531,7 @@ struct WorkoutsView: View {
                 }
             }
         }
+        .proUpsellPresenter()
         .traiBackground()
         .overlay(alignment: .topLeading) {
             Text("ready")
@@ -1025,35 +1015,6 @@ struct WorkoutsView: View {
             return
         }
         showingWorkoutGoalAISetup = true
-        HapticManager.selectionChanged()
-    }
-
-    private func startWorkoutGoalCheckIn(_ goal: WorkoutGoal) {
-        guard canAccessAIFeatures else {
-            proUpsellCoordinator?.present(source: .workoutPlan)
-            return
-        }
-
-        goal.markCheckedIn()
-        try? modelContext.save()
-
-        let context = [
-            "Goal: \(goal.trimmedTitle)",
-            "Scope: \(goal.scopeSummary)",
-            goal.trackingSummary.map { "Tracking: \($0)" },
-            goal.horizonSummary,
-            goal.trimmedNotes.isEmpty ? nil : "Notes: \(goal.trimmedNotes)"
-        ]
-        .compactMap { $0 }
-        .joined(separator: "\n")
-
-        pendingChatPrompt = """
-        Can you check in on this workout goal and help me assess whether it still makes sense, how it has been going lately, and whether it should be refined or updated?
-
-        \(context)
-        """
-        pendingChatLaunchLabel = "Checking in on your workout goal..."
-        appTabSelection.wrappedValue = .trai
         HapticManager.selectionChanged()
     }
 

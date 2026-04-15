@@ -21,6 +21,7 @@ enum AIFunctionDeclarations {
             getUserPlan,
             updateUserPlan,
             getRecentWorkouts,
+            reviseWorkoutPlan,
             getWorkoutGoals,
             createWorkoutGoal,
             updateWorkoutGoal,
@@ -46,7 +47,7 @@ enum AIFunctionDeclarations {
     static var suggestFoodLog: [String: Any] {
         [
             "name": "suggest_food_log",
-            "description": "Suggest a food entry for the user to log. The user must confirm before it's added to their diary. Use this when the user mentions eating something or shares a food photo. Always provide accurate nutritional estimates.",
+            "description": "Suggest a food entry for the user to log. The user must confirm before it's added to their diary. Use this when the user mentions eating something or shares a food photo. Always provide accurate nutritional estimates. If the user specifies a past day or exact date, include logged_at_date.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -82,6 +83,10 @@ enum AIFunctionDeclarations {
                         "type": "string",
                         "description": "A single relevant food emoji (e.g., ☕, 🥗, 🍳, 🍕)"
                     ],
+                    "logged_at_date": [
+                        "type": "string",
+                        "description": "Date to log the meal in YYYY-MM-DD format if the user specified a day other than today (e.g., '2026-04-13' for yesterday)."
+                    ],
                     "logged_at_time": [
                         "type": "string",
                         "description": "Time to log the meal in HH:mm 24-hour format, if the user specified a time (e.g., '14:30' for 2:30 PM)"
@@ -96,7 +101,7 @@ enum AIFunctionDeclarations {
     static var editFoodEntry: [String: Any] {
         [
             "name": "edit_food_entry",
-            "description": "Edit an existing food entry in the user's diary. Use when the user asks to modify a logged meal's details.",
+            "description": "Edit an existing food entry in the user's diary. Use when the user asks to modify a logged meal's details. Never ask the user for an entry ID or UUID. If you do not already have the entry_id, call get_food_log first to retrieve it, then call this tool.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -159,7 +164,7 @@ enum AIFunctionDeclarations {
     static var getTodaysFoodLog: [String: Any] {
         [
             "name": "get_food_log",
-            "description": "Get the user's food log for a specific date or date range, including averages for multi-day queries. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to see their eating patterns and adherence. Also use when the user asks what they've eaten, their progress, remaining calories/macros, nutrition status, or averages. Returns daily_averages automatically for multi-day ranges.",
+            "description": "Get the user's food log for a specific date or date range, including averages for multi-day queries. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to see their eating patterns and adherence. Also use when the user asks what they've eaten, their progress, remaining calories/macros, nutrition status, or averages. Use this before edit_food_entry when you need to identify which logged meal to update, because it returns entry IDs and exact timestamps. Returns daily_averages automatically for multi-day ranges.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -268,6 +273,23 @@ enum AIFunctionDeclarations {
                     ]
                 ],
                 "required": []
+            ]
+        ]
+    }
+
+    static var reviseWorkoutPlan: [String: Any] {
+        [
+            "name": "revise_workout_plan",
+            "description": "Propose changes to the user's current workout plan. The user must confirm before any changes are saved. Use when the user wants to review, adjust, or change their split, workout days, exercise selection, cardio balance, workout duration, or equipment setup. Put the requested change and any relevant context you learned from workout/recovery tools into change_request.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "change_request": [
+                        "type": "string",
+                        "description": "A concise summary of what should change, including any relevant workout or recovery context (for example: 'Shorten my workouts to 45 minutes and swap one lower-body day for a recovery/cardio day because my legs have been smoked lately')."
+                    ]
+                ],
+                "required": ["change_request"]
             ]
         ]
     }

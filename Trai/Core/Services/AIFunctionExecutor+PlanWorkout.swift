@@ -210,6 +210,57 @@ extension AIFunctionExecutor {
         ))
     }
 
+    func executeReviseWorkoutPlan(_ args: [String: Any]) async -> ExecutionResult {
+        guard let profile = userProfile else {
+            return .directMessage("I couldn't find your profile, so I can't revise your workout plan yet.")
+        }
+
+        guard let currentPlan = pendingWorkoutPlan ?? profile.workoutPlan else {
+            return .directMessage("You don't have a saved workout plan yet. We can create one from the workouts tab first, then I can revise it here anytime.")
+        }
+
+        let changeRequest = (args["change_request"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        guard !changeRequest.isEmpty else {
+            return .directMessage("Tell me what you want to change in your workout plan, and I’ll propose an update for you to review.")
+        }
+
+        let request = buildWorkoutPlanRevisionRequest(profile: profile)
+        let service = AIService()
+
+        do {
+            let response = try await service.refineWorkoutPlan(
+                currentPlan: currentPlan,
+                request: request,
+                userMessage: changeRequest,
+                conversationHistory: []
+            )
+
+            if let plan = response.proposedPlan ?? response.updatedPlan {
+                return .suggestedWorkoutPlanUpdate(
+                    WorkoutPlanSuggestionEntry(
+                        plan: plan,
+                        message: response.message
+                    )
+                )
+            }
+
+            let fallbackMessage = response.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fallbackMessage.isEmpty {
+                return .directMessage(fallbackMessage)
+            }
+
+            return .directMessage("I reviewed your workout plan, but I'm not confident enough to suggest a concrete change yet.")
+        } catch {
+            return .directMessage("I hit a snag while revising your workout plan. Please try again in a moment.")
+        }
+    }
+
+    private func buildWorkoutPlanRevisionRequest(profile: UserProfile) -> WorkoutPlanGenerationRequest {
+        profile.buildWorkoutPlanRequest()
+    }
+
     func executeGetWorkoutGoals(_ args: [String: Any]) -> ExecutionResult {
         let requestedStatus = (args["status"] as? String)?.lowercased() ?? "active"
         let descriptor = FetchDescriptor<WorkoutGoal>(

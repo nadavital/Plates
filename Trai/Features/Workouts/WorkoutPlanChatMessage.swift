@@ -34,6 +34,9 @@ struct WorkoutPlanFlowMessage: Identifiable {
         /// Generated plan proposal with accept/customize options
         case planProposal(WorkoutPlan, String)
 
+        /// Existing saved plan shown as the starting point for editing
+        case currentPlan(WorkoutPlan, String)
+
         /// Plan was accepted
         case planAccepted
 

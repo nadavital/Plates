@@ -12,6 +12,7 @@ import Charts
 struct CalorieDetailSheet: View {
     let entries: [FoodEntry]
     let goal: Int
+    var isToday: Bool = true
     var historicalEntries: [FoodEntry] = []
     var onAddFood: (() -> Void)?
     let onEditEntry: (FoodEntry) -> Void
@@ -74,7 +75,7 @@ struct CalorieDetailSheet: View {
 
                     // Food list
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(onAddFood != nil ? "Today's Food" : "Food Log")
+                        Text(isToday ? "Today's Food" : "Food Log")
                             .font(.headline)
                             .padding(.horizontal)
 

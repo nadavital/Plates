@@ -11,6 +11,7 @@ import SwiftData
 struct DailyFoodTimeline: View {
     let entries: [FoodEntry]
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+    var isToday: Bool = true
     var onAddFood: (() -> Void)?
     var onAddToSession: ((UUID) -> Void)?
     let onEditEntry: (FoodEntry) -> Void
@@ -63,7 +64,7 @@ struct DailyFoodTimeline: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Text(canAddFood ? "Today's Food" : "Food Log")
+                Text(isToday ? "Today's Food" : "Food Log")
                     .font(.headline)
 
                 Spacer()

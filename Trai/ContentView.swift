@@ -299,7 +299,7 @@ struct MainTabView: View {
                 Text("Are you sure you want to end this workout?")
             }
             .fullScreenCover(item: $foodCameraPresentation) { presentation in
-                FoodCameraView(sessionId: presentation.sessionId)
+                FoodCameraView(sessionId: presentation.sessionId, targetDate: presentation.targetDate)
                     .traiSheetBranding()
             }
             .sheet(isPresented: $showingLogWeight) {
@@ -333,9 +333,12 @@ struct MainTabView: View {
                     DashboardView(
                         showRemindersBinding: $showingReminders,
                         onSelectTab: selectTab,
-                        onPresentFoodCamera: { sessionId in
+                        onPresentFoodCamera: { sessionId, targetDate in
                             guard foodCameraPresentation == nil else { return }
-                            foodCameraPresentation = FoodCameraPresentation(sessionId: sessionId)
+                            foodCameraPresentation = FoodCameraPresentation(
+                                sessionId: sessionId,
+                                targetDate: targetDate
+                            )
                         }
                     )
                 }

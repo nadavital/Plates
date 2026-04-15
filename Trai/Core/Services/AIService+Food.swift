@@ -168,11 +168,14 @@ extension AIService {
             )
 
             let responseText = try await makeRequest(request: request)
-            return try parseRefinedFoodAnalysis(from: responseText)
+            return try parseRefinedFoodAnalysis(from: responseText, preserving: currentSuggestion)
         }
     }
 
-    private func parseRefinedFoodAnalysis(from text: String) throws -> SuggestedFoodEntry {
+    private func parseRefinedFoodAnalysis(
+        from text: String,
+        preserving originalSuggestion: SuggestedFoodEntry?
+    ) throws -> SuggestedFoodEntry {
         var cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleanText.hasPrefix("```json") {
             cleanText = String(cleanText.dropFirst(7))
@@ -213,7 +216,9 @@ extension AIService {
             fatGrams: decoded.fatGrams,
             fiberGrams: decoded.fiberGrams,
             servingSize: decoded.servingSize,
-            emoji: decoded.emoji
+            emoji: decoded.emoji,
+            loggedAtDateString: originalSuggestion?.loggedAtDateString,
+            loggedAtTime: originalSuggestion?.loggedAtTime
         )
     }
 
@@ -238,6 +243,7 @@ extension AIService {
                 let fiberGrams: Double?
                 let servingSize: String?
                 let emoji: String?
+                let loggedAtDate: String?
                 let loggedAtTime: String?
             }
         }
@@ -257,10 +263,14 @@ extension AIService {
                     fiberGrams: meal.fiberGrams,
                     servingSize: meal.servingSize,
                     emoji: meal.emoji,
+                    loggedAtDateString: meal.loggedAtDate,
                     loggedAtTime: meal.loggedAtTime
                 )
                 let emoji = meal.emoji ?? "🍽️"
                 var logMessage = "\(emoji) AI suggests logging: \(meal.name) - \(meal.calories) kcal"
+                if let date = meal.loggedAtDate {
+                    logMessage += " on \(date)"
+                }
                 if let time = meal.loggedAtTime {
                     logMessage += " at \(time)"
                 }

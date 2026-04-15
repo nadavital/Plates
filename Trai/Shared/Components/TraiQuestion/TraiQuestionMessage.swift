@@ -7,6 +7,68 @@
 
 import SwiftUI
 
+// MARK: - Conversation Message Primitives
+
+/// Shared leading Trai text styling used across chat-like surfaces.
+struct TraiAssistantTextMessage: View {
+    let text: String
+    var font: Font = .body
+    var foregroundStyle: Color = .primary
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(foregroundStyle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Shared multi-paragraph Trai text styling used across chat-like surfaces.
+struct TraiAssistantParagraphMessage: View {
+    let paragraphs: [AttributedString]
+    var font: Font = .body
+    var foregroundStyle: Color = .primary
+    var enableTextSelection: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                paragraphView(paragraph)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func paragraphView(_ paragraph: AttributedString) -> some View {
+        if enableTextSelection {
+            Text(paragraph)
+                .font(font)
+                .foregroundStyle(foregroundStyle)
+                .textSelection(.enabled)
+        } else {
+            Text(paragraph)
+                .font(font)
+                .foregroundStyle(foregroundStyle)
+                .textSelection(.disabled)
+        }
+    }
+}
+
+/// Shared user reply bubble styling used across chat-like surfaces.
+struct TraiUserTextBubble: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.white)
+            .padding(TraiSpacing.md)
+            .background(Color.accentColor)
+            .clipShape(.rect(cornerRadius: TraiRadius.medium))
+    }
+}
+
 // MARK: - Question Message
 
 /// Displays a Trai question with suggestion chips that users can tap to answer
@@ -18,9 +80,7 @@ struct TraiQuestionMessage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Question text (like a Trai message)
-            Text(config.question)
-                .font(.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            TraiAssistantTextMessage(text: config.question)
 
             // Suggestion chips
             TraiSuggestionChips(

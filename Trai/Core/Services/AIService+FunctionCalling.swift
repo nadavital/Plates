@@ -148,6 +148,7 @@ extension AIService {
         var suggestedFoods: [SuggestedFoodEntry] = []
         var planUpdate: PlanUpdateSuggestion?
         var suggestedFoodEdit: SuggestedFoodEdit?
+        var suggestedWorkoutPlan: WorkoutPlanSuggestionEntry?
         var suggestedWorkout: SuggestedWorkoutEntry?
         var suggestedWorkoutLog: SuggestedWorkoutLog?
         var suggestedReminder: SuggestedReminder?
@@ -157,6 +158,7 @@ extension AIService {
         let executor = AIFunctionExecutor(
             modelContext: modelContext,
             userProfile: context.profile,
+            pendingWorkoutPlan: context.pendingWorkoutPlanSuggestion?.plan,
             isIncognitoMode: context.isIncognitoMode,
             activityData: context.activityData
         )
@@ -211,7 +213,7 @@ extension AIService {
         if !pendingFunctionCalls.isEmpty {
             for (functionName, args) in pendingFunctionCalls {
                 let call = AIFunctionExecutor.FunctionCall(name: functionName, arguments: args)
-                let result = executor.execute(call)
+                let result = await executor.execute(call)
 
                 if functionName == "save_memory", let content = args["content"] as? String {
                     savedMemories.append(content)
@@ -219,6 +221,12 @@ extension AIService {
                 }
 
                 switch result {
+                case .directMessage(let message):
+                    if textResponse.isEmpty {
+                        textResponse = message
+                        onTextChunk?(textResponse)
+                    }
+
                 case .suggestedFood(let food):
                     suggestedFoods.append(food)
                     log("🍽️ Suggest: \(food.name) (\(food.calories) kcal)", type: .info)
@@ -230,6 +238,14 @@ extension AIService {
                 case .suggestedFoodEdit(let edit):
                     suggestedFoodEdit = edit
                     log("✏️ Edit: \(edit.name) - \(edit.changes.count) changes", type: .info)
+
+                case .suggestedWorkoutPlanUpdate(let suggestion):
+                    suggestedWorkoutPlan = suggestion
+                    if textResponse.isEmpty && !suggestion.message.isEmpty {
+                        textResponse = suggestion.message
+                        onTextChunk?(textResponse)
+                    }
+                    log("🗓️ Workout plan update suggested", type: .info)
 
                 case .dataResponse(let functionResult):
                     pendingFunctionResults.append(functionResult)
@@ -280,6 +296,12 @@ extension AIService {
                 suggestedFoods.append(contentsOf: followUp.suggestedFoods)
                 if let plan = followUp.planUpdate { planUpdate = plan }
                 if let edit = followUp.suggestedFoodEdit { suggestedFoodEdit = edit }
+                if let workoutPlan = followUp.suggestedWorkoutPlan {
+                    suggestedWorkoutPlan = workoutPlan
+                }
+                if textResponse.isEmpty && !followUp.text.isEmpty {
+                    textResponse = followUp.text
+                }
                 if let reminder = followUp.suggestedReminder { suggestedReminder = reminder }
                 savedMemories.append(contentsOf: followUp.savedMemories)
             }
@@ -368,6 +390,11 @@ extension AIService {
             onTextChunk?(textResponse)
         }
 
+        if let workoutPlan = suggestedWorkoutPlan, textResponse.isEmpty {
+            textResponse = workoutPlan.message
+            onTextChunk?(textResponse)
+        }
+
         if let workoutLog = suggestedWorkoutLog, textResponse.isEmpty {
             let exercisesSummary = workoutLog.exercises.isEmpty ? "general workout" : workoutLog.exercises.map { $0.name }.joined(separator: ", ")
             let followUp = try await sendFunctionResultForSuggestion(
@@ -421,7 +448,7 @@ extension AIService {
             onFunctionCall?("log_weight")
             functionsCalled.append("log_weight")
             let call = AIFunctionExecutor.FunctionCall(name: "log_weight", arguments: quickLogArgs)
-            if case .dataResponse(let functionResult) = executor.execute(call) {
+            if case .dataResponse(let functionResult) = await executor.execute(call) {
                 pendingFunctionResults.append(functionResult)
             }
         }
@@ -460,6 +487,7 @@ extension AIService {
             suggestedFoods: suggestedFoods,
             planUpdate: planUpdate,
             suggestedFoodEdit: suggestedFoodEdit,
+            suggestedWorkoutPlan: suggestedWorkoutPlan,
             suggestedWorkout: suggestedWorkout,
             suggestedWorkoutLog: suggestedWorkoutLog,
             suggestedReminder: suggestedReminder,

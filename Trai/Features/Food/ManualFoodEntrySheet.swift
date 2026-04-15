@@ -16,6 +16,7 @@ struct ManualFoodEntrySheet: View {
     @Query private var profiles: [UserProfile]
 
     let sessionId: UUID?
+    let targetDate: Date?
     let onSave: (FoodEntry) -> Void
 
     @State private var name = ""
@@ -151,6 +152,7 @@ struct ManualFoodEntrySheet: View {
         entry.servingSize = servingSize.isEmpty ? nil : servingSize
         entry.inputMethod = "manual"
         entry.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: name)
+        entry.loggedAt = resolvedFoodLogDate(targetDate: targetDate, sessionId: sessionId, modelContext: modelContext)
         entry.ensureDisplayMetadata()
 
         // Assign session if adding to existing session

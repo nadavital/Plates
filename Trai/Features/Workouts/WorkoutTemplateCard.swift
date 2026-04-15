@@ -190,11 +190,6 @@ struct CompactTemplateCard: View {
                     .foregroundStyle(template.displayAccentColor)
                     .lineLimit(1)
 
-                Text(template.displaySubtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
                 // Duration
                 HStack(spacing: 2) {
                     Image(systemName: "clock")
@@ -204,11 +199,9 @@ struct CompactTemplateCard: View {
                 .foregroundStyle(.tertiary)
             }
             .frame(width: 120)
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .traiCard(cornerRadius: 14)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle())
     }
 }
 

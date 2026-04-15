@@ -23,6 +23,13 @@
 - Color consistency: match accents (e.g., Review with Trai buttons, toolbar checkmarks) to the Trai Memories hexagon colors; use `.tint(.accentColor)` for confirmation actions where applicable.
 - Widgets: the Trai widget "Log Food" button was reported as non-functional; verify the widget action/deep link flow.
 
+## Design Language
+- Before changing UI, read [design.md](/Users/navital/Desktop/Trai/design.md) and preserve the app’s current warm, rounded, material-backed look.
+- Prefer the existing design system tokens and components: `traiCard`, `traiPrimary`, `traiSecondary`, `traiTertiary`, `traiBackground`, `traiSheetBranding`, `TraiSpacing`, `TraiRadius`, and the Trai rounded font helpers.
+- Keep main surfaces compact and card-based; move secondary information into toolbars, sheets, or drill-down views instead of making the main scroll surface taller.
+- Use the Trai brand palette and semantic colors consistently, and keep the Trai lens/hexagon icon intact.
+- Use Liquid Glass only as a small interactive accent on micro-surfaces like chat input controls or tiny buttons, not as the default language for primary cards.
+
 ## Reliability Notes
 - Widget deep links: prefer routing widget `logfood` through the same `showingFoodCamera`/intent state used by `LogFoodCameraIntent`, and handle pending deep links on initial `.onAppear` (not only `.onChange`) to avoid cold-launch misses.
 - Live workout HealthKit: HR streaming is anchored-query based; make sure HealthKit auth is requested explicitly and seed UI with the most recent sample so the screen doesn't appear blank while live updates warm up.

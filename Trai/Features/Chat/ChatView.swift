@@ -287,14 +287,25 @@ struct ChatView: View {
     }
 
     var todaysFoodEntries: [FoodEntry] {
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        return allFoodEntries.filter { $0.loggedAt >= startOfDay }
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? .distantFuture
+        return allFoodEntries.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
     }
 
     var pendingMealSuggestion: (message: ChatMessage, meal: SuggestedFoodEntry)? {
         for message in currentSessionMessages.reversed() {
             if let meal = message.pendingMealSuggestions.first?.meal {
                 return (message, meal)
+            }
+        }
+        return nil
+    }
+
+    var pendingWorkoutPlanSuggestion: (message: ChatMessage, suggestion: WorkoutPlanSuggestionEntry)? {
+        for message in currentSessionMessages.reversed() {
+            if message.hasPendingWorkoutPlanSuggestion, let suggestion = message.suggestedWorkoutPlan {
+                return (message, suggestion)
             }
         }
         return nil
@@ -401,6 +412,8 @@ struct ChatView: View {
             onDismissPlan: dismissPlanSuggestion,
             onAcceptFoodEdit: acceptFoodEditSuggestion,
             onDismissFoodEdit: dismissFoodEditSuggestion,
+            onAcceptWorkoutPlan: acceptWorkoutPlanSuggestion,
+            onDismissWorkoutPlan: dismissWorkoutPlanSuggestion,
             onAcceptWorkout: acceptWorkoutSuggestion,
             onDismissWorkout: dismissWorkoutSuggestion,
             onAcceptWorkoutLog: acceptWorkoutLogSuggestion,
@@ -1125,6 +1138,8 @@ private struct ChatContentSection: View {
     let onDismissPlan: (ChatMessage) -> Void
     let onAcceptFoodEdit: (SuggestedFoodEdit, ChatMessage) -> Void
     let onDismissFoodEdit: (ChatMessage) -> Void
+    let onAcceptWorkoutPlan: (WorkoutPlanSuggestionEntry, ChatMessage) -> Void
+    let onDismissWorkoutPlan: (ChatMessage) -> Void
     let onAcceptWorkout: (SuggestedWorkoutEntry, ChatMessage) -> Void
     let onDismissWorkout: (ChatMessage) -> Void
     let onAcceptWorkoutLog: (SuggestedWorkoutLog, ChatMessage) -> Void
@@ -1183,6 +1198,12 @@ private struct ChatContentSection: View {
             },
             onDismissFoodEdit: {
                 onDismissFoodEdit($0)
+            },
+            onAcceptWorkoutPlan: { suggestion, message in
+                onAcceptWorkoutPlan(suggestion, message)
+            },
+            onDismissWorkoutPlan: {
+                onDismissWorkoutPlan($0)
             },
             onAcceptWorkout: { workout, message in
                 onAcceptWorkout(workout, message)

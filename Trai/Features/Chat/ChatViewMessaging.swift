@@ -243,6 +243,7 @@ extension ChatView {
                 memoriesContext: memoriesContext,
                 coachContext: coachContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
+                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestion?.suggestion,
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
                 activityData: activityData
@@ -318,6 +319,13 @@ extension ChatView {
         if let editData = result.suggestedFoodEdit {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 aiMessage.setSuggestedFoodEdit(editData)
+            }
+            HapticManager.lightTap()
+        }
+
+        if let workoutPlanData = result.suggestedWorkoutPlan {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                aiMessage.setSuggestedWorkoutPlan(workoutPlanData)
             }
             HapticManager.lightTap()
         }

@@ -32,7 +32,7 @@ struct DashboardView: View {
     /// Optional binding to control reminders sheet from parent (for notification taps)
     @Binding var showRemindersBinding: Bool
     let onSelectTab: ((AppTab) -> Void)?
-    let onPresentFoodCamera: ((UUID?) -> Void)?
+    let onPresentFoodCamera: ((UUID?, Date?) -> Void)?
 
     @Query private var profiles: [UserProfile]
     @Query private var allFoodEntries: [FoodEntry]
@@ -118,7 +118,7 @@ struct DashboardView: View {
     init(
         showRemindersBinding: Binding<Bool> = .constant(false),
         onSelectTab: ((AppTab) -> Void)? = nil,
-        onPresentFoodCamera: ((UUID?) -> Void)? = nil
+        onPresentFoodCamera: ((UUID?, Date?) -> Void)? = nil
     ) {
         _showRemindersBinding = showRemindersBinding
         self.onSelectTab = onSelectTab
@@ -410,103 +410,9 @@ struct DashboardView: View {
                     GeometryReader { geometry in
                         ScrollView(.vertical) {
                             LazyVStack(spacing: 18) {
-                            // Date Navigation
-                            DateNavigationBar(
-                                selectedDate: $selectedDate,
-                                isToday: isViewingToday
-                            )
-
-                            if isViewingToday, profile != nil {
-                                // Quick action buttons (only on today)
-                                QuickActionsCard(
-                                    onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
-                                    onAddWorkout: { startWorkout() },
-                                    onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") },
-                                    workoutName: quickAddWorkoutName
-                                )
-                                .traiEntrance(index: 0)
-
-                                ChatWithTraiCard(
-                                    isUnlocked: canAccessAIFeatures,
-                                    action: { openTraiChatFromDashboard() }
-                                )
-                                    .traiEntrance(index: 1)
-
-                                // Today's reminders
-                                if !todaysReminderItems.isEmpty {
-                                    TodaysRemindersCard(
-                                        reminders: todaysReminderItems,
-                                        onReminderTap: { _ in /* Tap to expand/interact */ },
-                                        onComplete: completeReminder,
-                                        onViewAll: { /* Already viewing on dashboard */ }
-                                    )
-                                    .id("reminders-section")
-                                    .traiEntrance(index: 2)
-                                }
-                            }
-
-                            CalorieProgressCard(
-                                consumed: totalCalories,
-                                goal: profile?.dailyCalorieGoal ?? 2000,
-                                onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
-                            )
-                            .traiEntrance(index: 3)
-
-                            MacroBreakdownCard(
-                                protein: totalProtein,
-                                carbs: totalCarbs,
-                                fat: totalFat,
-                                fiber: totalFiber,
-                                sugar: totalSugar,
-                                proteinGoal: profile?.dailyProteinGoal ?? 150,
-                                carbsGoal: profile?.dailyCarbsGoal ?? 200,
-                                fatGoal: profile?.dailyFatGoal ?? 65,
-                                fiberGoal: profile?.dailyFiberGoal ?? 30,
-                                sugarGoal: profile?.dailySugarGoal ?? 50,
-                                enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-                                onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
-                            )
-                            .traiEntrance(index: 4)
-
-                            DailyFoodTimeline(
-                                entries: selectedDayFoodEntries,
-                                enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
-                                onAddFood: isViewingToday ? { openFoodCameraFromDashboard(source: "food_timeline_add") } : nil,
-                                onAddToSession: isViewingToday ? { sessionId in
-                                    openFoodCameraFromDashboard(source: "food_timeline_add_to_session", sessionId: sessionId)
-                                } : nil,
-                                onEditEntry: { entryToEdit = $0 },
-                                onDeleteEntry: deleteFoodEntry
-                            )
-                            .traiEntrance(index: 5)
-
-                            TodaysActivityCard(
-                                steps: todaySteps,
-                                activeCalories: todayActiveCalories,
-                                exerciseMinutes: todayExerciseMinutes,
-                                workoutCount: todayTotalWorkoutCount,
-                                isLoading: isLoadingActivity
-                            )
-                            .traiEntrance(index: 6)
-
-                            if isViewingToday, let latestWeight = weightEntries.first {
-                                NavigationLink {
-                                    WeightTrackingView()
-                                } label: {
-                                    WeightTrendCard(
-                                        currentWeight: latestWeight.weightKg,
-                                        targetWeight: profile?.targetWeightKg,
-                                        useLbs: !(profile?.usesMetricWeight ?? true)
-                                    )
-                                }
-                                .simultaneousGesture(
-                                    TapGesture().onEnded {
-                                        trackOpenWeightFromDashboard(source: "weight_trend_card")
-                                    }
-                                )
-                                .buttonStyle(.plain)
-                                .traiEntrance(index: 7)
-                            }
+                                dashboardTopSections
+                                dashboardNutritionSections
+                                dashboardActivitySections
                             }
                             .frame(width: max(0, geometry.size.width - 32), alignment: .leading)
                             .padding(.horizontal, 16)
@@ -636,7 +542,7 @@ struct DashboardView: View {
                 await refreshHealthData()
             }
             .fullScreenCover(item: $localFoodCameraPresentation) { presentation in
-                FoodCameraView(sessionId: presentation.sessionId)
+                FoodCameraView(sessionId: presentation.sessionId, targetDate: presentation.targetDate)
                     .traiSheetBranding()
             }
             .sheet(isPresented: $showingLogWeight) {
@@ -662,14 +568,15 @@ struct DashboardView: View {
                 CalorieDetailSheet(
                     entries: selectedDayFoodEntries,
                     goal: profile?.dailyCalorieGoal ?? 2000,
+                    isToday: isViewingToday,
                     historicalEntries: detailSheetHistoricalFoodEntries,
-                    onAddFood: isViewingToday ? {
+                    onAddFood: {
                         showingCalorieDetail = false
                         Task {
                             try? await Task.sleep(for: .milliseconds(300))
-                            presentFoodCamera()
+                            presentFoodCamera(targetDate: selectedDate)
                         }
-                    } : nil,
+                    },
                     onEditEntry: { entry in
                         showingCalorieDetail = false
                         Task {
@@ -687,17 +594,18 @@ struct DashboardView: View {
                     proteinGoal: profile?.dailyProteinGoal ?? 150,
                     carbsGoal: profile?.dailyCarbsGoal ?? 200,
                     fatGoal: profile?.dailyFatGoal ?? 65,
+                    isToday: isViewingToday,
                     fiberGoal: profile?.dailyFiberGoal ?? 30,
                     sugarGoal: profile?.dailySugarGoal ?? 50,
                     enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
                     historicalEntries: detailSheetHistoricalFoodEntries,
-                    onAddFood: isViewingToday ? {
+                    onAddFood: {
                         showingMacroDetail = false
                         Task {
                             try? await Task.sleep(for: .milliseconds(300))
-                            presentFoodCamera()
+                            presentFoodCamera(targetDate: selectedDate)
                         }
-                    } : nil,
+                    },
                     onEditEntry: { entry in
                         showingMacroDetail = false
                         Task {
@@ -720,23 +628,134 @@ struct DashboardView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityIdentifier("dashboardRootReady")
             }
-            .overlay(alignment: .topLeading) {
-                Text(dashboardLatencyProbeLabel)
-                    .font(.system(size: 1))
-                    .frame(width: 1, height: 1)
-                    .opacity(0.01)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(dashboardLatencyProbeLabel)
-                    .accessibilityIdentifier("dashboardLatencyProbe")
-            }
+            .overlay(alignment: .topLeading) { latencyProbeOverlay }
             }
         }
         .traiBackground()
     }
 
+    private var latencyProbeOverlay: some View {
+        Text(dashboardLatencyProbeLabel)
+            .font(.system(size: 1))
+            .frame(width: 1, height: 1)
+            .opacity(0.01)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(dashboardLatencyProbeLabel)
+            .accessibilityIdentifier("dashboardLatencyProbe")
+    }
+
     private var dashboardLatencyProbeLabel: String {
         guard AppLaunchArguments.shouldEnableLatencyProbe else { return "disabled" }
         return latencyProbeEntries.isEmpty ? "pending" : latencyProbeEntries.joined(separator: " | ")
+    }
+
+    @ViewBuilder
+    private var dashboardTopSections: some View {
+        DateNavigationBar(
+            selectedDate: $selectedDate,
+            isToday: isViewingToday
+        )
+
+        if isViewingToday, profile != nil {
+            QuickActionsCard(
+                onLogFood: { openFoodCameraFromDashboard(source: "quick_actions") },
+                onAddWorkout: { startWorkout() },
+                onLogWeight: { openLogWeightFromDashboard(source: "quick_actions") },
+                workoutName: quickAddWorkoutName
+            )
+            .traiEntrance(index: 0)
+
+            ChatWithTraiCard(
+                isUnlocked: canAccessAIFeatures,
+                action: { openTraiChatFromDashboard() }
+            )
+            .traiEntrance(index: 1)
+
+            if !todaysReminderItems.isEmpty {
+                TodaysRemindersCard(
+                    reminders: todaysReminderItems,
+                    onReminderTap: { _ in },
+                    onComplete: completeReminder,
+                    onViewAll: {}
+                )
+                .id("reminders-section")
+                .traiEntrance(index: 2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardNutritionSections: some View {
+        CalorieProgressCard(
+            consumed: totalCalories,
+            goal: profile?.dailyCalorieGoal ?? 2000,
+            onTap: { openCalorieDetailFromDashboard(source: "calorie_progress_card") }
+        )
+        .traiEntrance(index: 3)
+
+        MacroBreakdownCard(
+            protein: totalProtein,
+            carbs: totalCarbs,
+            fat: totalFat,
+            fiber: totalFiber,
+            sugar: totalSugar,
+            proteinGoal: profile?.dailyProteinGoal ?? 150,
+            carbsGoal: profile?.dailyCarbsGoal ?? 200,
+            fatGoal: profile?.dailyFatGoal ?? 65,
+            fiberGoal: profile?.dailyFiberGoal ?? 30,
+            sugarGoal: profile?.dailySugarGoal ?? 50,
+            enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
+            onTap: { openMacroDetailFromDashboard(source: "macro_breakdown_card") }
+        )
+        .traiEntrance(index: 4)
+
+        DailyFoodTimeline(
+            entries: selectedDayFoodEntries,
+            enabledMacros: profile?.enabledMacros ?? MacroType.defaultEnabled,
+            isToday: isViewingToday,
+            onAddFood: { openFoodCameraFromDashboard(source: "food_timeline_add", targetDate: selectedDate) },
+            onAddToSession: { sessionId in
+                openFoodCameraFromDashboard(
+                    source: "food_timeline_add_to_session",
+                    sessionId: sessionId,
+                    targetDate: selectedDate
+                )
+            },
+            onEditEntry: { entryToEdit = $0 },
+            onDeleteEntry: deleteFoodEntry
+        )
+        .traiEntrance(index: 5)
+    }
+
+    @ViewBuilder
+    private var dashboardActivitySections: some View {
+        TodaysActivityCard(
+            steps: todaySteps,
+            activeCalories: todayActiveCalories,
+            exerciseMinutes: todayExerciseMinutes,
+            workoutCount: todayTotalWorkoutCount,
+            isLoading: isLoadingActivity
+        )
+        .traiEntrance(index: 6)
+
+        if isViewingToday, let latestWeight = weightEntries.first {
+            NavigationLink {
+                WeightTrackingView()
+            } label: {
+                WeightTrendCard(
+                    currentWeight: latestWeight.weightKg,
+                    targetWeight: profile?.targetWeightKg,
+                    useLbs: !(profile?.usesMetricWeight ?? true)
+                )
+            }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    trackOpenWeightFromDashboard(source: "weight_trend_card")
+                }
+            )
+            .buttonStyle(.plain)
+            .traiEntrance(index: 7)
+        }
     }
 
     private func recordDashboardLatencyProbe(
@@ -1457,8 +1476,8 @@ struct DashboardView: View {
         return (opened, completed)
     }
 
-    private func openFoodCameraFromDashboard(source: String, sessionId: UUID? = nil) {
-        presentFoodCamera(sessionId: sessionId)
+    private func openFoodCameraFromDashboard(source: String, sessionId: UUID? = nil, targetDate: Date? = nil) {
+        presentFoodCamera(sessionId: sessionId, targetDate: targetDate)
         BehaviorTracker(modelContext: modelContext).recordDeferred(
             actionKey: BehaviorActionKey.logFood,
             domain: .nutrition,
@@ -1468,14 +1487,14 @@ struct DashboardView: View {
         )
     }
 
-    private func presentFoodCamera(sessionId: UUID? = nil) {
+    private func presentFoodCamera(sessionId: UUID? = nil, targetDate: Date? = nil) {
         if let onPresentFoodCamera {
-            onPresentFoodCamera(sessionId)
+            onPresentFoodCamera(sessionId, targetDate)
             return
         }
 
         guard localFoodCameraPresentation == nil else { return }
-        localFoodCameraPresentation = FoodCameraPresentation(sessionId: sessionId)
+        localFoodCameraPresentation = FoodCameraPresentation(sessionId: sessionId, targetDate: targetDate)
     }
 
     private func openLogWeightFromDashboard(source: String) {

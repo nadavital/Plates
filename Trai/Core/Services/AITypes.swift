@@ -62,22 +62,43 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable {
     let sugarGrams: Double?
     let servingSize: String?
     let emoji: String?  // Relevant emoji for the food (☕, 🥗, 🍳, etc.)
+    let loggedAtDateString: String?  // YYYY-MM-DD format if user specified a date
     let loggedAtTime: String?  // HH:mm format if user specified a time
 
-    /// Parse the loggedAtTime into a Date (today at that time)
+    /// Parse the logged date/time into a concrete Date in the current calendar.
     var loggedAtDate: Date? {
-        guard let timeString = loggedAtTime else { return nil }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        guard let time = formatter.date(from: timeString) else { return nil }
-
-        // Combine today's date with the parsed time
         let calendar = Calendar.current
-        let now = Date()
-        var components = calendar.dateComponents([.year, .month, .day], from: now)
-        let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
-        components.hour = timeComponents.hour
-        components.minute = timeComponents.minute
+        let baseDay: Date
+
+        if let loggedAtDateString {
+            let dateFormatter = DateFormatter()
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            guard let parsedDate = dateFormatter.date(from: loggedAtDateString) else { return nil }
+            baseDay = parsedDate
+        } else if loggedAtTime != nil {
+            baseDay = Date()
+        } else {
+            return nil
+        }
+
+        var components = calendar.dateComponents([.year, .month, .day], from: baseDay)
+
+        if let loggedAtTime {
+            let timeFormatter = DateFormatter()
+            timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+            timeFormatter.dateFormat = "HH:mm"
+            guard let parsedTime = timeFormatter.date(from: loggedAtTime) else { return nil }
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: parsedTime)
+            components.hour = timeComponents.hour
+            components.minute = timeComponents.minute
+        } else {
+            let nowComponents = calendar.dateComponents([.hour, .minute, .second], from: Date())
+            components.hour = nowComponents.hour
+            components.minute = nowComponents.minute
+            components.second = nowComponents.second
+        }
+
         return calendar.date(from: components)
     }
 
@@ -86,7 +107,7 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable {
         emoji ?? "🍽️"
     }
 
-    init(id: String = UUID().uuidString, name: String, calories: Int, proteinGrams: Double, carbsGrams: Double, fatGrams: Double, fiberGrams: Double? = nil, sugarGrams: Double? = nil, servingSize: String?, emoji: String? = nil, loggedAtTime: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, calories: Int, proteinGrams: Double, carbsGrams: Double, fatGrams: Double, fiberGrams: Double? = nil, sugarGrams: Double? = nil, servingSize: String?, emoji: String? = nil, loggedAtDateString: String? = nil, loggedAtTime: String? = nil) {
         self.id = id
         self.name = name
         self.calories = calories
@@ -97,6 +118,7 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable {
         self.sugarGrams = sugarGrams
         self.servingSize = servingSize
         self.emoji = emoji
+        self.loggedAtDateString = loggedAtDateString
         self.loggedAtTime = loggedAtTime
     }
 }
@@ -217,6 +239,15 @@ struct PlanUpdateSuggestionEntry: Codable, Sendable, Identifiable {
         self.goal = goal
         self.rationale = rationale
     }
+}
+
+// MARK: - Workout Plan Suggestion
+
+/// Workout plan update suggested by AI for user confirmation
+struct WorkoutPlanSuggestionEntry: Codable, Sendable, Identifiable {
+    var id: UUID = UUID()
+    let plan: WorkoutPlan
+    let message: String
 }
 
 // MARK: - Suggested Workout Entry

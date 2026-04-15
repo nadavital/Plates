@@ -203,6 +203,59 @@ struct WorkoutGoalRecommendationContextBuilder {
 }
 
 extension AIService {
+    func checkInOnGoal(
+        goalTitle: String,
+        goalKind: String,
+        goalScope: String,
+        currentProgress: String?,
+        targetSummary: String?,
+        recentSessionSummaries: [String],
+        userMessage: String,
+        conversationHistory: [(role: String, text: String)]
+    ) async throws -> String {
+        try await performAIRequest(for: .coachChat) {
+            let systemPrompt = """
+            You are Trai, a focused fitness coach. The user is checking in on a specific workout goal.
+
+            Goal: \(goalTitle)
+            Kind: \(goalKind)
+            Scope: \(goalScope)
+            Current progress: \(currentProgress ?? "Not yet measured")
+            Target: \(targetSummary ?? "No specific target set")
+            Recent related sessions: \(recentSessionSummaries.isEmpty ? "None yet" : recentSessionSummaries.joined(separator: " | "))
+
+            Your role:
+            - Acknowledge what the user tells you about their progress
+            - Give honest, concise feedback — encourage when warranted, be realistic when not
+            - Help them think about next steps or adjustments
+            - Keep responses focused on this goal, not general advice
+            - Use 2-4 short sentences per reply. No bullet lists.
+            """
+
+            var messages: [TraiAIMessage] = [
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: systemPrompt),
+                AIBackendPayloadBuilder.canonicalTextMessage(role: .assistant, text: "Got it. I'm looking at your goal and recent training. What's on your mind?")
+            ]
+
+            for entry in conversationHistory.suffix(10) {
+                let role: TraiAIMessageRole = entry.role == "user" ? .user : .assistant
+                messages.append(AIBackendPayloadBuilder.canonicalTextMessage(role: role, text: entry.text))
+            }
+
+            messages.append(AIBackendPayloadBuilder.canonicalTextMessage(role: .user, text: userMessage))
+
+            let request = AIBackendPayloadBuilder.canonicalRequest(
+                messages: messages,
+                generation: AIBackendPayloadBuilder.canonicalGeneration(reasoningLevel: .low, maxTokens: 512)
+            )
+
+            logPrompt(userMessage)
+            let response = try await makeRequest(request: request)
+            logResponse(response)
+            return response
+        }
+    }
+
     func suggestWorkoutGoals(
         userGoal: String?,
         plannedSessions: [String],

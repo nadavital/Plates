@@ -31,6 +31,7 @@ extension AIService {
         - Checking food log and nutrition progress (get_food_log)
         - Viewing and updating the user's nutrition plan (get_user_plan, update_user_plan)
         - Checking workout history (get_recent_workouts)
+        - Reviewing and revising the user's workout plan (revise_workout_plan)
         - Reading and managing workout goals (get_workout_goals, create_workout_goal, update_workout_goal)
         - Logging workouts (log_workout)
         - Checking and logging body weight (get_weight_history, log_weight)
@@ -43,7 +44,10 @@ extension AIService {
 
         if let profile = context.profile {
             prompt += buildUserInfoSection(profile: profile)
+            prompt += buildWorkoutPlanSection(profile: profile)
         }
+
+        prompt += buildTodaysFoodSection(entries: context.todaysFoodEntries)
 
         if !context.memoriesContext.isEmpty {
             prompt += buildMemoriesSection(memoriesContext: context.memoriesContext)
@@ -55,6 +59,10 @@ extension AIService {
 
         if let pending = context.pendingSuggestion {
             prompt += buildPendingSuggestionSection(pending: pending)
+        }
+
+        if let pendingWorkoutPlan = context.pendingWorkoutPlanSuggestion {
+            prompt += buildPendingWorkoutPlanSection(suggestion: pendingWorkoutPlan)
         }
 
         if let workout = context.activeWorkout {
@@ -109,6 +117,38 @@ extension AIService {
         return section
     }
 
+    private func buildTodaysFoodSection(entries: [FoodEntry]) -> String {
+        """
+
+        TODAY'S LOGGED FOOD SNAPSHOT:
+        \(FoodLogSummaryFormatter.promptSummary(for: entries, label: "Food log"))
+
+        Use this snapshot to stay grounded in what the user has already logged today.
+        This snapshot is conversational context only and does NOT provide entry IDs.
+        Still call get_food_log for exact date-range questions, nutrition math, or before editing an existing entry.
+
+        """
+    }
+
+    private func buildWorkoutPlanSection(profile: UserProfile) -> String {
+        guard let plan = profile.workoutPlan else { return "" }
+
+        let sessionPreview = plan.templates
+            .sorted { $0.order < $1.order }
+            .prefix(5)
+            .map(\.name)
+            .joined(separator: ", ")
+
+        return """
+
+        CURRENT WORKOUT PLAN:
+        - Split: \(plan.splitType.displayName)
+        - Days per week: \(plan.daysPerWeek)
+        - Sessions: \(sessionPreview)
+
+        """
+    }
+
     private func buildMemoriesSection(memoriesContext: String) -> String {
         """
 
@@ -137,9 +177,30 @@ extension AIService {
         - Name: \(pending.name)
         - Calories: \(pending.calories) kcal
         - Protein: \(Int(pending.proteinGrams))g, Carbs: \(Int(pending.carbsGrams))g, Fat: \(Int(pending.fatGrams))g
+        \(pending.loggedAtDateString.map { "- Date: \($0)" } ?? "")
+        \(pending.loggedAtTime.map { "- Time: \($0)" } ?? "")
         \(pending.servingSize.map { "- Serving: \($0)" } ?? "")
 
         If the user says this is wrong or wants corrections (e.g., "that's actually a wrap", "it's closer to 400 calories", "add the sauce"), provide an UPDATED suggest_food_log with the corrected values. Acknowledge their correction naturally.
+
+        """
+    }
+
+    private func buildPendingWorkoutPlanSection(suggestion: WorkoutPlanSuggestionEntry) -> String {
+        let sessionPreview = suggestion.plan.templates
+            .sorted { $0.order < $1.order }
+            .prefix(5)
+            .map(\.name)
+            .joined(separator: ", ")
+
+        return """
+
+        PENDING WORKOUT PLAN PROPOSAL (not yet saved):
+        - Split: \(suggestion.plan.splitType.displayName)
+        - Days per week: \(suggestion.plan.daysPerWeek)
+        - Sessions: \(sessionPreview)
+
+        If the user asks for another tweak before saving, treat this pending proposal as the current draft and revise from it, not from their saved plan.
 
         """
     }
@@ -170,14 +231,26 @@ extension AIService {
         - For food photos, analyze and call suggest_food_log with estimates.
         - Include relevant emojis for food (☕, 🥗, 🍳, etc.)
         - When suggesting plan changes, explain WHY before calling update_user_plan.
+        - Never ask the user for internal IDs, UUIDs, database identifiers, or tool-only fields if you can retrieve them yourself.
 
         FOOD LOGGING:
         - Call suggest_food_log ONLY when user says they ATE something ("I had an apple", "just ate lunch")
-        - For corrections to existing meals: call get_food_log to find the entry ID, then edit_food_entry
+        - If the user specifies a past day or explicit date for a meal, include logged_at_date in YYYY-MM-DD format when calling suggest_food_log.
+        - If the user specifies only a time, include logged_at_time in HH:mm 24-hour format.
+        - For corrections to existing meals: ALWAYS call get_food_log first to find the correct entry ID, then call edit_food_entry.
+        - Do not rely on the injected food snapshot for edits; it does not include entry IDs.
+        - Never ask the user for a food entry ID or UUID.
+        - If multiple logged meals could match the user's correction, ask one short natural-language follow-up using meal details like name, time, or date, never internal identifiers.
         - Don't say "I've logged this" - you suggest, user confirms
 
         RECOVERY & WORKOUTS:
         When asked about recovery or what to work out: call get_muscle_recovery_status, then give a specific recommendation based on which muscles are ready.
+
+        WORKOUT PLAN CHANGES:
+        - If the user wants to review or change their workout plan, use revise_workout_plan.
+        - Before revising the plan, call get_recent_workouts and/or get_muscle_recovery_status when that context would materially improve the recommendation.
+        - Put the requested change plus any relevant findings directly into revise_workout_plan.change_request.
+        - Never say the workout plan was already saved; the user must confirm the proposal first.
 
         WORKOUT GOALS:
         - When the user wants to set, refine, pause, complete, or review workout goals, use get_workout_goals first unless the request is brand new and fully specified.
@@ -431,7 +504,13 @@ extension AIService {
                     if let functionCall = part["functionCall"] as? [String: Any],
                        let functionName = functionCall["name"] as? String {
                         // Allow multiple food suggestions but stop chain for other types
-                        let hasNonFoodSuggestion = result.planUpdate != nil || result.suggestedFoodEdit != nil
+                        let hasNonFoodSuggestion =
+                            result.planUpdate != nil ||
+                            result.suggestedFoodEdit != nil ||
+                            result.suggestedWorkoutPlan != nil ||
+                            result.suggestedWorkout != nil ||
+                            result.suggestedWorkoutLog != nil ||
+                            result.suggestedReminder != nil
                         if hasNonFoodSuggestion && functionName != "suggest_food_log" {
                             log("⏭️ Skipping \(functionName) - already have suggestion", type: .info)
                             continue
@@ -449,13 +528,18 @@ extension AIService {
                         log("🔗 Chain[\(depth)]: \(functionName)(\(argsPreview))", type: .info)
 
                         let call = AIFunctionExecutor.FunctionCall(name: functionName, arguments: args)
-                        let execResult = executor.execute(call)
+                        let execResult = await executor.execute(call)
 
                         if functionName == "save_memory", let content = args["content"] as? String {
                             result.savedMemories.append(content)
                         }
 
                         switch execResult {
+                        case .directMessage(let message):
+                            if result.text.isEmpty {
+                                result.text = message
+                            }
+
                         case .suggestedFood(let food):
                             result.suggestedFoods.append(food)
                             log("🍽️ Got food suggestion (\(result.suggestedFoods.count) total)", type: .info)
@@ -467,6 +551,13 @@ extension AIService {
                         case .suggestedFoodEdit(let edit):
                             result.suggestedFoodEdit = edit
                             log("✏️ Got edit suggestion - stopping chain", type: .info)
+
+                        case .suggestedWorkoutPlanUpdate(let workoutPlan):
+                            result.suggestedWorkoutPlan = workoutPlan
+                            if result.text.isEmpty {
+                                result.text = workoutPlan.message
+                            }
+                            log("🗓️ Got workout plan suggestion - stopping chain", type: .info)
 
                         case .dataResponse(let nextFuncResult):
                             additionalFunctionResults.append(nextFuncResult)
@@ -502,7 +593,7 @@ extension AIService {
 
             completeAIRequest(requestTicket)
 
-            let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
+            let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkoutPlan != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
             if !additionalFunctionResults.isEmpty && !hasSuggestion {
                 let chainedResult = try await sendParallelFunctionResults(
                     functionResults: additionalFunctionResults,
@@ -522,6 +613,9 @@ extension AIService {
                 }
                 if let edit = chainedResult.suggestedFoodEdit {
                     result.suggestedFoodEdit = edit
+                }
+                if let workoutPlan = chainedResult.suggestedWorkoutPlan {
+                    result.suggestedWorkoutPlan = workoutPlan
                 }
                 if let reminder = chainedResult.suggestedReminder {
                     result.suggestedReminder = reminder

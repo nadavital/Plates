@@ -236,6 +236,42 @@ final class ChatMessage {
         }
     }
 
+    // MARK: - Workout Plan Suggestions
+
+    /// Suggested workout plan data (JSON encoded) - for confirmation before applying
+    @Attribute(.externalStorage) var suggestedWorkoutPlanData: Data?
+
+    /// Whether the user has dismissed the workout plan suggestion
+    var suggestedWorkoutPlanDismissed: Bool = false
+
+    /// Whether the workout plan update was applied from this message
+    var workoutPlanUpdateApplied: Bool = false
+
+    /// Whether this message has a pending workout plan suggestion (not yet applied or dismissed)
+    var hasPendingWorkoutPlanSuggestion: Bool {
+        suggestedWorkoutPlanData != nil && !workoutPlanUpdateApplied && !suggestedWorkoutPlanDismissed
+    }
+
+    /// Whether this message has an applied workout plan update
+    var hasAppliedWorkoutPlanSuggestion: Bool {
+        suggestedWorkoutPlanData != nil && workoutPlanUpdateApplied
+    }
+
+    /// Decode the suggested workout plan data
+    var suggestedWorkoutPlan: WorkoutPlanSuggestionEntry? {
+        guard let data = suggestedWorkoutPlanData else { return nil }
+        return try? JSONDecoder().decode(WorkoutPlanSuggestionEntry.self, from: data)
+    }
+
+    /// Set the suggested workout plan data
+    func setSuggestedWorkoutPlan(_ plan: WorkoutPlanSuggestionEntry?) {
+        if let plan {
+            suggestedWorkoutPlanData = try? JSONEncoder().encode(plan)
+        } else {
+            suggestedWorkoutPlanData = nil
+        }
+    }
+
     /// Whether this message has saved memories
     var hasSavedMemories: Bool {
         guard let data = savedMemoriesData else { return false }

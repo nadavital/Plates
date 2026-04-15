@@ -22,7 +22,7 @@ extension WorkoutPlan.WorkoutTemplate {
                 return .accentColor
             }
         case .cardio:
-            return .mint
+            return .cyan
         case .hiit:
             return .red
         case .climbing:
@@ -34,11 +34,11 @@ extension WorkoutPlan.WorkoutTemplate {
         case .flexibility:
             return .teal
         case .mobility:
-            return .cyan
+            return .purple
         case .mixed:
             return .accentColor
         case .recovery:
-            return .green
+            return .mint
         case .custom:
             return .gray
         }

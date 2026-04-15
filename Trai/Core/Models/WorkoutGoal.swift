@@ -21,6 +21,7 @@ final class WorkoutGoal {
     var notes: String = ""
     var targetDate: Date?
     var checkInCadenceDays: Int?
+    var baselineValue: Double?
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var completedAt: Date?
@@ -41,7 +42,8 @@ final class WorkoutGoal {
         periodCount: Int? = nil,
         notes: String = "",
         targetDate: Date? = nil,
-        checkInCadenceDays: Int? = nil
+        checkInCadenceDays: Int? = nil,
+        baselineValue: Double? = nil
     ) {
         self.title = title
         self.goalKindRaw = goalKind.rawValue
@@ -55,6 +57,7 @@ final class WorkoutGoal {
         self.notes = notes
         self.targetDate = targetDate
         self.checkInCadenceDays = checkInCadenceDays
+        self.baselineValue = baselineValue
     }
 }
 

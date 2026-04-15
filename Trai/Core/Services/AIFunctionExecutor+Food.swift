@@ -35,6 +35,7 @@ extension AIFunctionExecutor {
             fiberGrams: fiber,
             servingSize: args["serving_size"] as? String,
             emoji: args["emoji"] as? String,
+            loggedAtDateString: args["logged_at_date"] as? String,
             loggedAtTime: args["logged_at_time"] as? String
         )
 

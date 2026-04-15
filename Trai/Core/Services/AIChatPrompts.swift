@@ -50,6 +50,7 @@ extension AIPromptBuilder {
         If the image appears to be plain water or plain sparkling water with no visible additions, treat it as water rather than inventing a meal.
         IMPORTANT: You are SUGGESTING a meal to log - the user must confirm before it's saved. So say things like "Here's what I found" or "Want me to log this?" - NOT "I've logged this for you".
         If the user mentions they ate at a specific time, include loggedAtTime in HH:mm 24-hour format.
+        If the user mentions a specific day other than today, include loggedAtDate in YYYY-MM-DD format.
         Include a relevant emoji for the food (e.g., ☕ for coffee, 🥗 for salad, 🍳 for eggs).
 
         Keep your message brief (1-2 sentences).
@@ -73,6 +74,8 @@ extension AIPromptBuilder {
             - Name: \(pending.name)
             - Calories: \(pending.calories) kcal
             - Protein: \(Int(pending.proteinGrams))g, Carbs: \(Int(pending.carbsGrams))g, Fat: \(Int(pending.fatGrams))g
+            \(pending.loggedAtDateString.map { "- Date: \($0)" } ?? "")
+            \(pending.loggedAtTime.map { "- Time: \($0)" } ?? "")
             \(pending.servingSize.map { "- Serving: \($0)" } ?? "")
 
             If the user asks to adjust this (e.g., "add more calories", "make it 600 calories"), update the suggestMealLog with the modified values.
@@ -104,6 +107,7 @@ extension AIPromptBuilder {
         If there's a pending suggestion and the user wants to modify it, return the UPDATED suggestMealLog with adjusted values.
 
         If the user mentions they ate at a specific time (e.g., "I had lunch at 2pm"), include loggedAtTime in HH:mm 24-hour format.
+        If the user mentions a specific day other than today (e.g., "I had this yesterday" or "log this for April 10"), include loggedAtDate in YYYY-MM-DD format.
         Include a relevant emoji for the food (e.g., ☕ for coffee, 🥗 for salad, 🍳 for eggs).
 
         Keep your response brief and conversational (1-3 sentences).
@@ -133,6 +137,11 @@ extension AIPromptBuilder {
                         "emoji": [
                             "type": "string",
                             "description": "A single relevant emoji for this food (e.g., ☕, 🥗, 🍳, 🍕)"
+                        ],
+                        "loggedAtDate": [
+                            "type": "string",
+                            "description": "Date the meal was eaten in YYYY-MM-DD format. Only include if the user specified a day other than today.",
+                            "nullable": true
                         ],
                         "loggedAtTime": [
                             "type": "string",

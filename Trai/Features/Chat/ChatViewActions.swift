@@ -235,6 +235,64 @@ extension ChatView {
     }
 }
 
+// MARK: - Workout Plan Suggestion Actions
+
+extension ChatView {
+    func acceptWorkoutPlanSuggestion(_ suggestion: WorkoutPlanSuggestionEntry, for message: ChatMessage) {
+        guard let profile else { return }
+
+        let hadExistingPlan = profile.workoutPlan != nil
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: suggestion.plan
+        )
+
+        profile.workoutPlan = suggestion.plan
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                suggestion.plan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        try? modelContext.save()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.workoutPlanUpdateApplied = true
+        }
+
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.reviewWorkoutPlan,
+            domain: .planning,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: message.id
+        )
+
+        HapticManager.success()
+    }
+
+    func dismissWorkoutPlanSuggestion(for message: ChatMessage) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            message.suggestedWorkoutPlanDismissed = true
+        }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.reviewWorkoutPlan,
+            domain: .planning,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id
+        )
+        HapticManager.lightTap()
+    }
+}
+
 // MARK: - Workout Log Suggestion Actions
 
 extension ChatView {

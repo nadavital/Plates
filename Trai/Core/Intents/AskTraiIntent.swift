@@ -41,8 +41,9 @@ struct AskTraiIntent: AppIntent {
         // Get recent food entries for context
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: Date())
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? .distantFuture
         let foodDescriptor = FetchDescriptor<FoodEntry>(
-            predicate: #Predicate { $0.loggedAt >= startOfDay },
+            predicate: #Predicate { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay },
             sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
         )
         let todayFood = (try? context.fetch(foodDescriptor)) ?? []
@@ -74,11 +75,12 @@ struct AskTraiIntent: AppIntent {
             context += "Calorie goal: \(profile.dailyCalorieGoal)\n"
         }
 
-        if !todayFood.isEmpty {
-            let totalCals = todayFood.reduce(0) { $0 + $1.calories }
-            let totalProtein = todayFood.reduce(0) { $0 + $1.proteinGrams }
-            context += "Today's intake: \(totalCals) calories, \(Int(totalProtein))g protein\n"
-        }
+        context += FoodLogSummaryFormatter.promptSummary(
+            for: todayFood,
+            label: "Today's food log",
+            maxEntries: 10
+        )
+        context += "\n"
 
         return context
     }
@@ -105,6 +107,9 @@ extension AIService {
             Question: \(question)
 
             Give a helpful response. Be specific if you have data, otherwise give general advice.
+            If the question is about what the user ate today, answer from the food log in the context above.
+            Do not say they ate nothing if the context includes logged food entries.
+            If you only have totals and not enough meal detail, say that clearly instead of inventing foods.
             """
 
             let body: [String: Any] = [

@@ -635,6 +635,8 @@ struct ChatBubble: View {
     var onDismissPlan: (() -> Void)?
     var onAcceptFoodEdit: ((SuggestedFoodEdit) -> Void)?
     var onDismissFoodEdit: (() -> Void)?
+    var onAcceptWorkoutPlan: ((WorkoutPlanSuggestionEntry) -> Void)?
+    var onDismissWorkoutPlan: (() -> Void)?
     var onAcceptWorkout: ((SuggestedWorkoutEntry) -> Void)?
     var onDismissWorkout: (() -> Void)?
     var onAcceptWorkoutLog: ((SuggestedWorkoutLog) -> Void)?
@@ -674,11 +676,7 @@ struct ChatBubble: View {
                     }
 
                     if !message.content.isEmpty {
-                        Text(message.content)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .clipShape(.rect(cornerRadius: 16))
+                        TraiUserTextBubble(text: message.content)
                     }
                 }
             } else {
@@ -699,17 +697,12 @@ struct ChatBubble: View {
     private var aiContentView: some View {
         let base = VStack(alignment: .leading, spacing: 12) {
             if isStreaming {
-                Text(message.content)
+                TraiAssistantTextMessage(text: message.content)
             } else {
-                ForEach(Array(formattedParagraphs.enumerated()), id: \.offset) { _, paragraph in
-                    if enableTextSelection {
-                        Text(paragraph)
-                            .textSelection(.enabled)
-                    } else {
-                        Text(paragraph)
-                            .textSelection(.disabled)
-                    }
-                }
+                TraiAssistantParagraphMessage(
+                    paragraphs: formattedParagraphs,
+                    enableTextSelection: enableTextSelection
+                )
             }
 
             // Show meal suggestion cards for all pending meals
@@ -740,6 +733,18 @@ struct ChatBubble: View {
                     onAccept: { onAcceptPlan?(plan) },
                     onEdit: { onEditPlan?(plan) },
                     onDismiss: { onDismissPlan?() }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            if message.hasPendingWorkoutPlanSuggestion, let suggestion = message.suggestedWorkoutPlan {
+                SuggestedWorkoutPlanCard(
+                    suggestion: suggestion,
+                    onAccept: { onAcceptWorkoutPlan?(suggestion) },
+                    onDismiss: { onDismissWorkoutPlan?() }
                 )
                 .transition(.asymmetric(
                     insertion: .scale(scale: 0.9).combined(with: .opacity),
@@ -845,6 +850,11 @@ struct ChatBubble: View {
                 .transition(.scale.combined(with: .opacity))
             }
 
+            if message.hasAppliedWorkoutPlanSuggestion {
+                WorkoutPlanAcceptedBadge()
+                    .transition(.scale.combined(with: .opacity))
+            }
+
             // Show memory saved indicator
             if message.hasSavedMemories {
                 MemorySavedBadge(memories: message.savedMemories)
@@ -857,8 +867,10 @@ struct ChatBubble: View {
             base
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingMealSuggestion)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingPlanSuggestion)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingWorkoutPlanSuggestion)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.loggedFoodEntryId)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.planUpdateApplied)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.workoutPlanUpdateApplied)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasSavedMemories)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasPendingFoodEdit)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: message.hasAppliedFoodEdit)
@@ -912,6 +924,31 @@ struct ChatBubble: View {
             return line
         }
         return processed.joined(separator: "\n")
+    }
+}
+
+private struct SuggestedWorkoutPlanCard: View {
+    let suggestion: WorkoutPlanSuggestionEntry
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            WorkoutPlanProposalCard(
+                plan: suggestion.plan,
+                message: "",
+                onAccept: onAccept,
+                acceptTitle: "Save Changes",
+                onCustomize: nil
+            )
+
+            HStack {
+                Spacer()
+
+                Button("Not now", action: onDismiss)
+                    .buttonStyle(.traiTertiary())
+            }
+        }
     }
 }
 
