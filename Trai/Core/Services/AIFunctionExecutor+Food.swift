@@ -43,33 +43,30 @@ extension AIFunctionExecutor {
     }
 
     func executeEditFoodEntry(_ args: [String: Any]) -> ExecutionResult {
-        guard let entryIdString = args["entry_id"] as? String,
-              let entryId = UUID(uuidString: entryIdString) else {
+        let resolution = resolveFoodEntryForEdit(args)
+
+        switch resolution {
+        case .resolved(let entry):
+            return buildFoodEditResult(args, entry: entry)
+
+        case .clarification(let message):
+            return .directMessage(message)
+
+        case .error(let error):
             return .dataResponse(FunctionResult(
                 name: "edit_food_entry",
-                response: ["error": "Invalid or missing entry_id"]
+                response: ["error": error]
             ))
         }
+    }
 
-        // Find the entry
-        let descriptor = FetchDescriptor<FoodEntry>(
-            predicate: #Predicate { $0.id == entryId }
-        )
-
-        guard let entry = try? modelContext.fetch(descriptor).first else {
-            return .dataResponse(FunctionResult(
-                name: "edit_food_entry",
-                response: ["error": "Food entry not found"]
-            ))
-        }
-
+    private func buildFoodEditResult(_ args: [String: Any], entry: FoodEntry) -> ExecutionResult {
         // Collect proposed changes WITHOUT applying them
         var fieldChanges: [SuggestedFoodEdit.FieldChange] = []
 
         let trimmedName = (
             args["name"] as? String ??
             args["title"] as? String ??
-            args["meal_name"] as? String ??
             args["mealTitle"] as? String
         )?.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -152,7 +149,7 @@ extension AIFunctionExecutor {
                 components.minute = minute
                 components.second = 0
 
-                if let updatedAt = Calendar.current.date(from: components) {
+                if Calendar.current.date(from: components) != nil {
                     let oldTimeValue = timeFormatter.string(from: entry.loggedAt)
                     if oldTimeValue != loggedAtTime {
                         fieldChanges.append(SuggestedFoodEdit.FieldChange(
@@ -252,6 +249,272 @@ extension AIFunctionExecutor {
                 ]
             ]
         ))
+    }
+
+    private enum FoodEntryResolution {
+        case resolved(FoodEntry)
+        case clarification(String)
+        case error(String)
+    }
+
+    private func resolveFoodEntryForEdit(_ args: [String: Any]) -> FoodEntryResolution {
+        if let entryIdString = args["entry_id"] as? String {
+            guard let entryId = UUID(uuidString: entryIdString) else {
+                return .error("Invalid entry_id")
+            }
+
+            let descriptor = FetchDescriptor<FoodEntry>(
+                predicate: #Predicate { $0.id == entryId }
+            )
+
+            guard let entry = try? modelContext.fetch(descriptor).first else {
+                return .error("Food entry not found")
+            }
+
+            return .resolved(entry)
+        }
+
+        let targetName = (
+            args["target_name"] as? String ??
+            args["meal_name"] as? String ??
+            args["entry_name"] as? String ??
+            args["food_name"] as? String
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let targetDateString = (
+            args["target_logged_at_date"] as? String ??
+            args["logged_at_date"] as? String ??
+            args["date"] as? String
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let targetTimeString = (
+            args["target_logged_at_time"] as? String ??
+            args["entry_time"] as? String
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let targetMealType = (
+            args["target_meal_type"] as? String ??
+            args["entry_meal_type"] as? String
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+
+        if let targetDateString, !targetDateString.isEmpty {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            guard formatter.date(from: targetDateString) != nil else {
+                return .error("Invalid target_logged_at_date format. Use YYYY-MM-DD.")
+            }
+        }
+
+        if let targetTimeString, !targetTimeString.isEmpty,
+           minutesSinceMidnight(from: targetTimeString) == nil {
+            return .error("Invalid target_logged_at_time format. Use HH:mm.")
+        }
+
+        let hasNaturalReference =
+            (targetName?.isEmpty == false) ||
+            (targetDateString?.isEmpty == false) ||
+            (targetTimeString?.isEmpty == false) ||
+            (targetMealType?.isEmpty == false)
+
+        guard hasNaturalReference else {
+            return .error("Missing entry_id or target meal reference")
+        }
+
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone.current
+        let today = Date()
+        let dateArgs: [String: Any]
+        if let targetDateString, !targetDateString.isEmpty {
+            dateArgs = ["date": targetDateString, "range_days": 1]
+        } else {
+            dateArgs = ["days_back": 0, "range_days": 1]
+        }
+        let (startDate, endDate, _) = determineDateRange(args: dateArgs, calendar: calendar, today: today)
+
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.loggedAt >= startDate && $0.loggedAt < endDate },
+            sortBy: [SortDescriptor(\.loggedAt)]
+        )
+
+        let allEntries = (try? modelContext.fetch(descriptor)) ?? []
+        guard !allEntries.isEmpty else {
+            return directEditErrorForMissingEntries(targetDateString: targetDateString)
+        }
+
+        let mealTypeFiltered: [FoodEntry]
+        if let targetMealType,
+           let requestedMealType = FoodEntry.MealType(rawValue: targetMealType) {
+            mealTypeFiltered = allEntries.filter { $0.meal == requestedMealType }
+        } else {
+            mealTypeFiltered = allEntries
+        }
+
+        guard !mealTypeFiltered.isEmpty else {
+            return .clarification("I couldn't find a matching logged meal with that meal type. Tell me the meal name or time and I'll update it.")
+        }
+
+        let strictNameMatches = filterEntriesByName(mealTypeFiltered, targetName: targetName)
+        let hasAdditionalDisambiguator =
+            (targetDateString?.isEmpty == false) ||
+            (targetTimeString?.isEmpty == false) ||
+            (targetMealType?.isEmpty == false)
+        let nameFiltered = strictNameMatches.isEmpty && hasAdditionalDisambiguator
+            ? mealTypeFiltered
+            : strictNameMatches
+        let timeFiltered = filterEntriesByTime(nameFiltered, targetTimeString: targetTimeString)
+
+        if timeFiltered.count == 1 {
+            return .resolved(timeFiltered[0])
+        }
+
+        let scored = scoreEntriesForEditResolution(
+            entries: timeFiltered,
+            targetName: targetName,
+            targetTimeString: targetTimeString,
+            targetMealType: targetMealType
+        )
+
+        guard let topMatch = scored.first else {
+            return .clarification("I couldn't tell which logged meal you wanted to edit. Tell me the meal name, time, or day and I'll update it.")
+        }
+
+        let topMatches = scored.filter { $0.score == topMatch.score }
+        if topMatches.count == 1,
+           (scored.count == 1 || topMatch.score - scored[1].score >= 2) {
+            return .resolved(topMatch.entry)
+        }
+
+        let options = Array(topMatches.prefix(3)).map { formatEntryReference($0.entry) }.joined(separator: ", ")
+        return .clarification("I found multiple possible meals. Did you mean \(options)?")
+    }
+
+    private func filterEntriesByName(_ entries: [FoodEntry], targetName: String?) -> [FoodEntry] {
+        guard let rawTargetName = targetName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawTargetName.isEmpty else {
+            return entries
+        }
+
+        let normalizedTarget = normalizedFoodReference(rawTargetName)
+        let exactMatches = entries.filter { normalizedFoodReference($0.name) == normalizedTarget }
+        if !exactMatches.isEmpty {
+            return exactMatches
+        }
+
+        let tokenMatches = entries.filter {
+            let entryName = normalizedFoodReference($0.name)
+            return entryName.contains(normalizedTarget) || normalizedTarget.contains(entryName)
+        }
+        if !tokenMatches.isEmpty {
+            return tokenMatches
+        }
+
+        return []
+    }
+
+    private func filterEntriesByTime(_ entries: [FoodEntry], targetTimeString: String?) -> [FoodEntry] {
+        guard let targetTimeString = targetTimeString?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !targetTimeString.isEmpty,
+              let targetMinutes = minutesSinceMidnight(from: targetTimeString) else {
+            return entries
+        }
+
+        let withinNinetyMinutes = entries.filter { entry in
+            abs(minutesSinceMidnight(from: entry.loggedAt) - targetMinutes) <= 90
+        }
+
+        return withinNinetyMinutes
+    }
+
+    private func scoreEntriesForEditResolution(
+        entries: [FoodEntry],
+        targetName: String?,
+        targetTimeString: String?,
+        targetMealType: String?
+    ) -> [(entry: FoodEntry, score: Int)] {
+        let normalizedTargetName = targetName.map(normalizedFoodReference)
+        let targetMinutes = targetTimeString.flatMap(minutesSinceMidnight(from:))
+
+        return entries.map { entry in
+            var score = 0
+
+            if let normalizedTargetName, !normalizedTargetName.isEmpty {
+                let entryName = normalizedFoodReference(entry.name)
+                if entryName == normalizedTargetName {
+                    score += 6
+                } else if entryName.contains(normalizedTargetName) || normalizedTargetName.contains(entryName) {
+                    score += 4
+                }
+            }
+
+            if let targetMealType,
+               let requestedMealType = FoodEntry.MealType(rawValue: targetMealType),
+               entry.meal == requestedMealType {
+                score += 2
+            }
+
+            if let targetMinutes {
+                let delta = abs(minutesSinceMidnight(from: entry.loggedAt) - targetMinutes)
+                switch delta {
+                case 0...10:
+                    score += 5
+                case 11...30:
+                    score += 4
+                case 31...60:
+                    score += 3
+                case 61...90:
+                    score += 2
+                default:
+                    break
+                }
+            }
+
+            return (entry: entry, score: score)
+        }
+        .sorted { lhs, rhs in
+            if lhs.score != rhs.score {
+                return lhs.score > rhs.score
+            }
+            return lhs.entry.loggedAt < rhs.entry.loggedAt
+        }
+    }
+
+    private func normalizedFoodReference(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .replacingOccurrences(of: "[^a-zA-Z0-9 ]", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func minutesSinceMidnight(from timeString: String) -> Int? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        guard let date = formatter.date(from: timeString) else { return nil }
+        return minutesSinceMidnight(from: date)
+    }
+
+    private func minutesSinceMidnight(from date: Date) -> Int {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    }
+
+    private func formatEntryReference(_ entry: FoodEntry) -> String {
+        let timeFormatter = DateFormatter()
+        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+        timeFormatter.timeStyle = .short
+        timeFormatter.dateStyle = .none
+        return "\(timeFormatter.string(from: entry.loggedAt)) \(entry.name)"
+    }
+
+    private func directEditErrorForMissingEntries(targetDateString: String?) -> FoodEntryResolution {
+        if let targetDateString, !targetDateString.isEmpty {
+            return .clarification("I couldn't find any logged meals on \(targetDateString). Tell me a different day or the meal details and I'll help update it.")
+        }
+        return .clarification("I couldn't find any logged meals for today. Tell me the meal and day you want to edit and I'll help update it.")
     }
 
     func executeGetFoodLog(_ args: [String: Any]) -> ExecutionResult {

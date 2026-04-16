@@ -232,12 +232,14 @@ struct DateNavigationBar: View {
                     .foregroundStyle(.primary)
                     .frame(width: 44, height: 44)
             }
+            .accessibilityIdentifier("dashboardDatePreviousButton")
 
             Spacer()
 
             VStack(spacing: 2) {
                 Text(dateText)
                     .font(.headline)
+                    .accessibilityIdentifier("dashboardDateLabel")
 
                 if !isToday {
                     Button {
@@ -250,6 +252,7 @@ struct DateNavigationBar: View {
                             .font(.caption)
                             .foregroundStyle(.accent)
                     }
+                    .accessibilityIdentifier("dashboardJumpToTodayButton")
                 }
             }
 
@@ -266,6 +269,7 @@ struct DateNavigationBar: View {
                     .foregroundStyle(isToday ? .tertiary : .primary)
                     .frame(width: 44, height: 44)
             }
+            .accessibilityIdentifier("dashboardDateNextButton")
             .disabled(isToday)
         }
         .padding(.horizontal, 8)

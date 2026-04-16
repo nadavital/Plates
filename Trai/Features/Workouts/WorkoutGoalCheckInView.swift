@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct GoalCheckInMessage: Identifiable {
     let id = UUID()

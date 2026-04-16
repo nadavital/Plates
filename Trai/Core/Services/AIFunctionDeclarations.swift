@@ -109,6 +109,23 @@ enum AIFunctionDeclarations {
                         "type": "string",
                         "description": "The UUID of the food entry to edit"
                     ],
+                    "target_name": [
+                        "type": "string",
+                        "description": "Name of the already-logged meal you want to edit (for example, 'chicken bowl' or 'black coffee'). Use this to identify the existing entry when entry_id is not available."
+                    ],
+                    "target_logged_at_date": [
+                        "type": "string",
+                        "description": "Date of the already-logged meal you want to edit in YYYY-MM-DD format. Use this to identify the existing entry when entry_id is not available."
+                    ],
+                    "target_logged_at_time": [
+                        "type": "string",
+                        "description": "Time of the already-logged meal you want to edit in HH:mm 24-hour format. Use this to identify the existing entry when entry_id is not available."
+                    ],
+                    "target_meal_type": [
+                        "type": "string",
+                        "description": "Meal type of the already-logged entry you want to edit. Use this to identify the existing entry when entry_id is not available.",
+                        "enum": ["breakfast", "lunch", "dinner", "snack"]
+                    ],
                     "name": [
                         "type": "string",
                         "description": "New title/name for the food (optional)"
@@ -155,7 +172,7 @@ enum AIFunctionDeclarations {
                         "description": "New notes for this food entry (optional)"
                     ]
                 ],
-                "required": ["entry_id"]
+                "required": []
             ]
         ]
     }

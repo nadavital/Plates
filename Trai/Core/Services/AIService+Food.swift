@@ -18,6 +18,10 @@ extension AIService {
             throw AIServiceError.invalidInput("Please provide an image or description of the food")
         }
 
+        if AppLaunchArguments.shouldUseMockFoodAIResponses {
+            return mockFoodAnalysis(description: description)
+        }
+
         isLoading = true
         lastError = nil
         defer { isLoading = false }
@@ -109,6 +113,13 @@ extension AIService {
         currentSuggestion: SuggestedFoodEntry,
         imageData: Data?
     ) async throws -> SuggestedFoodEntry {
+        if AppLaunchArguments.shouldUseMockFoodAIResponses {
+            return mockRefinedFoodSuggestion(
+                correction: correction,
+                currentSuggestion: currentSuggestion
+            )
+        }
+
         isLoading = true
         lastError = nil
         defer { isLoading = false }
@@ -219,6 +230,64 @@ extension AIService {
             emoji: decoded.emoji,
             loggedAtDateString: originalSuggestion?.loggedAtDateString,
             loggedAtTime: originalSuggestion?.loggedAtTime
+        )
+    }
+
+    private func mockFoodAnalysis(description: String?) -> FoodAnalysis {
+        let trimmedDescription = description?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDescription = trimmedDescription?.isEmpty == false ? trimmedDescription! : "UI Test Meal"
+
+        return FoodAnalysis(
+            name: normalizedDescription.capitalized,
+            calories: 430,
+            proteinGrams: 28,
+            carbsGrams: 42,
+            fatGrams: 14,
+            fiberGrams: 6,
+            sugarGrams: 8,
+            servingSize: "1 serving",
+            confidence: "high",
+            notes: "Mocked food analysis for UI testing",
+            emoji: "🥗"
+        )
+    }
+
+    private func mockRefinedFoodSuggestion(
+        correction: String,
+        currentSuggestion: SuggestedFoodEntry
+    ) -> SuggestedFoodEntry {
+        let lowercaseCorrection = correction.lowercased()
+        let calorieAdjustment: Int
+        if lowercaseCorrection.contains("100") {
+            calorieAdjustment = 100
+        } else if lowercaseCorrection.contains("50") {
+            calorieAdjustment = 50
+        } else {
+            calorieAdjustment = 35
+        }
+
+        let updatedName: String
+        if lowercaseCorrection.contains("wrap") {
+            updatedName = "Chicken Wrap"
+        } else if lowercaseCorrection.contains("salad") {
+            updatedName = "Protein Salad"
+        } else {
+            updatedName = "\(currentSuggestion.name) Adjusted"
+        }
+
+        return SuggestedFoodEntry(
+            name: updatedName,
+            calories: currentSuggestion.calories + calorieAdjustment,
+            proteinGrams: currentSuggestion.proteinGrams + 3,
+            carbsGrams: currentSuggestion.carbsGrams + 4,
+            fatGrams: currentSuggestion.fatGrams + 1,
+            fiberGrams: (currentSuggestion.fiberGrams ?? 0) + 1,
+            sugarGrams: currentSuggestion.sugarGrams,
+            servingSize: currentSuggestion.servingSize,
+            emoji: currentSuggestion.emoji ?? "🥗",
+            loggedAtDateString: currentSuggestion.loggedAtDateString,
+            loggedAtTime: currentSuggestion.loggedAtTime
         )
     }
 

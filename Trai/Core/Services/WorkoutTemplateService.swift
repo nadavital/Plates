@@ -25,14 +25,12 @@ struct WorkoutTemplateService {
     func createCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = [],
-        focusAreas: [String] = []
+        muscles: [LiveWorkout.MuscleGroup] = []
     ) -> LiveWorkout {
         LiveWorkout(
             name: name,
             workoutType: type,
-            targetMuscleGroups: muscles,
-            focusAreas: focusAreas
+            targetMuscleGroups: muscles
         )
     }
 

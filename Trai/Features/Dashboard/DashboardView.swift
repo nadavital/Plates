@@ -349,14 +349,79 @@ struct DashboardView: View {
         Set(liveWorkouts.compactMap { $0.mergedHealthKitWorkoutID })
     }
 
-    /// Workouts for today, excluding HealthKit workouts that were merged into in-app workouts
-    private var todayTotalWorkoutCount: Int {
-        // Filter out HealthKit workouts that have been merged into LiveWorkouts
-        let uniqueHealthKitWorkouts = selectedDayWorkouts.filter { workout in
+    /// HealthKit workouts for the selected day that have not already been merged into in-app workouts.
+    private var selectedDayUniqueHealthKitWorkouts: [WorkoutSession] {
+        selectedDayWorkouts.filter { workout in
             guard let hkID = workout.healthKitWorkoutID else { return true }
             return !mergedHealthKitIDs.contains(hkID)
         }
-        return uniqueHealthKitWorkouts.count + selectedDayLiveWorkouts.count
+    }
+
+    private var selectedDayWorkoutCount: Int {
+        selectedDayUniqueHealthKitWorkouts.count + selectedDayLiveWorkouts.count
+    }
+
+    private var selectedDayWorkoutCalories: Int {
+        let healthKitCalories = selectedDayUniqueHealthKitWorkouts
+            .compactMap(\.caloriesBurned)
+            .reduce(0, +)
+        let liveWorkoutCalories = selectedDayLiveWorkouts.reduce(0) { total, workout in
+            total + Int(workout.healthKitCalories ?? 0)
+        }
+        return healthKitCalories + liveWorkoutCalories
+    }
+
+    private var selectedDayWorkoutMinutes: Int {
+        let healthKitMinutes = selectedDayUniqueHealthKitWorkouts.reduce(0) { total, workout in
+            total + Int(workout.durationMinutes ?? 0)
+        }
+        let liveWorkoutMinutes = selectedDayLiveWorkouts.reduce(0) { total, workout in
+            total + Int(workout.duration / 60)
+        }
+        return healthKitMinutes + liveWorkoutMinutes
+    }
+
+    private var activityCardTitle: String {
+        isViewingToday ? "Today's Activity" : "Logged Activity"
+    }
+
+    private var activityCardSteps: Int? {
+        isViewingToday ? todaySteps : nil
+    }
+
+    private var activityCardCalories: Int? {
+        if isViewingToday { return todayActiveCalories }
+        return selectedDayWorkoutCalories > 0 ? selectedDayWorkoutCalories : nil
+    }
+
+    private var activityCardExerciseMinutes: Int? {
+        if isViewingToday { return todayExerciseMinutes }
+        return selectedDayWorkoutMinutes > 0 ? selectedDayWorkoutMinutes : nil
+    }
+
+    private var activityCardCaloriesLabel: String {
+        isViewingToday ? "Active Cal" : "Workout Cal"
+    }
+
+    private var activityCardExerciseLabel: String {
+        isViewingToday ? "Exercise" : "Minutes"
+    }
+
+    private var activityCardIsLoading: Bool {
+        isViewingToday && isLoadingActivity
+    }
+
+    private var activityCardWorkoutCount: Int? {
+        if isViewingToday { return selectedDayWorkoutCount }
+        return selectedDayWorkoutCount > 0 ? selectedDayWorkoutCount : nil
+    }
+
+    private var shouldShowActivityCard: Bool {
+        if isViewingToday { return true }
+        return activityCardSteps != nil ||
+            activityCardCalories != nil ||
+            activityCardExerciseMinutes != nil ||
+            activityCardWorkoutCount != nil
     }
 
     /// Returns the workout name to display on the quick action button
@@ -729,14 +794,19 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var dashboardActivitySections: some View {
-        TodaysActivityCard(
-            steps: todaySteps,
-            activeCalories: todayActiveCalories,
-            exerciseMinutes: todayExerciseMinutes,
-            workoutCount: todayTotalWorkoutCount,
-            isLoading: isLoadingActivity
-        )
-        .traiEntrance(index: 6)
+        if shouldShowActivityCard {
+            TodaysActivityCard(
+                title: activityCardTitle,
+                steps: activityCardSteps,
+                activeCalories: activityCardCalories,
+                activeCaloriesLabel: activityCardCaloriesLabel,
+                exerciseMinutes: activityCardExerciseMinutes,
+                exerciseMinutesLabel: activityCardExerciseLabel,
+                workoutCount: activityCardWorkoutCount,
+                isLoading: activityCardIsLoading
+            )
+            .traiEntrance(index: 6)
+        }
 
         if isViewingToday, let latestWeight = weightEntries.first {
             NavigationLink {

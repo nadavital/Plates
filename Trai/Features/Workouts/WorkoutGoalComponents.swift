@@ -114,11 +114,6 @@ enum WorkoutGoalProgressResolver {
                     return true
                 }
 
-                let candidateFocus = Set(candidate.focusAreas.map(\.goalNormalizedKey))
-                if !candidateFocus.isDisjoint(with: currentFocus) {
-                    return true
-                }
-
                 let candidateActivities = Set((candidate.entries ?? []).map { $0.exerciseName.goalNormalizedKey })
                 return !candidateActivities.isDisjoint(with: currentActivities)
             }
@@ -776,8 +771,9 @@ struct WorkoutGoalProgressCard: View {
         .traiCard()
     }
 
+    @ViewBuilder
     private func goalRow(_ insight: WorkoutGoalInsight) -> some View {
-        let content = VStack(alignment: .leading, spacing: 10) {
+        let rowContent = VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: insight.goal.goalKind.iconName)
                     .font(.subheadline)
@@ -837,13 +833,13 @@ struct WorkoutGoalProgressCard: View {
         .padding(.vertical, 4)
 
         if let onGoalTap {
-            content
+            rowContent
                 .contentShape(Rectangle())
                 .onTapGesture {
                     onGoalTap(insight.goal)
                 }
         } else {
-            content
+            rowContent
         }
     }
 }

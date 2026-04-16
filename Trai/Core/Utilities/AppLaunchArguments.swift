@@ -12,6 +12,7 @@ enum AppLaunchArguments {
     static let pendingAppRoute = "-pendingAppRoute"
     static let seedLiveWorkoutPerfData = "--seed-live-workout-perf-data"
     static let uiTestLiveWorkoutPreset = "--ui-test-live-workout-preset"
+    static let mockFoodAIResponses = "--ui-test-mock-food-ai"
     static let enableTabPrewarm = "--enable-tab-prewarm"
     static let disableTabPrewarm = "--disable-tab-prewarm"
     static let disableHeavyTabDeferral = "--disable-heavy-tab-deferral"
@@ -54,6 +55,10 @@ enum AppLaunchArguments {
 
     static var shouldUseLiveWorkoutUITestPreset: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestLiveWorkoutPreset)
+    }
+
+    static var shouldUseMockFoodAIResponses: Bool {
+        ProcessInfo.processInfo.arguments.contains(mockFoodAIResponses)
     }
 
     static var shouldEnableTabPrewarm: Bool {

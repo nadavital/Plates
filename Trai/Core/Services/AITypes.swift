@@ -51,7 +51,7 @@ struct ChatFoodAnalysisResult: Sendable {
 }
 
 /// Food entry suggested by AI for logging
-struct SuggestedFoodEntry: Codable, Sendable, Identifiable {
+struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
     var id: String = UUID().uuidString
     let name: String
     let calories: Int

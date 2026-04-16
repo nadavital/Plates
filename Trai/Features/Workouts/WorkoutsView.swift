@@ -13,7 +13,6 @@ struct WorkoutsView: View {
         let name: String
         let type: LiveWorkout.WorkoutType
         let muscles: [LiveWorkout.MuscleGroup]
-        let focusAreas: [String]
     }
 
     // MARK: - Queries
@@ -235,49 +234,6 @@ struct WorkoutsView: View {
             plannedModes: plannedWorkoutModes,
             goalModes: activeWorkoutGoals.compactMap(\.linkedWorkoutType)
         )
-    }
-
-    private var customWorkoutSuggestions: [CustomWorkoutSetupSheet.SessionSuggestion] {
-        var suggestions: [CustomWorkoutSetupSheet.SessionSuggestion] = []
-        var seen = Set<String>()
-
-        for template in workoutPlan?.templates ?? [] {
-            let normalizedTitle = template.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedFocus = template.focusAreas.map(\.goalNormalizedKey).joined(separator: "|")
-            let key = "\(normalizedTitle.goalNormalizedKey)|\(template.sessionType.rawValue)|\(normalizedFocus)"
-            guard !seen.contains(key) else { continue }
-
-            suggestions.append(
-                .init(
-                    id: key,
-                    title: normalizedTitle,
-                    workoutType: template.sessionType,
-                    focusAreas: template.focusAreas,
-                    targetMuscles: LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
-                )
-            )
-            seen.insert(key)
-        }
-
-        for workout in completedLiveWorkouts.sorted(by: { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }) {
-            let normalizedTitle = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedFocus = workout.focusAreas.map(\.goalNormalizedKey).joined(separator: "|")
-            let key = "\(normalizedTitle.goalNormalizedKey)|\(workout.type.rawValue)|\(normalizedFocus)"
-            guard !seen.contains(key) else { continue }
-
-            suggestions.append(
-                .init(
-                    id: key,
-                    title: normalizedTitle,
-                    workoutType: workout.type,
-                    focusAreas: workout.focusAreas,
-                    targetMuscles: workout.muscleGroups
-                )
-            )
-            seen.insert(key)
-        }
-
-        return Array(suggestions.prefix(4))
     }
 
     private var workoutsByDate: [(date: Date, workouts: [WorkoutSession])] { cachedWorkoutsByDate }
@@ -506,11 +462,10 @@ struct WorkoutsView: View {
             }
             .sheet(isPresented: $showingCustomWorkoutSetup) {
                 CustomWorkoutSetupSheet(
-                    onStart: { name, type, muscles, focusAreas in
-                    queueCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
+                    onStart: { name, type, muscles in
+                        queueCustomWorkoutStart(name: name, type: type, muscles: muscles)
                     },
-                    orderedWorkoutTypes: personalizedWorkoutTypes,
-                    sessionSuggestions: customWorkoutSuggestions
+                    orderedWorkoutTypes: personalizedWorkoutTypes
                 )
                 .traiSheetBranding()
             }
@@ -520,8 +475,7 @@ struct WorkoutsView: View {
                 startCustomWorkout(
                     name: pendingCustomWorkoutStart.name,
                     type: pendingCustomWorkoutStart.type,
-                    muscles: pendingCustomWorkoutStart.muscles,
-                    focusAreas: pendingCustomWorkoutStart.focusAreas
+                    muscles: pendingCustomWorkoutStart.muscles
                 )
             }
             .onChange(of: showingWorkoutSheet) { _, isShowing in
@@ -1192,7 +1146,7 @@ struct WorkoutsView: View {
             ]
         )
 
-        // Store template for suggestions and open the workout sheet
+        // Preserve the source template context and open the workout sheet
         pendingTemplate = template
         pendingWorkout = workout
         showingWorkoutSheet = true
@@ -1202,14 +1156,12 @@ struct WorkoutsView: View {
     private func startCustomWorkout(
         name: String = "Custom Workout",
         type: LiveWorkout.WorkoutType = .strength,
-        muscles: [LiveWorkout.MuscleGroup] = [],
-        focusAreas: [String] = []
+        muscles: [LiveWorkout.MuscleGroup] = []
     ) {
         let workout = templateService.createCustomWorkout(
             name: name,
             type: type,
-            muscles: muscles,
-            focusAreas: focusAreas
+            muscles: muscles
         )
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
@@ -1233,16 +1185,14 @@ struct WorkoutsView: View {
     private func queueCustomWorkoutStart(
         name: String,
         type: LiveWorkout.WorkoutType,
-        muscles: [LiveWorkout.MuscleGroup],
-        focusAreas: [String]
+        muscles: [LiveWorkout.MuscleGroup]
     ) {
-        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles, focusAreas: focusAreas)
+        let request = PendingCustomWorkoutStart(name: name, type: type, muscles: muscles)
         guard showingCustomWorkoutSetup else {
             startCustomWorkout(
                 name: request.name,
                 type: request.type,
-                muscles: request.muscles,
-                focusAreas: request.focusAreas
+                muscles: request.muscles
             )
             return
         }
