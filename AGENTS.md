@@ -4,9 +4,9 @@
 - Shared operating notes for coding agents working in this repository.
 
 ## Project Scope
-- App code: `/Users/nadav/Desktop/Trai/Trai`
-- Widgets: `/Users/nadav/Desktop/Trai/TraiWidgets`
-- Xcode project: `/Users/nadav/Desktop/Trai/Trai.xcodeproj`
+- App code: `/Users/navital/Desktop/Trai/Trai`
+- Widgets: `/Users/navital/Desktop/Trai/TraiWidgets`
+- Xcode project: `/Users/navital/Desktop/Trai/Trai.xcodeproj`
 
 ## Working Rules
 - Make targeted, minimal changes.
@@ -21,7 +21,7 @@
 ## Product Notes
 - Branding: keep the Trai lens/hexagon icon unless explicitly discussed; avoid changing icon shapes unilaterally.
 - Color consistency: match accents (e.g., Review with Trai buttons, toolbar checkmarks) to the Trai Memories hexagon colors; use `.tint(.accentColor)` for confirmation actions where applicable.
-- Widgets: the Trai widget "Log Food" button was reported as non-functional; verify the widget action/deep link flow.
+- Widgets: keep the current widget action/deep link flow aligned with `LogFoodCameraIntent` and `showingFoodCamera`; avoid introducing alternate routing paths.
 
 ## Design Language
 - Before changing UI, read [design.md](/Users/navital/Desktop/Trai/design.md) and preserve the app’s current warm, rounded, material-backed look.
@@ -36,4 +36,4 @@
 
 ## Performance Notes
 - Live workout UI is sensitive to main-thread work. Avoid JSON encode/decode in hot getters (e.g., `LiveWorkoutEntry.sets`) and avoid synchronous `modelContext.save()` on `Add Set`; prefer caching and debounced saves.
-- Live workout latency checks: run `./scripts/run_live_workout_stability.sh --mode sim`; deeper context/results live in `/Users/nadav/Desktop/Trai/.agent/done/live-workout-latency-report.md`.
+- Live workout latency checks: run `./scripts/run_live_workout_stability.sh --mode sim`; deeper context/results live in `/Users/navital/Desktop/Trai/.agent/done/live-workout-latency-report.md`.

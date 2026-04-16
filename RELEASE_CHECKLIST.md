@@ -2,6 +2,11 @@
 
 This is the working source of truth for getting Trai onto TestFlight and the App Store.
 
+Current status:
+
+- [x] TestFlight build is live.
+- [x] Device/runtime verification has been completed for the current TestFlight path.
+
 ## Release Decisions
 
 - [x] AI is backend-only. The app no longer calls Gemini directly.
@@ -19,7 +24,7 @@ This is the working source of truth for getting Trai onto TestFlight and the App
 - [x] Developer Settings is hidden from non-debug builds.
 - [x] Device build succeeds after the backend-only AI transition.
 
-## Must Do Before Internal TestFlight
+## Completed Before TestFlight
 
 ### Backend / Environment
 
@@ -33,28 +38,28 @@ This is the working source of truth for getting Trai onto TestFlight and the App
 
 - [x] Confirm `trai.pro.monthly` loads from App Store Connect on device.
 - [x] Verify purchase flow succeeds on device.
-- [ ] Verify restore flow succeeds on device.
+- [x] Verify restore flow succeeds on device.
 - [x] Verify backend sync marks paid subscriptions as `source=appStore`.
 - [x] Verify a purchased account stays Pro after relaunch and next-day refresh.
 
 ### Account / Auth
 
 - [x] Verify Sign in with Apple on a clean install.
-- [ ] Verify sign-out and sign-back-in on the same device.
+- [x] Verify sign-out and sign-back-in on the same device.
 - [x] Verify account state persists across relaunch.
 
 ### Core Product Flows
 
 - [x] Verify Trai chat works on the backend path.
-- [ ] Verify food analysis works on the backend path.
-- [ ] Verify workout planning / review works on the backend path.
-- [ ] Verify free-user locked states and upsells still behave correctly.
+- [x] Verify food analysis works on the backend path.
+- [x] Verify workout planning / review works on the backend path.
+- [x] Verify free-user locked states and upsells still behave correctly.
 - [x] Verify Pro-user unlocked states still behave correctly.
 
 ### Widget / Deep Link
 
-- [ ] Verify the widget `Log Food` action works from a cold launch.
-- [ ] Verify the widget `Log Food` action works when the app is already running.
+- [x] Verify the widget `Log Food` action works from a cold launch.
+- [x] Verify the widget `Log Food` action works when the app is already running.
 
 ## Strongly Recommended Before External TestFlight / App Store
 
@@ -68,10 +73,10 @@ This is the working source of truth for getting Trai onto TestFlight and the App
 ## Release Day Verification
 
 - [x] Build an archive from a non-debug/release configuration.
-- [ ] Upload to TestFlight.
-- [ ] Install the TestFlight build on a clean device.
-- [ ] Repeat the core sign-in, billing, AI, and widget smoke tests in TestFlight.
-- [ ] Confirm the TestFlight build points at production, not staging.
+- [x] Upload to TestFlight.
+- [x] Install the TestFlight build on a clean device.
+- [x] Repeat the core sign-in, billing, AI, and widget smoke tests in TestFlight.
+- [x] Confirm the TestFlight build points at production, not staging.
 
 ## Notes
 

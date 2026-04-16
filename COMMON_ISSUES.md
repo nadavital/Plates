@@ -204,12 +204,12 @@ Use this when launch, reopen, or tab transitions feel slower than expected, or b
 
 ### What It Produces
 - JSON summary: `/tmp/trai-app-latency-summary-<timestamp>.json`
-- Markdown report: `/Users/nadav/Desktop/Trai/.agent/done/app-latency-regression-report.md`
+- Markdown report: `/Users/navital/Desktop/Trai/.agent/done/app-latency-regression-report.md`
 - Raw xcodebuild log: `/tmp/trai-app-latency-<timestamp>.log`
 
 ### Baseline Source of Truth
 - `scripts/latency_baseline_simulator.json`
-- If baseline budgets are updated, also update `/Users/nadav/Desktop/Trai/.agent/app-latency-issues.md` with rationale and latest measured values.
+- If baseline budgets are updated, also update `/Users/navital/Desktop/Trai/.agent/app-latency-issues.md` with rationale and latest measured values.
 
 ### Extractor Fixture Validation
 ```bash

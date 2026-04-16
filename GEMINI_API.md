@@ -1,6 +1,7 @@
 # Gemini API Reference
 
-This document defines the correct Gemini API usage for this project. Always reference before modifying Gemini-related code.
+This document is only for Gemini-specific provider behavior in Trai's backend and compatibility layers.
+For general app AI work, prefer the Trai-native backend contract and shared `AI*` service/types first.
 
 ## Official Documentation
 
