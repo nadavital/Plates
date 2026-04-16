@@ -23,6 +23,11 @@ struct TraiApp: App {
     let modelContainer: ModelContainer
     @State private var notificationService: NotificationService
     @State private var healthKitService: HealthKitService
+    @State private var appAccountService: AppAccountService
+    @State private var accountSessionService: AccountSessionService
+    @State private var monetizationService: MonetizationService
+    @State private var billingService: BillingService
+    @State private var proUpsellCoordinator: ProUpsellCoordinator
     @State private var notificationDelegate: NotificationDelegate?
     @State private var showRemindersFromNotification = false
     @State private var deepLinkDestination: AppRoute?
@@ -49,14 +54,34 @@ struct TraiApp: App {
     init() {
         let notificationService = NotificationService()
         let healthKitService = HealthKitService()
+        let appAccountService = AppAccountService.shared
+        let accountSessionService = AccountSessionService.shared
+        let monetizationService = MonetizationService.shared
+        let billingService = BillingService.shared
+        let proUpsellCoordinator = ProUpsellCoordinator.shared
         _notificationService = State(initialValue: notificationService)
         _healthKitService = State(initialValue: healthKitService)
+        _appAccountService = State(initialValue: appAccountService)
+        _accountSessionService = State(initialValue: accountSessionService)
+        _monetizationService = State(initialValue: monetizationService)
+        _billingService = State(initialValue: billingService)
+        _proUpsellCoordinator = State(initialValue: proUpsellCoordinator)
 
         let isUITesting = AppLaunchArguments.isUITesting
         let isRunningTests = AppLaunchArguments.isRunningTests
         let shouldUseInMemoryStore = AppLaunchArguments.shouldUseInMemoryStore
+        let launchPendingRoute = AppLaunchArguments.launchPendingRoute
         self.isUITesting = isUITesting
         self.isRunningTests = isRunningTests
+        _deepLinkDestination = State(initialValue: launchPendingRoute)
+
+        #if DEBUG
+        if isUITesting {
+            monetizationService.setDebugPlan(.developer)
+            monetizationService.resetQuotaForDebug()
+            accountSessionService.setDebugAuthenticatedSession()
+        }
+        #endif
 
         do {
             Self.primeSharedStoreDirectoryIfNeeded(usesInMemoryStore: shouldUseInMemoryStore)
@@ -76,6 +101,7 @@ struct TraiApp: App {
                 CoachSignal.self,
                 NutritionPlanVersion.self,
                 WorkoutPlanVersion.self,
+                WorkoutGoal.self,
                 CustomReminder.self,
                 ReminderCompletion.self,
                 SuggestionUsage.self,
@@ -135,7 +161,13 @@ struct TraiApp: App {
                     .tint(brandAccent)
                     .accentColor(brandAccent)
                     .environment(notificationService)
+                    .environment(appAccountService)
+                    .environment(accountSessionService)
+                    .environment(monetizationService)
+                    .environment(billingService)
+                    .environment(proUpsellCoordinator)
                     .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
+                    .proUpsellPresenter()
                     .onOpenURL { url in
                         handleDeepLink(url)
                     }
@@ -145,9 +177,17 @@ struct TraiApp: App {
                     .accentColor(brandAccent)
                     .environment(notificationService)
                     .environment(healthKitService)
+                    .environment(appAccountService)
+                    .environment(accountSessionService)
+                    .environment(monetizationService)
+                    .environment(billingService)
+                    .environment(proUpsellCoordinator)
                     .environment(\.showRemindersFromNotification, $showRemindersFromNotification)
+                    .proUpsellPresenter()
                     .onAppear {
                         PerformanceTrace.event("app_window_appear", category: .launch)
+                        billingService.refreshLocalState()
+                        monetizationService.refreshStateIfNeeded()
                         setupNotificationDelegate()
                         scheduleDeferredStartupTasksIfNeeded()
                         scheduleStartupMigrationIfNeeded()
@@ -173,6 +213,8 @@ struct TraiApp: App {
                     WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
                 }
             } else if newPhase == .active {
+                billingService.refreshLocalState()
+                monetizationService.refreshStateIfNeeded()
                 scheduleForegroundHealthKitSyncIfEligible()
                 scheduleReminderScheduleRefreshIfNeeded()
                 scheduleReminderBackgroundRefresh()

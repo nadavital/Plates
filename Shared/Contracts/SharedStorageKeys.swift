@@ -16,6 +16,11 @@ enum SharedStorageKeys {
         static let liveActivityTogglePauseTimestamp = "liveActivityTogglePauseTimestamp"
     }
 
+    enum Chat {
+        static let pendingPrompt = "pendingTraiChatPrompt"
+        static let pendingLaunchLabel = "pendingTraiChatLaunchLabel"
+    }
+
     enum AppRouting {
         static let pendingRoute = "pendingAppRoute"
     }

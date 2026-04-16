@@ -8,6 +8,10 @@
 import SwiftUI
 
 enum TraiColors {
+    /// Shared app accent from the asset catalog. Use this explicitly in sheet flows
+    /// where `.accentColor` can briefly fall back to the system default during presentation.
+    static let brandAccent = Color("AccentColor")
+
     /// Deep Red — the anchor tone
     static let ember = Color(red: 0.85, green: 0.25, blue: 0.20)
 
@@ -33,4 +37,14 @@ enum TraiColors {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+}
+
+extension View {
+    /// Applies an explicit Trai brand tint at the presented-view root so sheets
+    /// do not briefly fall back to the system blue accent during presentation.
+    func traiSheetBranding() -> some View {
+        self
+            .tint(TraiColors.brandAccent)
+            .accentColor(TraiColors.brandAccent)
+    }
 }

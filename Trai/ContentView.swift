@@ -282,6 +282,7 @@ struct MainTabView: View {
             }
             .sheet(item: $presentedWorkout) { workout in
                 LiveWorkoutView(workout: workout)
+                    .traiSheetBranding()
             }
             .confirmationDialog(
                 "End Workout?",
@@ -298,13 +299,16 @@ struct MainTabView: View {
                 Text("Are you sure you want to end this workout?")
             }
             .fullScreenCover(item: $foodCameraPresentation) { presentation in
-                FoodCameraView(sessionId: presentation.sessionId)
+                FoodCameraView(sessionId: presentation.sessionId, targetDate: presentation.targetDate)
+                    .traiSheetBranding()
             }
             .sheet(isPresented: $showingLogWeight) {
                 LogWeightSheet()
+                    .traiSheetBranding()
             }
             .sheet(item: $intentTriggeredWorkout) { workout in
                 LiveWorkoutView(workout: workout)
+                    .traiSheetBranding()
             }
             .onAppear {
                 consumePendingRoute()
@@ -329,9 +333,12 @@ struct MainTabView: View {
                     DashboardView(
                         showRemindersBinding: $showingReminders,
                         onSelectTab: selectTab,
-                        onPresentFoodCamera: { sessionId in
+                        onPresentFoodCamera: { sessionId, targetDate in
                             guard foodCameraPresentation == nil else { return }
-                            foodCameraPresentation = FoodCameraPresentation(sessionId: sessionId)
+                            foodCameraPresentation = FoodCameraPresentation(
+                                sessionId: sessionId,
+                                targetDate: targetDate
+                            )
                         }
                     )
                 }
@@ -439,7 +446,11 @@ struct MainTabView: View {
         switch destination {
         case .logFood:
             guard foodCameraPresentation == nil else { return }
-            foodCameraPresentation = FoodCameraPresentation()
+            Task { @MainActor in
+                await Task.yield()
+                guard foodCameraPresentation == nil else { return }
+                foodCameraPresentation = FoodCameraPresentation()
+            }
             BehaviorTracker(modelContext: modelContext).recordDeferred(
                 actionKey: BehaviorActionKey.logFood,
                 domain: .nutrition,

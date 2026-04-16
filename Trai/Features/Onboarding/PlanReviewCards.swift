@@ -15,6 +15,12 @@ struct DailyTargetsCard: View {
     @Binding var adjustedCarbs: String
     @Binding var adjustedFat: String
 
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case calories
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             HStack {
@@ -24,9 +30,14 @@ struct DailyTargetsCard: View {
 
                 Spacer()
 
-                Text("Tap to edit")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Button {
+                    focusedField = .calories
+                } label: {
+                    Text("Tap to edit")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
             }
 
             // Calories - big and prominent
@@ -37,6 +48,7 @@ struct DailyTargetsCard: View {
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
                         .frame(width: 160)
+                        .focused($focusedField, equals: .calories)
 
                     Text("kcal")
                         .font(.title3)
@@ -107,6 +119,7 @@ struct RationaleCard: View {
 
 struct ProgressInsightsCard: View {
     let insights: NutritionPlan.ProgressInsights
+    let goal: UserProfile.GoalType?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -125,7 +138,7 @@ struct ProgressInsightsCard: View {
                     Text(insights.estimatedWeeklyChange)
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundStyle(weeklyChangeColor(insights.calorieDeficitOrSurplus))
+                        .foregroundStyle(weeklyChangeColor)
                 }
 
                 Spacer()
@@ -149,7 +162,7 @@ struct ProgressInsightsCard: View {
             // Deficit/Surplus indicator
             HStack(spacing: 8) {
                 Image(systemName: deficitSurplusIcon(insights.calorieDeficitOrSurplus))
-                    .foregroundStyle(weeklyChangeColor(insights.calorieDeficitOrSurplus))
+                    .foregroundStyle(weeklyChangeColor)
 
                 Text(deficitSurplusText(insights.calorieDeficitOrSurplus))
                     .font(.subheadline)
@@ -199,18 +212,27 @@ struct ProgressInsightsCard: View {
         .traiCard(cornerRadius: 16)
     }
 
-    private func weeklyChangeColor(_ deficitOrSurplus: Int) -> Color {
-        if deficitOrSurplus < -100 {
+    private var weeklyChangeColor: Color {
+        if isNearMaintenance {
+            return .primary
+        } else if insights.calorieDeficitOrSurplus < -100 {
             return .green // Losing weight
-        } else if deficitOrSurplus > 100 {
+        } else if insights.calorieDeficitOrSurplus > 100 {
             return .blue // Gaining (muscle building)
         } else {
             return .primary // Maintenance
         }
     }
 
+    private var isNearMaintenance: Bool {
+        guard let goal else { return false }
+        return NutritionPlan.isNearMaintenance(goal: goal, deficitOrSurplus: insights.calorieDeficitOrSurplus)
+    }
+
     private func deficitSurplusIcon(_ value: Int) -> String {
-        if value < 0 {
+        if isNearMaintenance {
+            return "equal.circle.fill"
+        } else if value < 0 {
             return "arrow.down.circle.fill"
         } else if value > 0 {
             return "arrow.up.circle.fill"
@@ -220,7 +242,13 @@ struct ProgressInsightsCard: View {
     }
 
     private func deficitSurplusText(_ value: Int) -> String {
-        if value < 0 {
+        if isNearMaintenance {
+            if goal == .recomposition {
+                return "Near maintenance to support recomposition"
+            } else {
+                return "Maintenance calories"
+            }
+        } else if value < 0 {
             return "\(abs(value)) calorie deficit per day"
         } else if value > 0 {
             return "\(value) calorie surplus per day"

@@ -12,6 +12,18 @@ struct WorkoutPlanOverviewCard: View {
     let onCreatePlan: () -> Void
     let onEditPlan: () -> Void
 
+    private func flexibleSessionCount(for plan: WorkoutPlan) -> Int {
+        plan.templates.filter { !$0.sessionType.prefersStructuredEntries }.count
+    }
+
+    private func summaryLabel(for plan: WorkoutPlan) -> String {
+        let flexibleCount = flexibleSessionCount(for: plan)
+        if flexibleCount > 0 {
+            return flexibleCount == 1 ? "flex day" : "flex days"
+        }
+        return "sessions"
+    }
+
     var body: some View {
         if let plan = workoutPlan {
             planOverviewView(plan)
@@ -60,9 +72,9 @@ struct WorkoutPlanOverviewCard: View {
                 )
 
                 PlanStatChip(
-                    icon: "dumbbell",
+                    icon: "list.bullet.rectangle",
                     value: "\(plan.templates.count)",
-                    label: "workouts"
+                    label: summaryLabel(for: plan)
                 )
             }
 
@@ -101,7 +113,7 @@ struct WorkoutPlanOverviewCard: View {
                     Text("Create Your Workout Plan")
                         .font(.headline)
 
-                    Text("Let Trai design a personalized training program for you")
+                    Text("Let Trai build a weekly workout plan around your schedule and workout style")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -161,31 +173,11 @@ struct PlanStatChip: View {
 struct TemplateChip: View {
     let template: WorkoutPlan.WorkoutTemplate
 
-    private var primaryColor: Color {
-        // Color based on primary muscle group
-        guard let firstMuscle = template.targetMuscleGroups.first else {
-            return .gray
-        }
-
-        switch firstMuscle {
-        case "chest", "shoulders", "triceps":
-            return .orange
-        case "back", "biceps":
-            return .blue
-        case "quads", "hamstrings", "glutes", "calves":
-            return .green
-        case "core":
-            return .purple
-        default:
-            return .gray
-        }
-    }
-
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(primaryColor)
-                .frame(width: 8, height: 8)
+            Image(systemName: template.sessionType.iconName)
+                .font(.caption2)
+                .foregroundStyle(template.displayAccentColor)
 
             Text(template.name)
                 .font(.caption)
@@ -193,7 +185,7 @@ struct TemplateChip: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(primaryColor.opacity(0.15))
+        .background(template.displayAccentColor.opacity(0.15))
         .clipShape(.capsule)
     }
 }

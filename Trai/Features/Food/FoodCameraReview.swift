@@ -155,6 +155,15 @@ struct FoodCameraReviewView: View {
             .padding()
         }
         .background(Color(.systemBackground))
+        .onChange(of: refinedSuggestion) { _, newValue in
+            guard newValue != nil, isRefining else { return }
+
+            withAnimation(.spring(response: 0.3)) {
+                isRefining = false
+            }
+            refinementText = ""
+            isRefinementFocused = false
+        }
     }
 
     private func sendRefinement() {
@@ -258,6 +267,7 @@ struct FoodCameraSuggestionCard: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.traiTertiary())
+                    .accessibilityIdentifier("foodCameraReviewRefineButton")
 
                     Button(action: onSave) {
                         HStack(spacing: 6) {
@@ -270,6 +280,7 @@ struct FoodCameraSuggestionCard: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.traiPrimary())
+                    .accessibilityIdentifier("foodCameraReviewSaveButton")
                 }
             }
             }
@@ -327,6 +338,7 @@ struct FoodRefinementInput: View {
 
                 Button("Cancel", action: onCancel)
                     .font(.subheadline)
+                    .accessibilityIdentifier("foodCameraRefinementCancelButton")
             }
 
             HStack(spacing: 10) {
@@ -336,6 +348,7 @@ struct FoodRefinementInput: View {
                     .background(Color(.tertiarySystemBackground))
                     .clipShape(.rect(cornerRadius: 12))
                     .focused(isFocused)
+                    .accessibilityIdentifier("foodCameraRefinementField")
 
                 Button {
                     onSend()
@@ -349,6 +362,7 @@ struct FoodRefinementInput: View {
                             .foregroundStyle(text.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary : Color.accentColor)
                     }
                 }
+                .accessibilityIdentifier("foodCameraRefinementSendButton")
                 .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
             }
         }

@@ -60,7 +60,9 @@ final class TraiUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["Manual"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["foodCameraCaptureReady"].waitForExistence(timeout: 4)
+        )
     }
 
     func testPendingLogWeightRoutePresentsLogWeightSheet() {
@@ -76,6 +78,72 @@ final class TraiUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["liveWorkoutEndButton"].waitForExistence(timeout: 8))
+    }
+
+    func testDashboardPastDateHidesUnavailableHistoricalActivityMetrics() {
+        let app = makeApp()
+        app.launch()
+
+        assertReadiness(in: app, identifier: "dashboardRootReady", timeout: 10)
+
+        let previousDayButton = readinessElement(in: app, identifier: "dashboardDatePreviousButton")
+        XCTAssertTrue(previousDayButton.waitForExistence(timeout: 6))
+        previousDayButton.tap()
+
+        let jumpToTodayButton = readinessElement(in: app, identifier: "dashboardJumpToTodayButton")
+        XCTAssertTrue(jumpToTodayButton.waitForExistence(timeout: 4))
+
+        let activityCard = readinessElement(in: app, identifier: "dashboardActivityCard")
+        if activityCard.waitForExistence(timeout: 2) {
+            let activityTitle = readinessElement(in: app, identifier: "dashboardActivityTitle")
+            XCTAssertTrue(waitForElementLabel(activityTitle, equals: "Logged Activity", timeout: 4))
+            XCTAssertFalse(readinessElement(in: app, identifier: "dashboardActivityStepsValue").exists)
+            XCTAssertFalse(readinessElement(in: app, identifier: "dashboardActivityStepsLabel").exists)
+        } else {
+            XCTAssertFalse(activityCard.exists)
+        }
+    }
+
+    func testFoodCameraRefinementRestoresSaveButton() {
+        let app = makeApp(extraArguments: [
+            "-pendingAppRoute", "trai://logfood",
+            "--ui-test-mock-food-ai"
+        ])
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["foodCameraCaptureReady"].waitForExistence(timeout: 4)
+        )
+
+        let descriptionField = readinessElement(in: app, identifier: "foodCameraDescriptionField")
+        XCTAssertTrue(descriptionField.waitForExistence(timeout: 4))
+        descriptionField.tap()
+        descriptionField.typeText("banana yogurt bowl")
+
+        let submitButton = readinessElement(in: app, identifier: "foodCameraDescriptionSubmitButton")
+        XCTAssertTrue(submitButton.waitForExistence(timeout: 4))
+        submitButton.tap()
+
+        let saveButton = readinessElement(in: app, identifier: "foodCameraReviewSaveButton")
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 6))
+
+        let refineButton = readinessElement(in: app, identifier: "foodCameraReviewRefineButton")
+        XCTAssertTrue(refineButton.exists)
+        refineButton.tap()
+
+        let refinementField = readinessElement(in: app, identifier: "foodCameraRefinementField")
+        XCTAssertTrue(refinementField.waitForExistence(timeout: 4))
+        XCTAssertTrue(waitForNonExistence(saveButton, timeout: 2))
+
+        refinementField.tap()
+        refinementField.typeText("add 100 calories")
+
+        let sendButton = readinessElement(in: app, identifier: "foodCameraRefinementSendButton")
+        XCTAssertTrue(sendButton.exists)
+        sendButton.tap()
+
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 6))
+        XCTAssertTrue(waitForNonExistence(refinementField, timeout: 6))
     }
 
     func testLiveWorkoutStabilityPresetHandlesRepeatedMutationsAndReopen() throws {
@@ -380,9 +448,9 @@ final class TraiUITests: XCTestCase {
     ) -> XCUIApplication {
         let app = XCUIApplication()
         if includeUITestMode {
-            app.launchArguments = ["UITEST_MODE"] + extraArguments
+            app.launchArguments = ["UITEST_MODE", "--disable-tab-prewarm"] + extraArguments
         } else {
-            app.launchArguments = ["--use-persistent-store"] + extraArguments
+            app.launchArguments = ["--use-persistent-store", "--disable-tab-prewarm"] + extraArguments
         }
         return app
     }
@@ -548,6 +616,27 @@ final class TraiUITests: XCTestCase {
             return
         }
         XCTAssertTrue(element.waitForExistence(timeout: timeout))
+    }
+
+    @discardableResult
+    private func waitForElementLabel(
+        _ element: XCUIElement,
+        equals expectedLabel: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", expectedLabel)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @discardableResult
+    private func waitForNonExistence(
+        _ element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let predicate = NSPredicate(format: "exists == false")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     @discardableResult

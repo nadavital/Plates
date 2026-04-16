@@ -13,8 +13,12 @@ struct AddFoodView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
-    @State private var geminiService = GeminiService()
+    @State private var aiService = AIService()
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedImageData: Data?
@@ -82,6 +86,10 @@ struct AddFoodView: View {
                     }
                 }
             }
+        }
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
+                .traiSheetBranding()
         }
     }
 
@@ -194,10 +202,6 @@ struct AddFoodView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 sectionTitle("Analysis Result", icon: "checkmark.seal.fill")
-                Spacer()
-                Text(result.confidence)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 8) {
@@ -211,14 +215,6 @@ struct AddFoodView: View {
                     infoRow(label: "Serving", value: serving)
                 }
             }
-
-            if let notes = result.notes {
-                Text(notes)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-            }
-
             Button("Save Entry", systemImage: "checkmark.circle.fill") {
                 saveEntry()
             }
@@ -342,11 +338,21 @@ struct AddFoodView: View {
     }
 
     private func analyzeFood() async {
+        guard accountSessionService?.isAuthenticated == true else {
+            presentedAccountSetupContext = .aiFeatures
+            return
+        }
+
+        if !(monetizationService?.canAccessAIFeatures ?? true) {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
+            return
+        }
+
         isAnalyzing = true
         errorMessage = nil
 
         do {
-            let result = try await geminiService.analyzeFoodImage(
+            let result = try await aiService.analyzeFoodImage(
                 selectedImageData,
                 description: foodDescription.isEmpty ? nil : foodDescription
             )
@@ -370,6 +376,8 @@ struct AddFoodView: View {
             fatGrams: result.fatGrams
         )
 
+        entry.fiberGrams = result.fiberGrams
+        entry.sugarGrams = result.sugarGrams
         entry.servingSize = result.servingSize
         entry.imageData = selectedImageData
         entry.userDescription = foodDescription
@@ -378,6 +386,7 @@ struct AddFoodView: View {
         entry.ensureDisplayMetadata()
 
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         saveMacrosToHealthKit(entry)
         dismiss()
     }
@@ -401,6 +410,7 @@ struct AddFoodView: View {
         entry.ensureDisplayMetadata()
 
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         saveMacrosToHealthKit(entry)
         dismiss()
     }

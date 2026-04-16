@@ -83,26 +83,13 @@ public struct TraiLensView: View {
         self.size = size
         self.state = state
         self.palette = palette
+        _particles = State(initialValue: Self.makeParticles(size: size, state: state, palette: palette))
         _currentBlur = State(initialValue: state.blurAmount(forSize: size))
         _currentSpeedMult = State(initialValue: state.speedMultiplier)
     }
 
     func createParticles() {
-        var newParticles: [TraiParticle] = []
-        let sizeRange = state.particleSizeRange(forSize: size)
-        let targetCount = state.particleCount(forSize: size)
-
-        for _ in 0..<targetCount {
-            newParticles.append(TraiParticle(
-                x: CGFloat.random(in: 0...1),
-                y: CGFloat.random(in: 0...1),
-                size: CGFloat.random(in: sizeRange),
-                color: colors.randomElement()!,
-                baseSpeedX: CGFloat.random(in: -0.003...0.003),
-                baseSpeedY: CGFloat.random(in: -0.003...0.003)
-            ))
-        }
-        particles = newParticles
+        particles = Self.makeParticles(size: size, state: state, palette: palette)
     }
 
     public var body: some View {
@@ -190,6 +177,26 @@ public struct TraiLensView: View {
         let phase = date.timeIntervalSinceReferenceDate
         let sizeScale: CGFloat = size < 70 ? 0.7 : 1.0
         return sin(phase * .pi / state.breathingSpeed) * state.breathingAmplitude * sizeScale
+    }
+
+    private static func makeParticles(
+        size: CGFloat,
+        state: TraiLensState,
+        palette: TraiLensPalette
+    ) -> [TraiParticle] {
+        let sizeRange = state.particleSizeRange(forSize: size)
+        let targetCount = state.particleCount(forSize: size)
+
+        return (0..<targetCount).map { _ in
+            TraiParticle(
+                x: CGFloat.random(in: 0...1),
+                y: CGFloat.random(in: 0...1),
+                size: CGFloat.random(in: sizeRange),
+                color: palette.colors.randomElement() ?? .accentColor,
+                baseSpeedX: CGFloat.random(in: -0.003...0.003),
+                baseSpeedY: CGFloat.random(in: -0.003...0.003)
+            )
+        }
     }
 }
 

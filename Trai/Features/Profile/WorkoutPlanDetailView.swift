@@ -12,6 +12,14 @@ struct WorkoutPlanDetailView: View {
     var usesMetricExerciseWeight: Bool = true
     var onEditPlan: (() -> Void)?
 
+    private var flexibleSessionCount: Int {
+        plan.templates.filter { !$0.sessionType.prefersStructuredEntries }.count
+    }
+
+    private var hasStructuredStrengthSessions: Bool {
+        plan.templates.contains { $0.sessionType.prefersStructuredEntries }
+    }
+
     private var weightIncrementDisplay: String {
         let kg = plan.progressionStrategy.weightIncrementKg
         if usesMetricExerciseWeight {
@@ -58,7 +66,7 @@ struct WorkoutPlanDetailView: View {
                     Text(plan.splitType.displayName)
                         .font(.headline)
 
-                    Text("\(plan.daysPerWeek) days per week")
+                    Text(planSubtitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -81,7 +89,7 @@ struct WorkoutPlanDetailView: View {
 
     private var templatesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Workouts")
+            Text("Sessions")
                 .font(.headline)
                 .padding(.horizontal, 4)
 
@@ -93,22 +101,33 @@ struct WorkoutPlanDetailView: View {
 
     private func templateCard(_ template: WorkoutPlan.WorkoutTemplate) -> some View {
         HStack(spacing: 12) {
-            // Color indicator based on muscle group
             RoundedRectangle(cornerRadius: 2)
-                .fill(colorForMuscleGroup(template.targetMuscleGroups.first))
+                .fill(template.displayAccentColor)
                 .frame(width: 4)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(template.name)
                     .font(.headline)
 
-                Text(template.muscleGroupsDisplay)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Label(template.sessionType.displayName, systemImage: template.sessionType.iconName)
+                        .font(.caption)
+                        .foregroundStyle(template.displayAccentColor)
+
+                    if !template.displaySubtitle.isEmpty {
+                        Text(template.displaySubtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 HStack(spacing: 12) {
                     Label("\(template.estimatedDurationMinutes) min", systemImage: "clock")
-                    Label("\(template.exerciseCount) exercises", systemImage: "dumbbell")
+                    if template.sessionType.prefersStructuredEntries {
+                        Label("\(template.exerciseCount) exercises", systemImage: "dumbbell")
+                    } else {
+                        Label("Flexible session", systemImage: "list.bullet.rectangle")
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.tertiary)
@@ -121,22 +140,6 @@ struct WorkoutPlanDetailView: View {
         .clipShape(.rect(cornerRadius: 12))
     }
 
-    private func colorForMuscleGroup(_ muscleGroup: String?) -> Color {
-        guard let muscle = muscleGroup else { return .gray }
-        switch muscle {
-        case "chest", "shoulders", "triceps":
-            return .orange
-        case "back", "biceps":
-            return .blue
-        case "quads", "hamstrings", "glutes", "calves", "legs":
-            return .green
-        case "core":
-            return .purple
-        default:
-            return .gray
-        }
-    }
-
     // MARK: - Progression Card
 
     private var progressionCard: some View {
@@ -146,7 +149,7 @@ struct WorkoutPlanDetailView: View {
                     .font(.title3)
                     .foregroundStyle(.green)
 
-                Text("Progression Strategy")
+                Text(hasStructuredStrengthSessions ? "Progression Strategy" : "Progression Approach")
                     .font(.headline)
             }
 
@@ -165,25 +168,29 @@ struct WorkoutPlanDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 16) {
-                    if let repsTrigger = plan.progressionStrategy.repsTrigger {
-                        HStack(spacing: 4) {
-                            Text("Rep target:")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text("\(repsTrigger)")
-                                .font(.caption)
-                                .fontWeight(.medium)
+                if hasStructuredStrengthSessions {
+                    HStack(spacing: 16) {
+                        if let repsTrigger = plan.progressionStrategy.repsTrigger {
+                            HStack(spacing: 4) {
+                                Text("Rep target:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("\(repsTrigger)")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
                         }
-                    }
 
-                    HStack(spacing: 4) {
-                        Text("Weight increment:")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(weightIncrementDisplay)
-                            .font(.caption)
-                            .fontWeight(.medium)
+                        if plan.progressionStrategy.weightIncrementKg > 0 {
+                            HStack(spacing: 4) {
+                                Text("Weight increment:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(weightIncrementDisplay)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
+                        }
                     }
                 }
             }
@@ -193,6 +200,13 @@ struct WorkoutPlanDetailView: View {
         .frame(maxWidth: .infinity)
         .background(Color(.secondarySystemBackground))
         .clipShape(.rect(cornerRadius: 16))
+    }
+
+    private var planSubtitle: String {
+        let base = "\(plan.daysPerWeek) days per week"
+        guard flexibleSessionCount > 0 else { return base }
+        let suffix = flexibleSessionCount == 1 ? "1 flexible session" : "\(flexibleSessionCount) flexible sessions"
+        return "\(base) • \(suffix)"
     }
 
     // MARK: - Guidelines Card

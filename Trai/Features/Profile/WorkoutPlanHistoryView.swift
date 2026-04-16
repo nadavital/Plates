@@ -18,7 +18,7 @@ struct WorkoutPlanHistoryView: View {
             if planVersions.isEmpty {
                 ContentUnavailableView(
                     "No Workout Plan History",
-                    systemImage: "figure.strengthtraining.traditional",
+                    systemImage: "clock.arrow.circlepath",
                     description: Text("Your workout plan history will appear here after plan changes.")
                 )
             } else {
@@ -56,6 +56,7 @@ struct WorkoutPlanHistoryView: View {
             NavigationStack {
                 WorkoutPlanVersionDetailView(version: version)
             }
+            .traiSheetBranding()
         }
         .onAppear {
             fetchPlanVersions()
@@ -79,9 +80,9 @@ private struct WorkoutPlanVersionDetailView: View {
             Section("Overview") {
                 LabeledContent("Change", value: version.displayReason)
                 LabeledContent("Date", value: version.formattedDate)
-                LabeledContent("Split", value: version.splitTypeDisplayName)
+                LabeledContent("Plan", value: version.splitTypeDisplayName)
                 LabeledContent("Days per week", value: "\(version.daysPerWeek)")
-                LabeledContent("Workout days", value: "\(version.templateCount)")
+                LabeledContent("Sessions", value: "\(version.templateCount)")
                 if version.averageDurationMinutes > 0 {
                     LabeledContent("Avg duration", value: "\(version.averageDurationMinutes) min")
                 }
@@ -100,13 +101,16 @@ private struct WorkoutPlanVersionDetailView: View {
 
             if let plan = version.plan {
                 if !plan.templates.isEmpty {
-                    Section("Workout Days") {
+                    Section("Sessions") {
                         ForEach(plan.templates.sorted(by: { $0.order < $1.order })) { template in
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(template.name)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                Text(template.muscleGroupsDisplay)
+                                Label(template.sessionType.displayName, systemImage: template.sessionType.iconName)
+                                    .font(.caption)
+                                    .foregroundStyle(template.displayAccentColor)
+                                Text(template.displaySubtitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -114,15 +118,17 @@ private struct WorkoutPlanVersionDetailView: View {
                     }
                 }
 
-                Section("Progression") {
+                Section(hasStructuredStrengthSessions(plan) ? "Progression" : "Progression Approach") {
                     LabeledContent("Type", value: plan.progressionStrategy.type.displayName)
-                    if let repsTrigger = plan.progressionStrategy.repsTrigger {
+                    if hasStructuredStrengthSessions(plan), let repsTrigger = plan.progressionStrategy.repsTrigger {
                         LabeledContent("Rep target", value: "\(repsTrigger)")
                     }
-                    LabeledContent(
-                        "Weight increment",
-                        value: String(format: "%.1f kg", plan.progressionStrategy.weightIncrementKg)
-                    )
+                    if hasStructuredStrengthSessions(plan), plan.progressionStrategy.weightIncrementKg > 0 {
+                        LabeledContent(
+                            "Weight increment",
+                            value: String(format: "%.1f kg", plan.progressionStrategy.weightIncrementKg)
+                        )
+                    }
                     Text(plan.progressionStrategy.description)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -157,6 +163,10 @@ private struct WorkoutPlanVersionDetailView: View {
                 .labelStyle(.iconOnly)
             }
         }
+    }
+
+    private func hasStructuredStrengthSessions(_ plan: WorkoutPlan) -> Bool {
+        plan.templates.contains { $0.sessionType.prefersStructuredEntries }
     }
 }
 

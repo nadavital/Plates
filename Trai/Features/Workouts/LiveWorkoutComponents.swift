@@ -165,6 +165,8 @@ struct AddExerciseButton: View {
 struct WorkoutBottomBar: View {
     let onAddExercise: () -> Void
     let onAskTrai: () -> Void
+    var addLabel: String = "Add Exercise"
+    var addSystemImage: String = "plus.circle.fill"
 
     var body: some View {
         HStack(spacing: 16) {
@@ -179,8 +181,8 @@ struct WorkoutBottomBar: View {
 
             Button(action: onAddExercise) {
                 HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Add Exercise")
+                    Image(systemName: addSystemImage)
+                    Text(addLabel)
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("liveWorkoutAddExerciseButton")

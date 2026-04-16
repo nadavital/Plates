@@ -18,6 +18,9 @@ extension Notification.Name {
     /// Posted when weight is logged
     static let weightLogged = Notification.Name("weightLogged")
 
+    /// Posted when coach memories are created, edited, or deactivated.
+    static let coachMemoriesChanged = Notification.Name("coachMemoriesChanged")
+
     /// Posted when the app is transitioning to background and live workout edits should be flushed.
     static let liveWorkoutForceFlush = Notification.Name("liveWorkoutForceFlush")
 }

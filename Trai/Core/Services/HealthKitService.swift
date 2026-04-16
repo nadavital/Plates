@@ -298,8 +298,24 @@ final class HealthKitService {
             activityType = .traditionalStrengthTraining
         case .cardio:
             activityType = .mixedCardio
+        case .hiit:
+            activityType = .highIntensityIntervalTraining
+        case .climbing:
+            activityType = .climbing
+        case .yoga:
+            activityType = .yoga
+        case .pilates:
+            activityType = .pilates
+        case .flexibility:
+            activityType = .flexibility
+        case .mobility:
+            activityType = .cooldown
         case .mixed:
             activityType = .functionalStrengthTraining
+        case .recovery:
+            activityType = .cooldown
+        case .custom:
+            activityType = .other
         }
 
         // Calculate estimated calories (rough estimate based on duration and intensity)

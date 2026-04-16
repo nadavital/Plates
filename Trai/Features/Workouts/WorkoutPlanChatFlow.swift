@@ -11,6 +11,8 @@ import SwiftData
 struct WorkoutPlanChatFlow: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
 
     @Query private var profiles: [UserProfile]
     private var userProfile: UserProfile? { profiles.first }
@@ -22,6 +24,9 @@ struct WorkoutPlanChatFlow: View {
 
     /// When true, removes NavigationStack wrapper (for embedding)
     var embedded: Bool = false
+
+    /// Existing saved plan to revise instead of starting from a blank questionnaire
+    var currentPlanToEdit: WorkoutPlan? = nil
 
     /// Called when plan is complete (onboarding mode only)
     var onComplete: ((WorkoutPlan) -> Void)?
@@ -47,7 +52,7 @@ struct WorkoutPlanChatFlow: View {
     // MARK: - Question Flow
 
     private var allQuestions: [WorkoutPlanQuestion] {
-        [.workoutType, .experience, .equipment, .schedule, .split, .cardio, .goals, .weakPoints, .injuries, .preferences]
+        [.workoutType, .experience, .equipment, .schedule, .cardio, .goals, .injuries]
     }
 
     private var visibleQuestions: [WorkoutPlanQuestion] {
@@ -63,28 +68,74 @@ struct WorkoutPlanChatFlow: View {
         currentQuestionIndex >= visibleQuestions.count - 1
     }
 
+    private var canAccessWorkoutAI: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var isEditingExistingPlan: Bool {
+        currentPlanToEdit != nil
+    }
+
+    private var navigationTitle: String {
+        isEditingExistingPlan ? "Edit Your Plan" : "Create Your Plan"
+    }
+
+    private var requiresAuthenticatedAccountForWorkoutAI: Bool {
+        accountSessionService?.isAuthenticated != true
+    }
+
+    private var shouldShowRefinementSuggestions: Bool {
+        isEditingExistingPlan && showRefineMode && generatedPlan != nil && !isGenerating
+    }
+
+    private var refinementSuggestions: [TraiSuggestion] {
+        [
+            TraiSuggestion("Change the split", subtitle: "Try something like upper/lower or full body"),
+            TraiSuggestion("Add a workout day", subtitle: "Increase frequency without starting over"),
+            TraiSuggestion("Remove a day", subtitle: "Condense the plan into fewer sessions"),
+            TraiSuggestion("Make workouts shorter", subtitle: "Trim the session length"),
+            TraiSuggestion("Add more cardio", subtitle: "Layer conditioning into the week"),
+            TraiSuggestion("Add more recovery", subtitle: "Make the week easier to sustain"),
+            TraiSuggestion("Adapt this for home equipment", subtitle: "Swap gym work for what I have"),
+            TraiSuggestion("Swap some exercises", subtitle: "Keep the structure but change the lifts")
+        ]
+    }
+
+    private var thinkingActivityText: String {
+        isEditingExistingPlan && showRefineMode
+            ? "Updating your workout plan..."
+            : "Creating your personalized plan..."
+    }
+
     // MARK: - Body
 
     var body: some View {
-        if embedded {
-            mainContent
-        } else {
-            NavigationStack {
+        Group {
+            if requiresAuthenticatedAccountForWorkoutAI {
+                AccountSetupView(context: .aiFeatures, showsDismissButton: !embedded)
+            } else if !canAccessWorkoutAI {
+                ProUpsellView(source: .workoutPlan, showsDismissButton: !embedded)
+            } else if embedded {
                 mainContent
-                    .navigationTitle("Create Your Plan")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            if !isOnboarding && !isGenerating {
-                                Button("Cancel", systemImage: "xmark") {
-                                    dismiss()
+            } else {
+                NavigationStack {
+                    mainContent
+                        .navigationTitle(navigationTitle)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                if !isOnboarding && !isGenerating {
+                                    Button("Cancel", systemImage: "xmark") {
+                                        dismiss()
+                                    }
                                 }
                             }
                         }
-                    }
-                    .interactiveDismissDisabled(isGenerating)
+                        .interactiveDismissDisabled(isGenerating)
+                }
             }
         }
+        .traiSheetBranding()
     }
 
     private var mainContent: some View {
@@ -112,7 +163,7 @@ struct WorkoutPlanChatFlow: View {
 
                         // Thinking indicator
                         if isGenerating {
-                            ThinkingIndicator(activity: "Creating your personalized plan...")
+                            ThinkingIndicator(activity: thinkingActivityText)
                                 .id("thinking")
                         }
 
@@ -158,23 +209,30 @@ struct WorkoutPlanChatFlow: View {
             isInputFocused = false
         }
         .onAppear {
-            // Start with first question
             if messages.isEmpty {
-                addQuestionMessage()
+                if isEditingExistingPlan {
+                    seedExistingPlanConversation()
+                } else {
+                    // Start with first question
+                    addQuestionMessage()
+                }
             }
         }
     }
 
     // MARK: - Welcome Message
 
+    @ViewBuilder
     private var welcomeMessage: some View {
-        HStack(alignment: .top, spacing: 12) {
-            TraiLensView(size: 36, state: .idle, palette: .energy)
+        if !isEditingExistingPlan {
+            HStack(alignment: .top, spacing: 12) {
+                TraiLensView(size: 36, state: .idle, palette: .energy)
 
-            Text("Let's build your perfect workout plan! I'll ask you a few questions to personalize everything.")
-                .font(.subheadline)
+                Text("Let's build a plan around the kinds of sessions you actually want to do. I'll ask only the essentials, then put together a first version you can tweak.")
+                    .font(.subheadline)
 
-            Spacer()
+                Spacer()
+            }
         }
     }
 
@@ -185,9 +243,7 @@ struct WorkoutPlanChatFlow: View {
         switch message.type {
         case .question(let config):
             // Past questions (already answered)
-            Text(config.question)
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            TraiAssistantTextMessage(text: config.question)
 
         case .userAnswer(let answers):
             userAnswerBubble(answers: answers)
@@ -200,25 +256,29 @@ struct WorkoutPlanChatFlow: View {
                 plan: plan,
                 message: message,
                 onAccept: { acceptPlan() },
-                onCustomize: showRefineMode ? nil : { enterRefineMode() }
+                acceptTitle: isEditingExistingPlan ? "Save Changes" : "Use This Plan",
+                onCustomize: isEditingExistingPlan || showRefineMode ? nil : { enterRefineMode() }
+            )
+
+        case .currentPlan(let plan, let message):
+            WorkoutPlanProposalCard(
+                plan: plan,
+                message: message,
+                onAccept: nil,
+                onCustomize: nil
             )
 
         case .planAccepted:
             WorkoutPlanAcceptedBadge()
 
         case .traiMessage(let text):
-            Text(text)
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            TraiAssistantTextMessage(text: text)
 
-        case .planUpdated:
+        case .planUpdated(_):
             WorkoutPlanUpdatedBadge()
 
         case .error(let text):
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(.red)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            TraiAssistantTextMessage(text: text, foregroundStyle: .red)
         }
     }
 
@@ -226,14 +286,28 @@ struct WorkoutPlanChatFlow: View {
         HStack {
             Spacer()
 
-            Text(answers.joined(separator: ", "))
-                .font(.subheadline)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.accentColor)
-                .clipShape(.rect(cornerRadius: 18))
+            TraiUserTextBubble(text: answers.joined(separator: ", "))
         }
+    }
+
+    private var refinementSuggestionView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(refinementSuggestions) { suggestion in
+                    TraiSelectableChip(
+                        text: suggestion.text,
+                        isSelected: false,
+                        action: {
+                            HapticManager.lightTap()
+                            submitRefineSuggestion(suggestion)
+                        }
+                    )
+                }
+            }
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+        .background(Color(.systemBackground))
     }
 
     // MARK: - Current Options View
@@ -286,13 +360,19 @@ struct WorkoutPlanChatFlow: View {
         Group {
             if planAccepted && showRefineMode {
                 // Freeform chat mode after plan accepted
-                SimpleChatInputBar(
-                    text: $inputText,
-                    placeholder: "Ask me to adjust anything...",
-                    isLoading: isGenerating,
-                    onSend: { handleRefineMessage() },
-                    isFocused: $isInputFocused
-                )
+                VStack(spacing: 6) {
+                    if shouldShowRefinementSuggestions {
+                        refinementSuggestionView
+                    }
+
+                    SimpleChatInputBar(
+                        text: $inputText,
+                        placeholder: isEditingExistingPlan ? "Tell me what you'd like to change..." : "Ask me to adjust anything...",
+                        isLoading: isGenerating,
+                        onSend: { handleRefineMessage() },
+                        isFocused: $isInputFocused
+                    )
+                }
             } else if !planAccepted {
                 // Question mode
                 TraiQuestionInputBar(
@@ -371,6 +451,23 @@ struct WorkoutPlanChatFlow: View {
         if !alreadyAdded {
             messages.append(WorkoutPlanFlowMessage(type: .question(question.config)))
         }
+    }
+
+    private func seedExistingPlanConversation() {
+        guard let plan = currentPlanToEdit else { return }
+
+        generatedPlan = plan
+        planAccepted = true
+        showRefineMode = true
+
+        messages.append(
+            WorkoutPlanFlowMessage(
+                type: .currentPlan(
+                    plan,
+                    "Here's your current plan. Tell me what you'd like to change and I'll revise it without making you start over."
+                )
+            )
+        )
     }
 
     private func handleContinue() {
@@ -473,7 +570,7 @@ struct WorkoutPlanChatFlow: View {
 
         Task {
             let request = buildRequest()
-            let service = GeminiService()
+            let service = AIService()
 
             do {
                 let plan = try await service.generateWorkoutPlan(request: request)
@@ -526,13 +623,21 @@ struct WorkoutPlanChatFlow: View {
         } else if workoutTypes.contains("Strength") {
             return "Based on your goals, I've designed a \(splitName) split - \(days) days per week focused on building strength and muscle."
         } else if workoutTypes.contains("Cardio") {
-            return "Here's a \(days)-day plan that'll keep your cardio on track while building overall fitness."
+            return "Here's a \(days)-day plan built around the conditioning work you want while keeping the week balanced."
+        } else if workoutTypes.contains("Climbing") || workoutTypes.contains("Yoga") || workoutTypes.contains("Pilates") || workoutTypes.contains("Mobility") {
+            let customFocus = workoutTypes.joined(separator: ", ")
+            return "I've mapped out a \(days)-day plan centered on \(customFocus.lowercased()) with enough structure to keep it sustainable week to week."
         } else {
             return "I've created a \(splitName) program for you - \(days) days per week tailored to your goals and schedule."
         }
     }
 
     private func acceptPlan() {
+        if isOnboarding || isEditingExistingPlan {
+            savePlan()
+            return
+        }
+
         HapticManager.success()
 
         withAnimation(.spring(response: 0.3)) {
@@ -553,12 +658,23 @@ struct WorkoutPlanChatFlow: View {
 
     private func handleRefineMessage() {
         let text = inputText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty, let currentPlan = generatedPlan else { return }
+        guard !text.isEmpty else { return }
 
         // Clear text immediately before anything else
         let messageText = text
         inputText = ""
         isInputFocused = false
+
+        submitRefineRequest(messageText)
+    }
+
+    private func submitRefineSuggestion(_ suggestion: TraiSuggestion) {
+        submitRefineRequest(suggestion.text)
+    }
+
+    private func submitRefineRequest(_ text: String) {
+        let messageText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !messageText.isEmpty, let currentPlan = generatedPlan else { return }
 
         // Add user message
         withAnimation(.spring(response: 0.3)) {
@@ -568,18 +684,23 @@ struct WorkoutPlanChatFlow: View {
 
         Task {
             let request = buildRequest()
-            let service = GeminiService()
+            let service = AIService()
 
             do {
                 let response = try await service.refineWorkoutPlan(
                     currentPlan: currentPlan,
                     request: request,
-                    userMessage: text,
-                    conversationHistory: []
+                    userMessage: messageText,
+                    conversationHistory: refinementConversationHistory
                 )
 
                 withAnimation(.spring(response: 0.3)) {
                     if let newPlan = response.proposedPlan ?? response.updatedPlan {
+                        if newPlan != currentPlan {
+                            messages.append(WorkoutPlanFlowMessage(
+                                type: .planUpdated(newPlan)
+                            ))
+                        }
                         generatedPlan = newPlan
                         messages.append(WorkoutPlanFlowMessage(
                             type: .planProposal(newPlan, response.message)
@@ -610,6 +731,13 @@ struct WorkoutPlanChatFlow: View {
             onComplete?(plan)
         } else {
             guard let profile = userProfile else { return }
+
+            if currentPlanToEdit == plan {
+                HapticManager.success()
+                dismiss()
+                return
+            }
+
             let hadExistingPlan = profile.workoutPlan != nil
 
             WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
@@ -650,6 +778,10 @@ struct WorkoutPlanChatFlow: View {
     // MARK: - Build Request
 
     private func buildRequest() -> WorkoutPlanGenerationRequest {
+        if isEditingExistingPlan, collectedAnswers.allAnswers().isEmpty {
+            return buildEditingRequest()
+        }
+
         let profile = userProfile
 
         // Parse workout types
@@ -661,13 +793,16 @@ struct WorkoutPlanChatFlow: View {
         let experience = parseExperience(from: collectedAnswers.answers(for: "experience"))
         let equipment = parseEquipment(from: collectedAnswers.answers(for: "equipment"))
         let days = parseDays(from: collectedAnswers.answers(for: "schedule"))
-        let split = parseSplit(from: collectedAnswers.answers(for: "split"))
         let cardioTypes = parseCardioTypes(from: collectedAnswers.answers(for: "cardio"))
 
         // Custom text from non-standard answers
-        let customWorkoutType = workoutTypeAnswers.first { !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed"].contains($0) }
+        let customWorkoutTypes = workoutTypeAnswers.filter { !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed"].contains($0) }
+        let customWorkoutType = customWorkoutTypes.isEmpty ? nil : customWorkoutTypes.joined(separator: ", ")
         let customExperience = collectedAnswers.answers(for: "experience").first { !["Beginner", "Intermediate", "Advanced"].contains($0) }
         let customEquipment = collectedAnswers.answers(for: "equipment").first { !["Full Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"].contains($0) }
+        let customModalities = collectedAnswers.answers(for: "cardio").filter {
+            !["Running", "Cycling", "Swimming", "Climbing", "Rowing", "Walking", "Jump Rope", "Anything works"].contains($0)
+        }
 
         return WorkoutPlanGenerationRequest(
             name: profile?.name ?? "User",
@@ -681,17 +816,162 @@ struct WorkoutPlanChatFlow: View {
             equipmentAccess: equipment,
             availableDays: days,
             timePerWorkout: 45,
-            preferredSplit: split,
+            preferredSplit: nil,
             cardioTypes: cardioTypes.isEmpty ? nil : cardioTypes,
             customWorkoutType: customWorkoutType,
             customExperience: customExperience,
             customEquipment: customEquipment,
-            customCardioType: nil,
+            customCardioType: customModalities.isEmpty ? nil : customModalities.joined(separator: ", "),
             specificGoals: collectedAnswers.answers(for: "goals").isEmpty ? nil : collectedAnswers.answers(for: "goals"),
-            weakPoints: collectedAnswers.answers(for: "weakPoints").isEmpty ? nil : collectedAnswers.answers(for: "weakPoints"),
+            weakPoints: nil,
             injuries: collectedAnswers.answers(for: "injuries").first,
-            preferences: collectedAnswers.answers(for: "preferences").first
+            preferences: nil
         )
+    }
+
+    private var refinementConversationHistory: [WorkoutPlanChatMessage] {
+        messages.compactMap { message in
+            switch message.type {
+            case .userAnswer(let answers):
+                return WorkoutPlanChatMessage(role: .user, content: answers.joined(separator: ", "))
+            case .traiMessage(let text):
+                return WorkoutPlanChatMessage(role: .assistant, content: text)
+            case .planProposal(_, let message), .currentPlan(_, let message):
+                guard !message.isEmpty else { return nil }
+                return WorkoutPlanChatMessage(role: .assistant, content: message)
+            case .error(let text):
+                return WorkoutPlanChatMessage(role: .assistant, content: text)
+            case .question(_), .thinking(_), .planAccepted, .planUpdated(_):
+                return nil
+            }
+        }
+    }
+
+    private func buildEditingRequest() -> WorkoutPlanGenerationRequest {
+        let currentPlan = generatedPlan ?? currentPlanToEdit
+        let inferredWorkoutTypes = currentPlan.map { inferWorkoutTypes(from: $0) } ?? []
+        let primaryWorkoutType = inferredWorkoutTypes.count == 1
+            ? (inferredWorkoutTypes.first ?? .mixed)
+            : .mixed
+        let inferredCardioTypes = currentPlan.map { inferCardioTypes(from: $0) } ?? []
+        let preferredSplit = currentPlan.flatMap { inferPreferredSplit(from: $0) }
+
+        if let profile = userProfile {
+            return profile.buildWorkoutPlanRequest(
+                workoutType: primaryWorkoutType,
+                selectedWorkoutTypes: inferredWorkoutTypes.isEmpty ? nil : inferredWorkoutTypes,
+                preferredSplit: preferredSplit,
+                cardioTypes: inferredCardioTypes.isEmpty ? nil : inferredCardioTypes
+            )
+        }
+
+        return WorkoutPlanGenerationRequest(
+            name: "User",
+            age: 30,
+            gender: .notSpecified,
+            goal: .health,
+            activityLevel: .moderate,
+            workoutType: primaryWorkoutType,
+            selectedWorkoutTypes: inferredWorkoutTypes.isEmpty ? nil : inferredWorkoutTypes,
+            experienceLevel: nil,
+            equipmentAccess: nil,
+            availableDays: currentPlan?.daysPerWeek,
+            timePerWorkout: 45,
+            preferredSplit: preferredSplit,
+            cardioTypes: inferredCardioTypes.isEmpty ? nil : inferredCardioTypes,
+            customWorkoutType: nil,
+            customExperience: nil,
+            customEquipment: nil,
+            customCardioType: nil,
+            specificGoals: nil,
+            weakPoints: nil,
+            injuries: nil,
+            preferences: nil
+        )
+    }
+
+    private func inferWorkoutTypes(from plan: WorkoutPlan) -> [WorkoutPlanGenerationRequest.WorkoutType] {
+        var inferredTypes: [WorkoutPlanGenerationRequest.WorkoutType] = []
+
+        for template in plan.templates {
+            let inferredType: WorkoutPlanGenerationRequest.WorkoutType
+
+            switch template.sessionType {
+            case .strength:
+                inferredType = .strength
+            case .cardio, .climbing:
+                inferredType = .cardio
+            case .hiit:
+                inferredType = .hiit
+            case .yoga, .pilates, .flexibility, .mobility, .recovery:
+                inferredType = .flexibility
+            case .mixed, .custom:
+                inferredType = .mixed
+            }
+
+            if !inferredTypes.contains(inferredType) {
+                inferredTypes.append(inferredType)
+            }
+        }
+
+        if inferredTypes.isEmpty, !plan.templates.isEmpty {
+            return [.mixed]
+        }
+
+        return inferredTypes
+    }
+
+    private func inferPreferredSplit(from plan: WorkoutPlan) -> WorkoutPlanGenerationRequest.PreferredSplit? {
+        switch plan.splitType {
+        case .pushPullLegs:
+            return .pushPullLegs
+        case .upperLower:
+            return .upperLower
+        case .fullBody:
+            return .fullBody
+        case .bodyPartSplit:
+            return .broSplit
+        case .custom:
+            return nil
+        }
+    }
+
+    private func inferCardioTypes(from plan: WorkoutPlan) -> [WorkoutPlanGenerationRequest.CardioType] {
+        var inferredTypes: [WorkoutPlanGenerationRequest.CardioType] = []
+
+        for template in plan.templates {
+            let loweredTokens = ([template.name] + template.focusAreas)
+                .joined(separator: " ")
+                .lowercased()
+
+            let inferredType: WorkoutPlanGenerationRequest.CardioType?
+
+            if template.sessionType == .climbing || loweredTokens.contains("climb") || loweredTokens.contains("boulder") {
+                inferredType = .climbing
+            } else if loweredTokens.contains("run") {
+                inferredType = .running
+            } else if loweredTokens.contains("cycl") {
+                inferredType = .cycling
+            } else if loweredTokens.contains("swim") {
+                inferredType = .swimming
+            } else if loweredTokens.contains("row") {
+                inferredType = .rowing
+            } else if loweredTokens.contains("walk") || loweredTokens.contains("hike") {
+                inferredType = .walking
+            } else if loweredTokens.contains("jump rope") || loweredTokens.contains("jumprope") {
+                inferredType = .jumpRope
+            } else if template.sessionType == .cardio {
+                inferredType = .anyCardio
+            } else {
+                inferredType = nil
+            }
+
+            if let inferredType, !inferredTypes.contains(inferredType) {
+                inferredTypes.append(inferredType)
+            }
+        }
+
+        return inferredTypes
     }
 
     // MARK: - Parsing Helpers
@@ -702,7 +982,8 @@ struct WorkoutPlanChatFlow: View {
             case "Strength": return .strength
             case "Cardio": return .cardio
             case "HIIT": return .hiit
-            case "Flexibility": return .flexibility
+            case "Yoga", "Pilates", "Mobility", "Flexibility": return .flexibility
+            case "Climbing": return .cardio
             case "Mixed": return .mixed
             default: return nil
             }
@@ -738,24 +1019,14 @@ struct WorkoutPlanChatFlow: View {
         return Int(digits)
     }
 
-    private func parseSplit(from answers: [String]) -> WorkoutPlanGenerationRequest.PreferredSplit? {
-        guard let answer = answers.first else { return nil }
-        switch answer {
-        case "Push/Pull/Legs": return .pushPullLegs
-        case "Upper/Lower": return .upperLower
-        case "Full Body": return .fullBody
-        case "Bro Split": return .broSplit
-        case "Let Trai decide": return .letTraiDecide
-        default: return nil
-        }
-    }
-
     private func parseCardioTypes(from answers: [String]) -> [WorkoutPlanGenerationRequest.CardioType] {
         answers.compactMap { answer in
             switch answer {
             case "Running": return .running
             case "Cycling": return .cycling
             case "Swimming": return .swimming
+            case "Climbing": return .climbing
+            case "Walking": return .walking
             case "Rowing": return .rowing
             case "Jump Rope": return .jumpRope
             case "Anything works": return .anyCardio

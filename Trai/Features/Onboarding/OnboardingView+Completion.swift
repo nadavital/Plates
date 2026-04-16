@@ -38,6 +38,8 @@ extension OnboardingView {
 
         // Macro tracking preferences
         profile.enabledMacros = enabledMacros
+        profile.syncFoodToHealthKit = syncFoodToHealthKit
+        profile.syncWeightToHealthKit = syncWeightToHealthKit
 
         // Nutrition targets (from adjusted values or plan)
         profile.dailyCalorieGoal = Int(adjustedCalories) ?? 2000
@@ -72,6 +74,7 @@ extension OnboardingView {
         do {
             try modelContext.save()
             UserDefaults.standard.set(true, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
+            clearOnboardingDraft()
         } catch {
             print("Failed to persist onboarding profile: \(error)")
         }
@@ -86,8 +89,6 @@ extension OnboardingView {
 
     /// Parse user notes using AI to create properly categorized memories
     func parseAndCreateMemories() async {
-        let geminiService = GeminiService()
-
         // Combine all notes with context
         var allNotes: [(notes: String, context: String)] = []
 
@@ -104,10 +105,19 @@ extension OnboardingView {
         // If no notes to parse, return early
         guard !allNotes.isEmpty else { return }
 
+        guard monetizationService?.canAccessAIFeatures ?? true else {
+            for (notes, context) in allNotes {
+                createSimpleMemory(content: notes, context: context)
+            }
+            return
+        }
+
+        let aiService = AIService()
+
         // Parse each set of notes
         for (notes, context) in allNotes {
             do {
-                let parsedMemories = try await geminiService.parseNotesIntoMemories(
+                let parsedMemories = try await aiService.parseNotesIntoMemories(
                     notes: notes,
                     context: context
                 )
@@ -117,8 +127,13 @@ extension OnboardingView {
                     let memory = parsed.toCoachMemory(source: "onboarding")
                     modelContext.insert(memory)
                 }
-
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                    NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+                } catch {
+                    modelContext.rollback()
+                    print("Failed to persist onboarding memories: \(error)")
+                }
             } catch {
                 // Fall back to simple memory creation if AI parsing fails
                 print("Failed to parse notes with AI, using fallback: \(error)")
@@ -138,6 +153,12 @@ extension OnboardingView {
             importance: 4
         )
         modelContext.insert(memory)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            NotificationCenter.default.post(name: .coachMemoriesChanged, object: nil)
+        } catch {
+            modelContext.rollback()
+            print("Failed to persist fallback onboarding memory: \(error)")
+        }
     }
 }

@@ -14,6 +14,7 @@ struct MacroDetailSheet: View {
     let proteinGoal: Int
     let carbsGoal: Int
     let fatGoal: Int
+    var isToday: Bool = true
     var fiberGoal: Int = 30
     var sugarGoal: Int = 50
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled

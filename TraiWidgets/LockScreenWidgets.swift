@@ -135,10 +135,9 @@ struct StatsInlineView: View {
 
 // MARK: - Previews
 
-#Preview("Circular", as: .accessoryCircular) {
-    CalorieCircularWidget()
-} timeline: {
-    TraiWidgetEntry(date: .now, data: WidgetData(
+#if DEBUG
+private enum LockScreenWidgetPreviewData {
+    static let circularEntry = TraiWidgetEntry(date: .now, data: WidgetData(
         caloriesConsumed: 1450,
         calorieGoal: 2000,
         proteinConsumed: 95,
@@ -153,12 +152,8 @@ struct StatsInlineView: View {
         todayWorkoutCompleted: false,
         lastUpdated: Date()
     ))
-}
 
-#Preview("Rectangular", as: .accessoryRectangular) {
-    StatsRectangularWidget()
-} timeline: {
-    TraiWidgetEntry(date: .now, data: WidgetData(
+    static let rectangularEntry = TraiWidgetEntry(date: .now, data: WidgetData(
         caloriesConsumed: 1450,
         calorieGoal: 2000,
         proteinConsumed: 120,
@@ -173,12 +168,8 @@ struct StatsInlineView: View {
         todayWorkoutCompleted: false,
         lastUpdated: Date()
     ))
-}
 
-#Preview("Inline", as: .accessoryInline) {
-    StatsInlineWidget()
-} timeline: {
-    TraiWidgetEntry(date: .now, data: WidgetData(
+    static let inlineEntry = TraiWidgetEntry(date: .now, data: WidgetData(
         caloriesConsumed: 1600,
         calorieGoal: 2000,
         proteinConsumed: 130,
@@ -194,3 +185,22 @@ struct StatsInlineView: View {
         lastUpdated: Date()
     ))
 }
+
+struct LockScreenWidgets_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            CalorieCircularView(entry: LockScreenWidgetPreviewData.circularEntry)
+                .previewContext(WidgetPreviewContext(family: .accessoryCircular))
+                .previewDisplayName("Circular")
+
+            StatsRectangularView(entry: LockScreenWidgetPreviewData.rectangularEntry)
+                .previewContext(WidgetPreviewContext(family: .accessoryRectangular))
+                .previewDisplayName("Rectangular")
+
+            StatsInlineView(entry: LockScreenWidgetPreviewData.inlineEntry)
+                .previewContext(WidgetPreviewContext(family: .accessoryInline))
+                .previewDisplayName("Inline")
+        }
+    }
+}
+#endif

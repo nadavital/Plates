@@ -6,10 +6,26 @@
     <array>
         <string>Nadav.Trai.reminder-refresh</string>
     </array>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLName</key>
+            <string>Nadav.Trai.deeplink</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>trai</string>
+            </array>
+        </dict>
+    </array>
+    <key>TRAIBackendProductionBaseURL</key>
+    <string>https://trai-backend-production-g33i5go2kq-uc.a.run.app</string>
+    <key>TRAIBackendStagingBaseURL</key>
+    <string>https://trai-backend-staging-g33i5go2kq-uc.a.run.app</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>fetch</string>
-        <string>remote-notification</string>
     </array>
 </dict>
 </plist>

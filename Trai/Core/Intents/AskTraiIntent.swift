@@ -22,6 +22,12 @@ struct AskTraiIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        await BillingService.shared.refreshAccessStateForImmediateUse()
+
+        guard MonetizationService.shared.canAccessAIFeatures else {
+            return .result(dialog: "Ask Trai is available with Trai Pro. Open the app to start your subscription.")
+        }
+
         guard let container = TraiApp.sharedModelContainer else {
             return .result(dialog: "Unable to access Trai. Please open the app first.")
         }
@@ -35,17 +41,18 @@ struct AskTraiIntent: AppIntent {
         // Get recent food entries for context
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: Date())
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? .distantFuture
         let foodDescriptor = FetchDescriptor<FoodEntry>(
-            predicate: #Predicate { $0.loggedAt >= startOfDay },
+            predicate: #Predicate { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay },
             sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
         )
         let todayFood = (try? context.fetch(foodDescriptor)) ?? []
 
-        // Build context for Gemini
-        let geminiService = GeminiService()
+        // Build context for the shared AI service
+        let aiService = AIService()
 
         do {
-            let response = try await geminiService.askQuickQuestion(
+            let response = try await aiService.askQuickQuestion(
                 question: question,
                 userContext: buildUserContext(profile: profile, todayFood: todayFood)
             )
@@ -54,7 +61,9 @@ struct AskTraiIntent: AppIntent {
             let shortResponse = response.prefix(500)
             return .result(dialog: "\(shortResponse)")
         } catch {
-            return .result(dialog: "Sorry, I couldn't process that question. Please try again.")
+            return .result(dialog: IntentDialog(stringLiteral: error.aiUserFacingMessage(
+                fallback: "Sorry, I couldn't process that question. Please try again."
+            )))
         }
     }
 
@@ -66,45 +75,51 @@ struct AskTraiIntent: AppIntent {
             context += "Calorie goal: \(profile.dailyCalorieGoal)\n"
         }
 
-        if !todayFood.isEmpty {
-            let totalCals = todayFood.reduce(0) { $0 + $1.calories }
-            let totalProtein = todayFood.reduce(0) { $0 + $1.proteinGrams }
-            context += "Today's intake: \(totalCals) calories, \(Int(totalProtein))g protein\n"
-        }
+        context += FoodLogSummaryFormatter.promptSummary(
+            for: todayFood,
+            label: "Today's food log",
+            maxEntries: 10
+        )
+        context += "\n"
 
         return context
     }
 }
 
-// MARK: - Gemini Extension for Quick Questions
+// MARK: - AI Service Extension for Quick Questions
 
-extension GeminiService {
+extension AIService {
     /// Answer a quick question with minimal context (for Siri)
     func askQuickQuestion(
         question: String,
         userContext: String,
         tone: TraiCoachTone = .sharedPreference
     ) async throws -> String {
-        let prompt = """
-        You are Trai, a fitness and nutrition coach. Answer this question concisely (2-3 sentences max) for a voice response.
-        Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
-        Never refer to yourself as an AI or assistant.
+        try await performAIRequest(for: .coachChat) {
+            let prompt = """
+            You are Trai, a fitness and nutrition coach. Answer this question concisely (2-3 sentences max) for a voice response.
+            Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
+            Never refer to yourself as an AI or assistant.
 
-        User context:
-        \(userContext)
+            User context:
+            \(userContext)
 
-        Question: \(question)
+            Question: \(question)
 
-        Give a helpful response. Be specific if you have data, otherwise give general advice.
-        """
+            Give a helpful response. Be specific if you have data, otherwise give general advice.
+            If the question is about what the user ate today, answer from the food log in the context above.
+            Do not say they ate nothing if the context includes logged food entries.
+            If you only have totals and not enough meal detail, say that clearly instead of inventing foods.
+            """
 
-        let body: [String: Any] = [
-            "contents": [
-                ["parts": [["text": prompt]]]
-            ],
-            "generationConfig": buildGenerationConfig(thinkingLevel: .low, maxTokens: 500)
-        ]
+            let body: [String: Any] = [
+                "contents": [
+                    ["parts": [["text": prompt]]]
+                ],
+                "generationConfig": buildGenerationConfig(thinkingLevel: .low, maxTokens: 500)
+            ]
 
-        return try await makeRequest(body: body)
+            return try await makeRequest(body: body)
+        }
     }
 }

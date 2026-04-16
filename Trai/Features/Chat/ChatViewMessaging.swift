@@ -32,6 +32,7 @@ extension ChatView {
         lastActivityTimestamp = Date().timeIntervalSince1970
         isTemporarySession = false
         temporaryMessages = []
+        rebuildSessionMessages(preferLiveQueryData: true)
         if !silent {
             HapticManager.lightTap()
         }
@@ -87,6 +88,14 @@ extension ChatView {
             return "Updating plan..."
         case "get_recent_workouts":
             return "Getting workouts..."
+        case "get_workout_goals":
+            return "Checking workout goals..."
+        case "create_workout_goal":
+            return "Creating workout goal..."
+        case "update_workout_goal":
+            return "Updating workout goal..."
+        case "update_workout_notes":
+            return "Updating workout notes..."
         case "log_workout":
             return "Logging workout..."
         case "get_muscle_recovery_status":
@@ -161,6 +170,35 @@ extension ChatView {
         }
     }
 
+    func sendAppInitiatedPrompt(_ text: String, launchLabel: String? = nil) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
+        updateLastActivity()
+        currentActivity = launchLabel ?? "Reviewing with Trai..."
+
+        let previousMessages = Array(currentSessionMessages.suffix(10))
+        let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
+        let baseContext = buildFitnessContext()
+        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
+
+        if isTemporarySession {
+            temporaryMessages.append(aiMessage)
+        } else {
+            modelContext.insert(aiMessage)
+        }
+        rebuildSessionMessages(preferLiveQueryData: true)
+
+        currentMessageTask = Task {
+            await performSendMessage(
+                text: trimmedText,
+                capturedImage: nil,
+                previousMessages: previousMessages,
+                aiMessage: aiMessage
+            )
+        }
+    }
+
     func stopGenerating() {
         currentMessageTask?.cancel()
         currentMessageTask = nil
@@ -196,7 +234,7 @@ extension ChatView {
             // Fetch activity data from HealthKit
             let activityData = await fetchActivityData()
 
-            let functionContext = GeminiService.ChatFunctionContext(
+            let functionContext = AIService.ChatFunctionContext(
                 profile: profile,
                 todaysFoodEntries: todaysFoodEntries,
                 currentDateTime: currentDateTime,
@@ -205,12 +243,13 @@ extension ChatView {
                 memoriesContext: memoriesContext,
                 coachContext: coachContext,
                 pendingSuggestion: pendingMealSuggestion?.meal,
+                pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestion?.suggestion,
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
                 activityData: activityData
             )
 
-            let result = try await geminiService.chatWithFunctions(
+            let result = try await aiService.chatWithFunctions(
                 message: text,
                 imageData: capturedImage?.jpegData(compressionQuality: 0.8),
                 context: functionContext,
@@ -235,12 +274,18 @@ extension ChatView {
                 aiMessage.content = latestStreamedText
             }
             handleChatResult(result, aiMessage: aiMessage)
-        } catch is CancellationError {
-            // User cancelled - don't show error, keep partial content
-            aiMessage.wasManuallyStopped = true
         } catch {
-            aiMessage.content = ""
-            aiMessage.errorMessage = error.localizedDescription
+            if error.isUserCancelledRequest {
+                // User cancelled - don't show an error bubble, just keep whatever streamed so far.
+                aiMessage.wasManuallyStopped = true
+                aiMessage.errorMessage = nil
+                if !latestStreamedText.isEmpty {
+                    aiMessage.content = latestStreamedText
+                }
+            } else {
+                aiMessage.content = ""
+                aiMessage.errorMessage = error.aiUserFacingMessage ?? error.localizedDescription
+            }
         }
 
         isLoading = false
@@ -248,7 +293,7 @@ extension ChatView {
         currentMessageTask = nil
     }
 
-    func handleChatResult(_ result: GeminiService.ChatFunctionResult, aiMessage: ChatMessage) {
+    func handleChatResult(_ result: AIService.ChatFunctionResult, aiMessage: ChatMessage) {
         if !result.suggestedFoods.isEmpty {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 aiMessage.setSuggestedMeals(result.suggestedFoods)
@@ -274,6 +319,13 @@ extension ChatView {
         if let editData = result.suggestedFoodEdit {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 aiMessage.setSuggestedFoodEdit(editData)
+            }
+            HapticManager.lightTap()
+        }
+
+        if let workoutPlanData = result.suggestedWorkoutPlan {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                aiMessage.setSuggestedWorkoutPlan(workoutPlanData)
             }
             HapticManager.lightTap()
         }
@@ -457,7 +509,17 @@ extension ChatView {
             context: context,
             tokenBudget: 650
         )
-        return packet.promptSummary
+        let recentWorkoutNotes = buildRecentWorkoutNotesContext(now: now)
+        let activeGoalSummary = buildActiveWorkoutGoalsContext()
+
+        var sections: [String] = [packet.promptSummary]
+        if !activeGoalSummary.isEmpty {
+            sections.append("Active workout goals:\n" + activeGoalSummary)
+        }
+        if !recentWorkoutNotes.isEmpty {
+            sections.append("Recent workout notes:\n" + recentWorkoutNotes)
+        }
+        return sections.joined(separator: "\n\n")
     }
 
     private func hasWorkoutLoggedToday(now: Date) -> Bool {
@@ -477,7 +539,7 @@ extension ChatView {
         return hasLoggedSession || hasLiveWorkout
     }
 
-    private func fetchActivityData() async -> GeminiService.ActivityData {
+    private func fetchActivityData() async -> AIService.ActivityData {
         guard let healthKitService else {
             return .empty
         }
@@ -488,7 +550,7 @@ extension ChatView {
             async let exercise = healthKitService.fetchTodayExerciseMinutes()
 
             let (fetchedSteps, fetchedCalories, fetchedExercise) = try await (steps, calories, exercise)
-            return GeminiService.ActivityData(
+            return AIService.ActivityData(
                 steps: fetchedSteps,
                 activeCalories: fetchedCalories,
                 exerciseMinutes: fetchedExercise
@@ -497,5 +559,72 @@ extension ChatView {
             // Return empty data if HealthKit fails
             return .empty
         }
+    }
+
+    private func buildRecentWorkoutNotesContext(now: Date) -> String {
+        let calendar = Calendar.current
+        guard let cutoff = calendar.date(byAdding: .day, value: -14, to: now) else { return "" }
+
+        struct WorkoutNoteSignal {
+            let date: Date
+            let title: String
+            let subtitle: String
+            let note: String
+        }
+
+        let sessionSignals: [WorkoutNoteSignal] = recentWorkouts
+            .filter { $0.loggedAt >= cutoff && $0.hasSignalNote }
+            .map { workout in
+                let subtitle = [workout.displayTypeName, workout.formattedDuration, workout.formattedDistance]
+                    .compactMap { $0 }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " • ")
+                return WorkoutNoteSignal(
+                    date: workout.loggedAt,
+                    title: workout.displayName,
+                    subtitle: subtitle,
+                    note: workout.trimmedNotes
+                )
+            }
+
+        let liveSignals: [WorkoutNoteSignal] = liveWorkouts
+            .filter { ($0.completedAt ?? $0.startedAt) >= cutoff }
+            .compactMap { workout in
+                let note = workout.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !note.isEmpty else { return nil }
+                let subtitle = [workout.type.displayName, workout.displayFocusSummary, workout.formattedDuration]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " • ")
+                return WorkoutNoteSignal(
+                    date: workout.completedAt ?? workout.startedAt,
+                    title: workout.name,
+                    subtitle: subtitle,
+                    note: note
+                )
+            }
+
+        return (sessionSignals + liveSignals)
+            .sorted { $0.date > $1.date }
+            .prefix(3)
+            .map { signal in
+                let prefix = signal.subtitle.isEmpty ? signal.title : "\(signal.title) (\(signal.subtitle))"
+                return "- \(prefix): \(signal.note)"
+            }
+            .joined(separator: "\n")
+    }
+
+    private func buildActiveWorkoutGoalsContext() -> String {
+        activeWorkoutGoals
+            .prefix(6)
+            .map { goal in
+                let parts = [
+                    goal.trimmedTitle,
+                    goal.scopeSummary,
+                    goal.trackingSummary,
+                    goal.horizonSummary
+                ].compactMap { $0 }
+                return "• " + parts.joined(separator: " • ")
+            }
+            .joined(separator: "\n")
     }
 }

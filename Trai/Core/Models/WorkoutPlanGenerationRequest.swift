@@ -146,6 +146,7 @@ struct WorkoutPlanGenerationRequest {
         case running = "running"
         case cycling = "cycling"
         case swimming = "swimming"
+        case climbing = "climbing"
         case rowing = "rowing"
         case walking = "walking"
         case stairClimber = "stairClimber"
@@ -160,6 +161,7 @@ struct WorkoutPlanGenerationRequest {
             case .running: "Running"
             case .cycling: "Cycling"
             case .swimming: "Swimming"
+            case .climbing: "Climbing"
             case .rowing: "Rowing"
             case .walking: "Walking"
             case .stairClimber: "Stair Climber"
@@ -174,6 +176,7 @@ struct WorkoutPlanGenerationRequest {
             case .running: "figure.run"
             case .cycling: "figure.outdoor.cycle"
             case .swimming: "figure.pool.swim"
+            case .climbing: "figure.climbing"
             case .rowing: "figure.rower"
             case .walking: "figure.walk"
             case .stairClimber: "figure.stair.stepper"
@@ -260,6 +263,17 @@ struct WorkoutPlanGenerationRequest {
 
     /// Recommend a split type based on preferences, available days and experience
     var recommendedSplit: WorkoutPlan.SplitType {
+        switch workoutType {
+        case .cardio, .hiit, .flexibility:
+            return .custom
+        case .mixed:
+            if includesCardio {
+                return .custom
+            }
+        case .strength:
+            break
+        }
+
         // If user chose a specific split, use it
         if let preferred = preferredSplit, preferred != .letTraiDecide {
             switch preferred {

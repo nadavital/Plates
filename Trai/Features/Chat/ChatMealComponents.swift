@@ -390,6 +390,7 @@ struct EditMealSuggestionSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Log", systemImage: "checkmark") {
                         let updated = SuggestedFoodEntry(
+                            id: meal.id,
                             name: name.trimmingCharacters(in: .whitespaces),
                             calories: Int(caloriesText) ?? meal.calories,
                             proteinGrams: Double(proteinText) ?? meal.proteinGrams,
@@ -397,7 +398,10 @@ struct EditMealSuggestionSheet: View {
                             fatGrams: Double(fatText) ?? meal.fatGrams,
                             fiberGrams: fiberText.isEmpty ? nil : Double(fiberText),
                             sugarGrams: sugarText.isEmpty ? nil : Double(sugarText),
-                            servingSize: servingSize.isEmpty ? nil : servingSize
+                            servingSize: servingSize.isEmpty ? nil : servingSize,
+                            emoji: meal.emoji,
+                            loggedAtDateString: meal.loggedAtDateString,
+                            loggedAtTime: meal.loggedAtTime
                         )
                         onSave(updated)
                     }

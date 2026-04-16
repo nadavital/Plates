@@ -82,6 +82,18 @@ struct SettingsView: View {
                 Text("Trai guidance will adapt to this tone while still learning from your behavior.")
             }
 
+#if DEBUG
+            Section {
+                NavigationLink {
+                    DeveloperSettingsView()
+                } label: {
+                    Label("Developer Settings", systemImage: "hammer")
+                }
+            } footer: {
+                Text("Backend, billing, account, and testing controls live here while the app is still in local development.")
+            }
+#endif
+
             // MARK: - Nutrition Plan Section
             Section {
                 Button {
@@ -252,13 +264,16 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showPlanAdjustment) {
             PlanAdjustmentSheet(profile: profile)
+                .traiSheetBranding()
         }
         .sheet(isPresented: $showWorkoutPlanSetup) {
             WorkoutPlanChatFlow()
+                .traiSheetBranding()
         }
         .sheet(isPresented: $showWorkoutPlanEdit) {
             if let plan = profile.workoutPlan {
                 WorkoutPlanEditSheet(currentPlan: plan)
+                    .traiSheetBranding()
             }
         }
     }
@@ -269,6 +284,7 @@ struct SettingsView: View {
             set: { coachToneRaw = $0.rawValue }
         )
     }
+
 }
 
 // MARK: - Macro Toggle Row

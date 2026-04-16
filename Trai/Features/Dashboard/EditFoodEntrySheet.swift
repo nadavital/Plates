@@ -11,6 +11,7 @@ import SwiftData
 struct EditFoodEntrySheet: View {
     @Bindable var entry: FoodEntry
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var profiles: [UserProfile]
 
     @State private var name: String
@@ -198,6 +199,7 @@ struct EditFoodEntrySheet: View {
         entry.servingSize = servingSize.isEmpty ? nil : servingSize
         entry.userDescription = notes.isEmpty ? nil : notes
 
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         HapticManager.success()
         dismiss()
     }

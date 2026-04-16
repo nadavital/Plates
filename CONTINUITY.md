@@ -40,6 +40,13 @@ Visual language refinement — consistent, organic card aesthetics inspired by A
 ### Next
 - Tune glow opacity/positioning based on visual feedback
 
+### Last deploy
+- Built Release for device EE90D8D7-8766-5B9E-A6F8-E4E6BD62A1A9 (2026-04-15)
+- Fixed two build errors before successful build:
+  1. `WorkoutGoalCheckInView.swift`: added missing `import SwiftData`
+  2. `WorkoutGoalComponents.swift`: added `@ViewBuilder` to `goalRow(_:)` (local `let` pattern incompatible with opaque return type)
+- Installed at bundleID: Nadav.Trai
+
 ## Open Questions
 - None
 

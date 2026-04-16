@@ -34,17 +34,11 @@ struct PlanChatBubble: View {
             if message.role == .user { Spacer() }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
-                Text(message.content)
-                    .font(.subheadline)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        message.role == .user
-                            ? Color.accentColor
-                            : Color(.secondarySystemBackground)
-                    )
-                    .foregroundStyle(message.role == .user ? .white : .primary)
-                    .clipShape(.rect(cornerRadius: 18))
+                if message.role == .user {
+                    TraiUserTextBubble(text: message.content)
+                } else {
+                    TraiAssistantTextMessage(text: message.content)
+                }
 
                 if let proposed = message.proposedPlan {
                     ProposedPlanCard(plan: proposed) {

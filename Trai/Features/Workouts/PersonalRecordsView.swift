@@ -655,6 +655,7 @@ struct PRDetailSheet: View {
             }
             .sheet(item: $historyToEdit) { entry in
                 EditHistorySheet(history: entry, useLbs: useLbs)
+                    .traiSheetBranding()
             }
             .confirmationDialog(
                 "Delete Record",
@@ -669,6 +670,7 @@ struct PRDetailSheet: View {
                 Text("Delete record from \(entry.performedAt.formatted(date: .abbreviated, time: .omitted))?")
             }
         }
+        .traiSheetBranding()
     }
 
     private func deleteHistory(_ history: ExerciseHistory) {
@@ -941,6 +943,7 @@ private struct EditHistorySheet: View {
                 }
             }
         }
+        .traiSheetBranding()
     }
 
     private func saveChanges() {

@@ -31,7 +31,7 @@ struct GoalOption: View {
         case .loseWeight: "Reduce overall weight"
         case .loseFat: "Preserve muscle mass"
         case .buildMuscle: "Strength & size gains"
-        case .recomposition: "Lose fat, gain muscle"
+        case .recomposition: "Lean out near maintenance"
         case .maintenance: "Keep current weight"
         case .performance: "Optimize for athletics"
         case .health: "Balanced nutrition"

@@ -68,15 +68,18 @@ extension ProfileView {
             // Show enabled macros with dynamic grid layout
             let macros = profile.enabledMacrosOrdered
             if !macros.isEmpty {
-                let columns = macroGridColumns(for: macros.count)
-                LazyVGrid(columns: columns, spacing: 8) {
-                    ForEach(macros) { macro in
-                        MacroPill(
-                            label: macro.displayName,
-                            value: profile.goalFor(macro),
-                            unit: "g",
-                            color: macro.color
-                        )
+                VStack(spacing: 8) {
+                    ForEach(Array(balancedMacroRows(for: macros).enumerated()), id: \.offset) { _, row in
+                        HStack(spacing: 8) {
+                            ForEach(row) { macro in
+                                MacroPill(
+                                    label: macro.displayName,
+                                    value: profile.goalFor(macro),
+                                    unit: "g",
+                                    color: macro.color
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -84,11 +87,18 @@ extension ProfileView {
             HStack(spacing: 12) {
                 // Review with Trai button
                 Button {
-                    pendingPlanReviewRequest = true
-                    onSelectTab?(.trai)
+                    if canAccessAIFeatures {
+                        pendingPlanReviewRequest = true
+                        onSelectTab?(.trai)
+                    } else {
+                        proUpsellCoordinator?.present(source: .nutritionPlan)
+                    }
                     HapticManager.lightTap()
                 } label: {
-                    traiReviewButtonLabel()
+                    aiActionButtonLabel(
+                        isUnlocked: canAccessAIFeatures,
+                        unlockedTitle: "Review with Trai"
+                    )
                 }
                 .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
 
@@ -222,11 +232,18 @@ extension ProfileView {
 
                 HStack(spacing: 12) {
                     Button {
-                        pendingWorkoutPlanReviewRequest = true
-                        onSelectTab?(.trai)
+                        if canAccessAIFeatures {
+                            pendingWorkoutPlanReviewRequest = true
+                            onSelectTab?(.trai)
+                        } else {
+                            proUpsellCoordinator?.present(source: .workoutPlan)
+                        }
                         HapticManager.lightTap()
                     } label: {
-                        traiReviewButtonLabel()
+                        aiActionButtonLabel(
+                            isUnlocked: canAccessAIFeatures,
+                            unlockedTitle: "Review with Trai"
+                        )
                     }
                     .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fullWidth: true, height: 40))
 
@@ -265,10 +282,14 @@ extension ProfileView {
 
                 // Create plan prompt
                 Button {
-                    showPlanSetupSheet = true
+                    if canAccessAIFeatures {
+                        showPlanSetupSheet = true
+                    } else {
+                        proUpsellCoordinator?.present(source: .workoutPlan)
+                    }
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "circle.hexagongrid.circle")
                             .font(.title2)
                             .foregroundStyle(Color.accentColor)
 
@@ -284,6 +305,15 @@ extension ProfileView {
                         }
 
                         Spacer()
+
+                        if !canAccessAIFeatures {
+                            Text("PRO")
+                                .font(.traiLabel(11))
+                                .foregroundStyle(TraiColors.ember)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(TraiColors.ember.opacity(0.10), in: Capsule())
+                        }
 
                         Image(systemName: "chevron.right")
                             .font(.caption)
@@ -302,12 +332,12 @@ extension ProfileView {
     // MARK: - Workout Plan Chip
 
     private func WorkoutPlanChip(template: WorkoutPlan.WorkoutTemplate) -> some View {
-        let primaryColor = colorForMuscleGroup(template.targetMuscleGroups.first)
+        let primaryColor = template.displayAccentColor
 
         return HStack(spacing: 6) {
-            Circle()
-                .fill(primaryColor)
-                .frame(width: 8, height: 8)
+            Image(systemName: template.sessionType.iconName)
+                .font(.caption2)
+                .foregroundStyle(primaryColor)
 
             Text(template.name)
                 .font(.caption)
@@ -317,22 +347,6 @@ extension ProfileView {
         .padding(.vertical, 8)
         .background(primaryColor.opacity(0.15))
         .clipShape(.capsule)
-    }
-
-    private func colorForMuscleGroup(_ muscleGroup: String?) -> Color {
-        guard let muscle = muscleGroup else { return .gray }
-        switch muscle {
-        case "chest", "shoulders", "triceps":
-            return .orange
-        case "back", "biceps":
-            return .accentColor
-        case "quads", "hamstrings", "glutes", "calves", "legs":
-            return .green
-        case "core":
-            return TraiColors.coral
-        default:
-            return .gray
-        }
     }
 
     // MARK: - Memories Card
@@ -407,17 +421,19 @@ extension ProfileView {
         .buttonStyle(.plain)
     }
 
-    /// Calculate grid columns for macro pills based on count
-    func macroGridColumns(for count: Int) -> [GridItem] {
-        let columnCount: Int
-        switch count {
-        case 1: columnCount = 1
-        case 2: columnCount = 2
-        case 3: columnCount = 3
-        case 4: columnCount = 2  // 2x2 grid
-        default: columnCount = 3  // 5+ uses 3 columns
+    func balancedMacroRows(for macros: [MacroType]) -> [[MacroType]] {
+        switch macros.count {
+        case 0...3:
+            [macros]
+        case 4:
+            [Array(macros.prefix(2)), Array(macros.suffix(2))]
+        case 5:
+            [Array(macros.prefix(3)), Array(macros.suffix(2))]
+        default:
+            stride(from: 0, to: macros.count, by: 3).map { start in
+                Array(macros[start..<min(start + 3, macros.count)])
+            }
         }
-        return Array(repeating: GridItem(.flexible()), count: columnCount)
     }
 
     // MARK: - Exercises Card
@@ -495,17 +511,30 @@ extension ProfileView {
     // MARK: - Helpers
 
     @ViewBuilder
-    private func traiReviewButtonLabel() -> some View {
+    private func aiActionButtonLabel(isUnlocked: Bool, unlockedTitle: String) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 6) {
                 Image(systemName: "circle.hexagongrid.circle")
-                Text("Review with Trai")
+                Text(unlockedTitle)
+                if !isUnlocked {
+                    Text("PRO")
+                        .font(.traiLabel(10))
+                        .foregroundStyle(TraiColors.ember)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(TraiColors.ember.opacity(0.10), in: Capsule())
+                }
             }
             .frame(maxWidth: .infinity)
 
             HStack(spacing: 6) {
                 Image(systemName: "circle.hexagongrid.circle")
                 Text("Review")
+                if !isUnlocked {
+                    Text("PRO")
+                        .font(.traiLabel(10))
+                        .foregroundStyle(TraiColors.ember)
+                }
             }
             .frame(maxWidth: .infinity)
         }

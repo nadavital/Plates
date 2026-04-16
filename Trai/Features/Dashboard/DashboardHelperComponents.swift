@@ -11,14 +11,24 @@ import SwiftUI
 
 struct MacroRingItem: View {
     let name: String
+    var compactLabel: String? = nil
     let current: Double
     let goal: Double
     let color: Color
+    var diameter: CGFloat = 60
+    var prefersCompactLabel: Bool = false
 
     @State private var animatedProgress: Double = 0
 
     private var progress: Double {
         min(current / goal, 1.0)
+    }
+
+    private var labelText: String {
+        if prefersCompactLabel, let compactLabel, !compactLabel.isEmpty {
+            return compactLabel
+        }
+        return name
     }
 
     var body: some View {
@@ -37,14 +47,16 @@ struct MacroRingItem: View {
                     .shadow(color: color.opacity(0.3), radius: 3, y: 1)
 
                 Text("\(Int(current))g")
-                    .font(.traiLabel())
+                    .font(.traiLabel(diameter < 54 ? 11 : 12))
                     .bold()
             }
-            .frame(width: 60, height: 60)
+            .frame(width: diameter, height: diameter)
 
-            Text(name)
-                .font(.caption)
+            Text(labelText)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(prefersCompactLabel ? 0.9 : 0.7)
         }
         .onAppear {
             withAnimation(TraiAnimation.bouncy) {
@@ -117,6 +129,7 @@ struct QuickActionButton: View {
 }
 
 struct ChatWithTraiCard: View {
+    let isUnlocked: Bool
     let action: () -> Void
 
     var body: some View {
@@ -141,8 +154,32 @@ struct ChatWithTraiCard: View {
                         .foregroundStyle(.white)
                 }
 
-                Text("Chat with Trai")
-                    .font(.traiHeadline(14))
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        Text("Chat with Trai")
+                            .font(.traiHeadline(14))
+
+                        if !isUnlocked {
+                            Text("PRO")
+                                .font(.traiLabel(10))
+                                .foregroundStyle(TraiColors.ember)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(TraiColors.ember.opacity(0.10), in: Capsule())
+                        }
+                    }
+
+                    HStack(spacing: 6) {
+                        Text("Chat")
+                            .font(.traiHeadline(14))
+
+                        if !isUnlocked {
+                            Text("PRO")
+                                .font(.traiLabel(10))
+                                .foregroundStyle(TraiColors.ember)
+                        }
+                    }
+                }
 
                 Spacer(minLength: 0)
             }
@@ -195,12 +232,14 @@ struct DateNavigationBar: View {
                     .foregroundStyle(.primary)
                     .frame(width: 44, height: 44)
             }
+            .accessibilityIdentifier("dashboardDatePreviousButton")
 
             Spacer()
 
             VStack(spacing: 2) {
                 Text(dateText)
                     .font(.headline)
+                    .accessibilityIdentifier("dashboardDateLabel")
 
                 if !isToday {
                     Button {
@@ -213,6 +252,7 @@ struct DateNavigationBar: View {
                             .font(.caption)
                             .foregroundStyle(.accent)
                     }
+                    .accessibilityIdentifier("dashboardJumpToTodayButton")
                 }
             }
 
@@ -229,6 +269,7 @@ struct DateNavigationBar: View {
                     .foregroundStyle(isToday ? .tertiary : .primary)
                     .frame(width: 44, height: 44)
             }
+            .accessibilityIdentifier("dashboardDateNextButton")
             .disabled(isToday)
         }
         .padding(.horizontal, 8)

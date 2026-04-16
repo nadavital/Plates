@@ -14,8 +14,10 @@ struct WorkoutBanner: View {
     let onEnd: () -> Void
 
     private struct BannerStats {
-        let exerciseCount: Int
+        let entryCount: Int
         let completedSets: Int
+        let completedActivities: Int
+        let strengthEntryCount: Int
     }
 
     private var stats: BannerStats {
@@ -23,10 +25,39 @@ struct WorkoutBanner: View {
         let completedSets = entries.reduce(0) { total, entry in
             total + (entry.completedSets?.count ?? 0)
         }
+        let completedActivities = entries.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count
+        let strengthEntryCount = entries.filter(\.isStrength).count
         return BannerStats(
-            exerciseCount: entries.count,
-            completedSets: completedSets
+            entryCount: entries.count,
+            completedSets: completedSets,
+            completedActivities: completedActivities,
+            strengthEntryCount: strengthEntryCount
         )
+    }
+
+    private var usesFlexibleSessionPresentation: Bool {
+        let stats = stats
+        return !workout.type.prefersStructuredEntries && stats.completedSets == 0
+    }
+
+    private func entrySummaryText(for stats: BannerStats) -> String? {
+        guard stats.entryCount > 0 else { return nil }
+
+        if usesFlexibleSessionPresentation || stats.strengthEntryCount == 0 {
+            return "\(stats.entryCount) \(stats.entryCount == 1 ? "activity" : "activities")"
+        }
+
+        return "\(stats.entryCount) \(stats.entryCount == 1 ? "exercise" : "exercises")"
+    }
+
+    private func completionSummaryText(for stats: BannerStats) -> String? {
+        if usesFlexibleSessionPresentation || stats.strengthEntryCount == 0 {
+            guard stats.completedActivities > 0 else { return nil }
+            return "\(stats.completedActivities) done"
+        }
+
+        guard stats.completedSets > 0 else { return nil }
+        return "\(stats.completedSets) \(stats.completedSets == 1 ? "set" : "sets")"
     }
 
     private func formattedTime(at date: Date) -> String {
@@ -58,11 +89,13 @@ struct WorkoutBanner: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    if stats.exerciseCount > 0 {
-                        Text("\(stats.exerciseCount) exercises")
+                    if let entrySummary = entrySummaryText(for: stats) {
+                        Text(entrySummary)
                     }
-                    Text("•")
-                        .foregroundStyle(.tertiary)
+                    if entrySummaryText(for: stats) != nil {
+                        Text("•")
+                            .foregroundStyle(.tertiary)
+                    }
                     TimelineView(.periodic(from: workout.startedAt, by: 1.0)) { context in
                         Text(formattedTime(at: context.date))
                             .monospacedDigit()
@@ -75,11 +108,11 @@ struct WorkoutBanner: View {
             Spacer(minLength: 8)
 
             // Sets completed badge
-            if stats.completedSets > 0 {
+            if let completionSummary = completionSummaryText(for: stats) {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption)
-                    Text("\(stats.completedSets) sets")
+                    Text(completionSummary)
                         .font(.caption)
                 }
                 .foregroundStyle(.green)

@@ -11,7 +11,7 @@ struct PlanChatView: View {
     let onPlanUpdated: (NutritionPlan) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var geminiService = GeminiService()
+    @State private var aiService = AIService()
     @State private var messages: [PlanChatMessage] = []
     @State private var inputText = ""
     @State private var isLoading = false
@@ -117,7 +117,7 @@ struct PlanChatView: View {
 
         Task {
             do {
-                let response = try await geminiService.refinePlan(
+                let response = try await aiService.refinePlan(
                     currentPlan: currentPlan,
                     request: request,
                     userMessage: text,
@@ -202,7 +202,8 @@ struct PlanChatView: View {
         activityLevel: .moderate,
         activityNotes: "",
         goal: .loseWeight,
-        additionalNotes: ""
+        additionalNotes: "",
+        enabledMacros: MacroType.defaultEnabled
     )
 
     PlanChatView(

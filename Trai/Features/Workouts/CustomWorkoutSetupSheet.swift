@@ -2,7 +2,7 @@
 //  CustomWorkoutSetupSheet.swift
 //  Trai
 //
-//  Sheet for setting up a custom workout with name, type, and target muscles
+//  Sheet for setting up a custom workout with optional workout type and target muscles
 //
 
 import SwiftUI
@@ -12,33 +12,37 @@ import SwiftUI
 struct CustomWorkoutSetupSheet: View {
     @Environment(\.dismiss) private var dismiss
     let onStart: (String, LiveWorkout.WorkoutType, [LiveWorkout.MuscleGroup]) -> Void
+    var orderedWorkoutTypes: [LiveWorkout.WorkoutType] = LiveWorkout.WorkoutType.allCases
 
     @State private var workoutName = ""
     @State private var selectedType: LiveWorkout.WorkoutType = .strength
     @State private var selectedMuscles: Set<LiveWorkout.MuscleGroup> = []
 
     private var defaultName: String {
-        if selectedMuscles.isEmpty {
+        if selectedType.supportsMuscleTargets, !selectedMuscles.isEmpty {
+            let muscleNames = selectedMuscles.sorted { $0.displayName < $1.displayName }
+                .prefix(3)
+                .map { $0.displayName }
+                .joined(separator: " + ")
+            return muscleNames
+        }
+
+        if selectedType == .custom {
             return "Custom Workout"
         }
-        let muscleNames = selectedMuscles.sorted { $0.displayName < $1.displayName }
-            .prefix(3)
-            .map { $0.displayName }
-            .joined(separator: " + ")
-        return muscleNames
+
+        return "\(selectedType.displayName) Workout"
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
-                    setupHeaderCard
-
                     nameCard
 
                     workoutTypeCard
 
-                    if selectedType != .cardio {
+                    if selectedType.supportsMuscleTargets {
                         targetMusclesCard
                     }
 
@@ -61,37 +65,15 @@ struct CustomWorkoutSetupSheet: View {
                     Button("Start", systemImage: "checkmark") {
                         let name = workoutName.trimmingCharacters(in: .whitespacesAndNewlines)
                         let finalName = name.isEmpty ? defaultName : name
-                        onStart(finalName, selectedType, Array(selectedMuscles))
+                        let muscles = selectedType.supportsMuscleTargets ? Array(selectedMuscles) : []
+                        onStart(finalName, selectedType, muscles)
                         dismiss()
                     }
                     .labelStyle(.iconOnly)
                 }
             }
         }
-        .tint(Color("AccentColor"))
-        .accentColor(Color("AccentColor"))
-    }
-
-    private var setupHeaderCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "figure.run.circle.fill")
-                .font(.traiBold(24))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 40, height: 40)
-                .background(Color.accentColor.opacity(0.12), in: Circle())
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Build Your Session")
-                    .font(.traiHeadline())
-
-                Text("Pick a type, set targets, and start quickly.")
-                    .font(.traiLabel(12))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .traiCard(cornerRadius: 16)
+        .traiSheetBranding()
     }
 
     private var nameCard: some View {
@@ -99,15 +81,9 @@ struct CustomWorkoutSetupSheet: View {
             Label("Workout Name", systemImage: "textformat")
                 .font(.traiHeadline())
 
-            TextField("e.g. Push Day, Legs, Arm Focus", text: $workoutName)
+            TextField("e.g. Bouldering, Morning Flow, Long Run", text: $workoutName)
                 .padding(12)
                 .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-
-            if workoutName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Suggested: \(defaultName)")
-                    .font(.traiLabel(12))
-                    .foregroundStyle(.secondary)
-            }
         }
         .traiCard(cornerRadius: 16)
     }
@@ -117,8 +93,12 @@ struct CustomWorkoutSetupSheet: View {
             Label("Workout Type", systemImage: "square.grid.2x2.fill")
                 .font(.traiHeadline())
 
-            HStack(spacing: 8) {
-                ForEach(LiveWorkout.WorkoutType.allCases) { type in
+            Text("Pick the closest fit for this session.")
+                .font(.traiLabel(12))
+                .foregroundStyle(.secondary)
+
+            FlowLayout(spacing: 8) {
+                ForEach(orderedWorkoutTypes) { type in
                     WorkoutTypeButton(
                         type: type,
                         isSelected: selectedType == type
@@ -134,14 +114,14 @@ struct CustomWorkoutSetupSheet: View {
 
     private var targetMusclesCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Target Muscles", systemImage: "figure.strengthtraining.traditional")
+            Label("Target Areas", systemImage: "figure.strengthtraining.traditional")
                 .font(.traiHeadline())
 
-            Text("Select what you want to train today")
+            Text("Optional for strength workouts")
                 .font(.traiLabel(12))
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 6) {
+            FlowLayout(spacing: 6) {
                 PresetButton(title: "Push", isSelected: isPushSelected) {
                     togglePreset(LiveWorkout.MuscleGroup.pushMuscles)
                 }
@@ -232,23 +212,22 @@ private struct WorkoutTypeButton: View {
             Button(action: action) {
                 label
             }
-            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.18))
+            .buttonStyle(.traiSecondary(color: .accentColor, size: .compact, fillOpacity: 0.18))
         } else {
             Button(action: action) {
                 label
             }
-            .buttonStyle(.traiTertiary(color: .secondary, fullWidth: true))
+            .buttonStyle(.traiTertiary(color: .secondary, size: .compact))
         }
     }
 
     private var label: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 6) {
             Image(systemName: type.iconName)
-                .font(.traiHeadline(18))
+                .font(.traiLabel(12))
             Text(type.displayName)
                 .font(.traiLabel(12))
         }
-        .frame(maxWidth: .infinity)
     }
 }
 

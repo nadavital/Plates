@@ -43,6 +43,9 @@ extension ChatView {
         guard !processingMealSuggestionKeys.contains(mealKey) else {
             return
         }
+        guard message.foodEntryId(for: meal.id) == nil else {
+            return
+        }
         processingMealSuggestionKeys.insert(mealKey)
         defer { processingMealSuggestionKeys.remove(mealKey) }
 
@@ -58,6 +61,7 @@ extension ChatView {
         entry.carbsGrams = meal.carbsGrams
         entry.fatGrams = meal.fatGrams
         entry.fiberGrams = meal.fiberGrams
+        entry.sugarGrams = meal.sugarGrams
         entry.servingSize = meal.servingSize
         entry.emoji = FoodEmojiResolver.resolve(preferred: meal.emoji, foodName: meal.name)
         entry.imageData = imageData
@@ -72,6 +76,7 @@ extension ChatView {
             logDate = entry.loggedAt
         }
 
+        message.replaceSuggestedMeal(meal)
         modelContext.insert(entry)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.logFood,
@@ -102,6 +107,7 @@ extension ChatView {
             message.markMealLogged(mealId: meal.id, entryId: entry.id)
         }
         try? modelContext.save()
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         rebuildSessionMessages(preferLiveQueryData: true)
 
         HapticManager.success()
@@ -229,15 +235,76 @@ extension ChatView {
     }
 }
 
+// MARK: - Workout Plan Suggestion Actions
+
+extension ChatView {
+    func acceptWorkoutPlanSuggestion(_ suggestion: WorkoutPlanSuggestionEntry, for message: ChatMessage) {
+        guard let profile else { return }
+
+        let hadExistingPlan = profile.workoutPlan != nil
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: suggestion.plan
+        )
+
+        profile.workoutPlan = suggestion.plan
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                suggestion.plan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        try? modelContext.save()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.workoutPlanUpdateApplied = true
+        }
+
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.reviewWorkoutPlan,
+            domain: .planning,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: message.id
+        )
+
+        HapticManager.success()
+    }
+
+    func dismissWorkoutPlanSuggestion(for message: ChatMessage) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            message.suggestedWorkoutPlanDismissed = true
+        }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.reviewWorkoutPlan,
+            domain: .planning,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id
+        )
+        HapticManager.lightTap()
+    }
+}
+
 // MARK: - Workout Log Suggestion Actions
 
 extension ChatView {
     func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
         // Create a LiveWorkout with proper exercise details
+        let workoutType = LiveWorkout.WorkoutType(rawValue: workoutLog.workoutType.lowercased())
+            ?? (workoutLog.isStrength ? .strength : .cardio)
         let workout = LiveWorkout(
             name: workoutLog.displayName,
-            workoutType: workoutLog.isStrength ? .strength : .cardio,
-            targetMuscleGroups: []
+            workoutType: workoutType,
+            targetMuscleGroups: [],
+            focusAreas: workoutType.supportsMuscleTargets ? [] : [workoutLog.displayName]
         )
 
         // Add exercises as entries
@@ -316,18 +383,20 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutSuggestion(_ workout: SuggestedWorkoutEntry, for message: ChatMessage) {
         // Map workout type string to enum
-        let workoutType = LiveWorkout.WorkoutType(rawValue: workout.workoutType) ?? .strength
+        let workoutType = LiveWorkout.WorkoutType(rawValue: workout.workoutType.lowercased()) ?? .strength
 
         // Map target muscle groups
-        let targetMuscles = workout.targetMuscleGroups.compactMap {
-            LiveWorkout.MuscleGroup(rawValue: $0)
-        }
+        let targetMuscles = workoutType.supportsMuscleTargets
+            ? workout.targetMuscleGroups.compactMap { LiveWorkout.MuscleGroup(rawValue: $0.lowercased()) }
+            : []
+        let focusAreas = workoutType.supportsMuscleTargets ? [] : workout.targetMuscleGroups
 
         // Create the LiveWorkout
         let liveWorkout = LiveWorkout(
             name: workout.name,
             workoutType: workoutType,
-            targetMuscleGroups: targetMuscles
+            targetMuscleGroups: targetMuscles,
+            focusAreas: focusAreas
         )
 
         // Add suggested exercises as entries
@@ -603,8 +672,8 @@ extension ChatView {
             prompt = "It's been a while since my plan was reviewed. Can you check my progress and suggest any needed updates?"
         }
 
-        // Send the message through the normal chat flow
-        sendMessage(prompt)
+        // This was launched from an app CTA, not typed into chat.
+        sendAppInitiatedPrompt(prompt, launchLabel: "Reviewing your plan...")
     }
 
     /// Handle when user taps "Later" or dismiss on recommendation card
@@ -624,19 +693,38 @@ extension ChatView {
         HapticManager.lightTap()
     }
 
-    /// Check for pending plan review request from Profile (cross-tab navigation)
-    func checkForPendingPlanReview() {
+    /// Check for pending cross-tab startup actions that should open in chat
+    func checkForPendingStartupActions() {
+        let trimmedPrompt = pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedPrompt.isEmpty {
+            let trimmedLaunchLabel = pendingChatLaunchLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            pendingChatPrompt = ""
+            pendingChatLaunchLabel = ""
+            startNewSession(silent: true)
+            sendAppInitiatedPrompt(
+                trimmedPrompt,
+                launchLabel: trimmedLaunchLabel.isEmpty ? "Reviewing with Trai..." : trimmedLaunchLabel
+            )
+            return
+        }
+
         if pendingPlanReviewRequest {
             pendingPlanReviewRequest = false
             startNewSession(silent: true)
-            sendMessage("Can you review my nutrition plan and check if any updates are needed based on my progress?")
+            sendAppInitiatedPrompt(
+                "Can you review my nutrition plan and check if any updates are needed based on my progress?",
+                launchLabel: "Reviewing your nutrition plan..."
+            )
             return
         }
 
         guard pendingWorkoutPlanReviewRequest else { return }
         pendingWorkoutPlanReviewRequest = false
         startNewSession(silent: true)
-        sendMessage("Can you review my workout split and suggest any updates based on my recovery and recent workouts?")
+        sendAppInitiatedPrompt(
+            "Can you review my workout split and suggest any updates based on my recovery and recent workouts?",
+            launchLabel: "Reviewing your workout plan..."
+        )
     }
 
 }

@@ -2,7 +2,7 @@
 //  MuscleRecoveryCard.swift
 //  Trai
 //
-//  Displays muscle group recovery status with visual indicators
+//  Displays recovery signals based on recent muscle load
 //
 
 import SwiftUI
@@ -33,7 +33,7 @@ struct MuscleRecoveryCard: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
                 HStack {
-                    Label("Muscle Recovery", systemImage: "figure.strengthtraining.traditional")
+                    Label("Recovery Signals", systemImage: "figure.mind.and.body")
                         .font(.headline)
                     Spacer()
                     if onTap != nil {
@@ -83,7 +83,7 @@ struct MuscleRecoveryCard: View {
         HStack {
             Image(systemName: "dumbbell")
                 .foregroundStyle(.secondary)
-            Text("Start logging workouts to track recovery")
+            Text("Start logging sessions to track recovery signals")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -188,7 +188,7 @@ struct MuscleRecoveryDetailSheet: View {
                     }
                 }
             }
-            .navigationTitle("Muscle Recovery")
+            .navigationTitle("Recovery Signals")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

@@ -29,6 +29,7 @@ struct ChatView: View {
     private static let weightFetchLimit = 48
     private static let behaviorFetchLimit = 48
     private static let activeMemoriesFetchLimit = 48
+    private static let activeWorkoutGoalsFetchLimit = 24
     private static let activeSignalsFetchLimit = 48
     private static let suggestionUsageFetchLimit = 64
     private static let initialSessionPreviewMessageLimit = 20
@@ -47,7 +48,7 @@ struct ChatView: View {
     }
 
     /// Optional workout context for mid-workout chat
-    var workoutContext: GeminiService.WorkoutContext?
+    var workoutContext: AIService.WorkoutContext?
 
     @Query var allMessages: [ChatMessage]
 
@@ -58,6 +59,7 @@ struct ChatView: View {
     var recentWorkouts: [WorkoutSession]
     @Query(sort: \LiveWorkout.startedAt, order: .reverse)
     var liveWorkouts: [LiveWorkout]
+    @Query var activeWorkoutGoals: [WorkoutGoal]
     @Query(sort: \WeightEntry.loggedAt, order: .reverse)
     var weightEntries: [WeightEntry]
     @Query var activeMemories: [CoachMemory]
@@ -70,7 +72,9 @@ struct ChatView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(HealthKitService.self) var healthKitService: HealthKitService?
-    @State var geminiService = GeminiService()
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @State var aiService = AIService()
     @State var recoveryService = MuscleRecoveryService.shared
     @State var isLoading = false
     @State var currentActivity: String?
@@ -87,6 +91,8 @@ struct ChatView: View {
     @AppStorage("lastChatActivityDate") var lastActivityTimestamp: Double = 0
     @AppStorage("pendingPlanReviewRequest") var pendingPlanReviewRequest: Bool = false
     @AppStorage("pendingWorkoutPlanReviewRequest") var pendingWorkoutPlanReviewRequest: Bool = false
+    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) var pendingChatPrompt: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) var pendingChatLaunchLabel: String = ""
     @AppStorage(TraiCoachTone.storageKey) var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
     @State var isTemporarySession = false
     @State var temporaryMessages: [ChatMessage] = []
@@ -140,7 +146,15 @@ struct ChatView: View {
         let oldestTimestamp: Date?
     }
 
-    init(workoutContext: GeminiService.WorkoutContext? = nil) {
+    private var canAccessTraiChat: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var requiresAuthenticatedAccountForTraiChat: Bool {
+        accountSessionService?.isAuthenticated != true
+    }
+
+    init(workoutContext: AIService.WorkoutContext? = nil) {
         self.workoutContext = workoutContext
 
         let now = Date()
@@ -184,6 +198,13 @@ struct ChatView: View {
         )
         activeMemoriesDescriptor.fetchLimit = Self.activeMemoriesFetchLimit
         _activeMemories = Query(activeMemoriesDescriptor)
+
+        var activeWorkoutGoalsDescriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { $0.statusRaw == "active" },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        activeWorkoutGoalsDescriptor.fetchLimit = Self.activeWorkoutGoalsFetchLimit
+        _activeWorkoutGoals = Query(activeWorkoutGoalsDescriptor)
 
         var activeSignalsDescriptor = FetchDescriptor<CoachSignal>(
             predicate: #Predicate<CoachSignal> {
@@ -266,14 +287,25 @@ struct ChatView: View {
     }
 
     var todaysFoodEntries: [FoodEntry] {
-        let startOfDay = Calendar.current.startOfDay(for: Date())
-        return allFoodEntries.filter { $0.loggedAt >= startOfDay }
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? .distantFuture
+        return allFoodEntries.filter { $0.loggedAt >= startOfDay && $0.loggedAt < endOfDay }
     }
 
     var pendingMealSuggestion: (message: ChatMessage, meal: SuggestedFoodEntry)? {
         for message in currentSessionMessages.reversed() {
             if let meal = message.pendingMealSuggestions.first?.meal {
                 return (message, meal)
+            }
+        }
+        return nil
+    }
+
+    var pendingWorkoutPlanSuggestion: (message: ChatMessage, suggestion: WorkoutPlanSuggestionEntry)? {
+        for message in currentSessionMessages.reversed() {
+            if message.hasPendingWorkoutPlanSuggestion, let suggestion = message.suggestedWorkoutPlan {
+                return (message, suggestion)
             }
         }
         return nil
@@ -305,6 +337,7 @@ struct ChatView: View {
     private var hasPendingStartupActions: Bool {
         pendingPlanReviewRequest
             || pendingWorkoutPlanReviewRequest
+            || !pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var isChatTabActive: Bool {
@@ -379,6 +412,8 @@ struct ChatView: View {
             onDismissPlan: dismissPlanSuggestion,
             onAcceptFoodEdit: acceptFoodEditSuggestion,
             onDismissFoodEdit: dismissFoodEditSuggestion,
+            onAcceptWorkoutPlan: acceptWorkoutPlanSuggestion,
+            onDismissWorkoutPlan: dismissWorkoutPlanSuggestion,
             onAcceptWorkout: acceptWorkoutSuggestion,
             onDismissWorkout: dismissWorkoutSuggestion,
             onAcceptWorkoutLog: acceptWorkoutLogSuggestion,
@@ -407,67 +442,77 @@ struct ChatView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ChatRootView(
-                content: chatContentAnyView,
-                inputBar: chatInputBarAnyView,
-                isInputFocused: isInputFocusedBinding,
-                messageCount: currentSessionMessages.count,
-                lastMessageId: currentSessionMessages.last?.id,
-                selectedPhotoItem: selectedPhotoItem,
-                onPhotoSelected: handleSelectedPhotoItem,
-                onAppear: {
-                    handleChatTabAppear()
-                },
-                onSessionIdChange: {
-                    rebuildSessionMessages()
-                },
-                onTemporaryChange: {
-                    rebuildSessionMessages()
-                },
-                onTemporaryMessagesChange: {
-                    rebuildSessionMessages()
-                },
-                onAllMessagesChange: {
-                    if suppressAutomaticMessageCacheRebuild {
-                        rebuildSessionMessages(preferLiveQueryData: true)
-                        return
-                    }
-                    scheduleMessageCacheRebuild()
-                },
-                currentSessionIdString: currentSessionIdString,
-                isTemporarySession: isTemporarySession,
-                temporaryMessagesCount: temporaryMessages.count,
-                allMessagesFingerprint: allMessagesWindowFingerprint,
-                chatSessions: chatSessions,
-                onToggleTemporaryMode: {
-                    toggleTemporaryMode()
-                    HapticManager.lightTap()
-                },
-                onSelectSession: switchToSession,
-                onClearHistory: clearAllChats,
-                onNewChat: { startNewSession() },
-                showingCamera: $showingCamera,
-                onCameraImage: { image in selectedImage = image },
-                enlargedImage: $enlargedImage,
-                editingMealSuggestion: $editingMealSuggestion,
-                enabledMacrosValue: enabledMacrosValue,
-                onAcceptMeal: { meal, message in acceptMealSuggestion(meal, for: message) },
-                editingPlanSuggestion: $editingPlanSuggestion,
-                currentCalories: profile?.dailyCalorieGoal ?? 2000,
-                currentProtein: profile?.dailyProteinGoal ?? 150,
-                currentCarbs: profile?.dailyCarbsGoal ?? 200,
-                currentFat: profile?.dailyFatGoal ?? 65,
-                onAcceptPlan: { plan, message in acceptPlanSuggestion(plan, for: message) },
-                viewingFoodEntry: viewingFoodEntry,
-                viewingLoggedMealId: $viewingLoggedMealId,
-                viewingAppliedPlan: $viewingAppliedPlan
-            )
+        Group {
+            if requiresAuthenticatedAccountForTraiChat {
+                AccountSetupView(context: .aiFeatures, showsDismissButton: false)
+            } else if canAccessTraiChat {
+                NavigationStack {
+                    ChatRootView(
+                        content: chatContentAnyView,
+                        inputBar: chatInputBarAnyView,
+                        isInputFocused: isInputFocusedBinding,
+                        messageCount: currentSessionMessages.count,
+                        lastMessageId: currentSessionMessages.last?.id,
+                        selectedPhotoItem: selectedPhotoItem,
+                        onPhotoSelected: handleSelectedPhotoItem,
+                        onAppear: {
+                            handleChatTabAppear()
+                        },
+                        onSessionIdChange: {
+                            rebuildSessionMessages()
+                        },
+                        onTemporaryChange: {
+                            rebuildSessionMessages()
+                        },
+                        onTemporaryMessagesChange: {
+                            rebuildSessionMessages()
+                        },
+                        onAllMessagesChange: {
+                            if suppressAutomaticMessageCacheRebuild {
+                                rebuildSessionMessages(preferLiveQueryData: true)
+                                return
+                            }
+                            scheduleMessageCacheRebuild()
+                        },
+                        currentSessionIdString: currentSessionIdString,
+                        isTemporarySession: isTemporarySession,
+                        temporaryMessagesCount: temporaryMessages.count,
+                        allMessagesFingerprint: allMessagesWindowFingerprint,
+                        chatSessions: chatSessions,
+                        onToggleTemporaryMode: {
+                            toggleTemporaryMode()
+                            HapticManager.lightTap()
+                        },
+                        onSelectSession: switchToSession,
+                        onClearHistory: clearAllChats,
+                        onNewChat: { startNewSession() },
+                        showingCamera: $showingCamera,
+                        onCameraImage: { image in selectedImage = image },
+                        enlargedImage: $enlargedImage,
+                        editingMealSuggestion: $editingMealSuggestion,
+                        enabledMacrosValue: enabledMacrosValue,
+                        onAcceptMeal: { meal, message in acceptMealSuggestion(meal, for: message) },
+                        editingPlanSuggestion: $editingPlanSuggestion,
+                        currentCalories: profile?.dailyCalorieGoal ?? 2000,
+                        currentProtein: profile?.dailyProteinGoal ?? 150,
+                        currentCarbs: profile?.dailyCarbsGoal ?? 200,
+                        currentFat: profile?.dailyFatGoal ?? 65,
+                        onAcceptPlan: { plan, message in acceptPlanSuggestion(plan, for: message) },
+                        viewingFoodEntry: viewingFoodEntry,
+                        viewingLoggedMealId: $viewingLoggedMealId,
+                        viewingAppliedPlan: $viewingAppliedPlan
+                    )
+                }
+            } else {
+                ProUpsellView(source: .chat, showsDismissButton: false)
+            }
         }
         .onDisappear {
+            guard canAccessTraiChat else { return }
             handleChatTabDeactivation()
         }
         .onChange(of: scenePhase) { _, newPhase in
+            guard canAccessTraiChat else { return }
             if newPhase == .active {
                 guard isTraiTabSelected else { return }
                 handleChatTabAppear()
@@ -476,6 +521,7 @@ struct ChatView: View {
             }
         }
         .onChange(of: appTabSelection.wrappedValue) { _, selectedTab in
+            guard canAccessTraiChat else { return }
             if selectedTab == .trai {
                 guard scenePhase == .active else { return }
                 handleChatTabAppear()
@@ -484,15 +530,15 @@ struct ChatView: View {
             }
         }
         .onChange(of: smartStarterFoodRefreshFingerprint) { _, _ in
-            guard isChatTabActive else { return }
+            guard isChatTabActive, canAccessTraiChat else { return }
             refreshSmartStarterCache()
         }
         .onChange(of: recentWorkouts.count) {
-            guard isChatTabActive else { return }
+            guard isChatTabActive, canAccessTraiChat else { return }
             refreshSmartStarterCache()
         }
         .onChange(of: liveWorkouts.count) {
-            guard isChatTabActive else { return }
+            guard isChatTabActive, canAccessTraiChat else { return }
             refreshSmartStarterCache()
         }
         .traiBackground()
@@ -876,7 +922,7 @@ struct ChatView: View {
                 let hadPendingStartupActions = hasPendingStartupActions
                 suppressAutomaticMessageCacheRebuild = true
                 checkSessionTimeout()
-                checkForPendingPlanReview()
+                checkForPendingStartupActions()
                 if !hadPendingStartupActions {
                     scheduleDeferredPlanRecommendationIfNeeded()
                 }
@@ -1062,7 +1108,9 @@ private struct ChatRootView: View {
         .chatViewFoodEntrySheet(viewingEntry: viewingFoodEntry, viewingLoggedMealId: $viewingLoggedMealId)
         .sheet(item: $viewingAppliedPlan) { plan in
             PlanUpdateDetailSheet(plan: plan)
+                .traiSheetBranding()
         }
+        .traiSheetBranding()
     }
 }
 
@@ -1090,6 +1138,8 @@ private struct ChatContentSection: View {
     let onDismissPlan: (ChatMessage) -> Void
     let onAcceptFoodEdit: (SuggestedFoodEdit, ChatMessage) -> Void
     let onDismissFoodEdit: (ChatMessage) -> Void
+    let onAcceptWorkoutPlan: (WorkoutPlanSuggestionEntry, ChatMessage) -> Void
+    let onDismissWorkoutPlan: (ChatMessage) -> Void
     let onAcceptWorkout: (SuggestedWorkoutEntry, ChatMessage) -> Void
     let onDismissWorkout: (ChatMessage) -> Void
     let onAcceptWorkoutLog: (SuggestedWorkoutLog, ChatMessage) -> Void
@@ -1148,6 +1198,12 @@ private struct ChatContentSection: View {
             },
             onDismissFoodEdit: {
                 onDismissFoodEdit($0)
+            },
+            onAcceptWorkoutPlan: { suggestion, message in
+                onAcceptWorkoutPlan(suggestion, message)
+            },
+            onDismissWorkoutPlan: {
+                onDismissWorkoutPlan($0)
             },
             onAcceptWorkout: { workout, message in
                 onAcceptWorkout(workout, message)

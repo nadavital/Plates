@@ -13,49 +13,98 @@ import PhotosUI
 final class FoodCameraPresentation: Identifiable {
     let id = UUID()
     let sessionId: UUID?
+    let targetDate: Date?
 
-    init(sessionId: UUID? = nil) {
+    init(sessionId: UUID? = nil, targetDate: Date? = nil) {
         self.sessionId = sessionId
+        self.targetDate = targetDate
     }
 }
 
 struct FoodCameraView: View {
     /// Session ID to add this food entry to (for grouping related entries)
     var sessionId: UUID?
+    var targetDate: Date?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @Query private var profiles: [UserProfile]
 
     @State private var draft: FoodLogDraft?
+    @State private var showingManualEntry = false
+    @State private var pendingManualEntry: FoodEntry?
 
     private var enabledMacros: Set<MacroType> {
         profiles.first?.enabledMacros ?? MacroType.defaultEnabled
     }
 
+    private var canAccessFoodAI: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var requiresAuthenticatedAccountForFoodAI: Bool {
+        accountSessionService?.isAuthenticated != true
+    }
+
     var body: some View {
-        NavigationStack {
-            if draft == nil {
-                FoodLogCaptureStepView(
-                    sessionId: sessionId,
-                    onDraftReady: { draft in
-                        self.draft = draft
-                    },
-                    onManualEntrySaved: saveManualEntry,
-                    onCancel: { dismiss() }
-                )
+        Group {
+            if !canAccessFoodAI {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+            } else if requiresAuthenticatedAccountForFoodAI {
+                AccountSetupView(context: .aiFeatures)
             } else {
-                FoodLogReviewStepView(
-                    draft: draftBinding,
-                    enabledMacros: enabledMacros,
-                    onRetake: { draft = nil },
-                    onFinish: { dismiss() }
-                )
+                NavigationStack {
+                    if draft == nil {
+                        FoodLogCaptureStepView(
+                            sessionId: sessionId,
+                            onDraftReady: { draft in
+                                self.draft = draft
+                            },
+                            onManualEntryRequested: { showingManualEntry = true },
+                            onCancel: { dismiss() }
+                        )
+                    } else {
+                        FoodLogReviewStepView(
+                            draft: draftBinding,
+                            enabledMacros: enabledMacros,
+                            onRetake: { draft = nil },
+                            onFinish: { dismiss() },
+                            targetDate: targetDate
+                        )
+                    }
+                }
             }
         }
-        .tint(Color("AccentColor"))
-        .accentColor(Color("AccentColor"))
+        .sheet(isPresented: $showingManualEntry) {
+            ManualFoodEntrySheet(sessionId: sessionId, targetDate: targetDate) { entry in
+                pendingManualEntry = entry
+                showingManualEntry = false
+            }
+            .traiSheetBranding()
+        }
+        .onChange(of: showingManualEntry) { _, isShowing in
+            guard !isShowing else { return }
+
+            if let pendingManualEntry {
+                self.pendingManualEntry = nil
+                saveManualEntry(pendingManualEntry)
+            } else if !canAccessFoodAI {
+                dismiss()
+            }
+        }
+        .task(id: canAccessFoodAI) {
+            if !canAccessFoodAI && !showingManualEntry {
+                showingManualEntry = true
+            }
+        }
+        .tint(TraiColors.brandAccent)
+        .accentColor(TraiColors.brandAccent)
+        .proUpsellPresenter()
     }
 
     private var draftBinding: Binding<FoodLogDraft> {
@@ -67,6 +116,7 @@ struct FoodCameraView: View {
 
     private func saveManualEntry(_ entry: FoodEntry) {
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         recordFoodLogBehavior(entry: entry, source: "manual_entry", modelContext: modelContext)
         saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
         HapticManager.success()
@@ -77,7 +127,7 @@ struct FoodCameraView: View {
 private struct FoodLogCaptureStepView: View {
     let sessionId: UUID?
     let onDraftReady: (FoodLogDraft) -> Void
-    let onManualEntrySaved: (FoodEntry) -> Void
+    let onManualEntryRequested: () -> Void
     let onCancel: () -> Void
 
     @Environment(\.openURL) private var openURL
@@ -87,8 +137,6 @@ private struct FoodLogCaptureStepView: View {
     @State private var foodDescription = ""
     @State private var isCapturingPhoto = false
     @State private var showingCameraPermissionAlert = false
-    @State private var showingManualEntry = false
-    @State private var pendingManualEntry: FoodEntry?
 
     var body: some View {
         FoodCameraViewfinder(
@@ -96,10 +144,18 @@ private struct FoodLogCaptureStepView: View {
             isCapturingPhoto: isCapturingPhoto,
             description: $foodDescription,
             onCapture: capturePhoto,
-            onManualEntry: { showingManualEntry = true },
+            onManualEntry: onManualEntryRequested,
             onSubmitDescription: submitTextDescription,
             selectedPhotoItem: $selectedPhotoItem
         )
+        .overlay(alignment: .topLeading) {
+            Text("ready")
+                .font(.system(size: 1))
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("foodCameraCaptureReady")
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -144,17 +200,6 @@ private struct FoodLogCaptureStepView: View {
                     showingCameraPermissionAlert = false
                 }
             }
-        }
-        .sheet(isPresented: $showingManualEntry) {
-            ManualFoodEntrySheet(sessionId: sessionId) { entry in
-                pendingManualEntry = entry
-                showingManualEntry = false
-            }
-        }
-        .onChange(of: showingManualEntry) { _, isShowing in
-            guard !isShowing, let pendingManualEntry else { return }
-            self.pendingManualEntry = nil
-            onManualEntrySaved(pendingManualEntry)
         }
         .alert("Camera Access Needed", isPresented: $showingCameraPermissionAlert) {
             Button("Open Settings") {
@@ -214,11 +259,14 @@ private struct FoodLogReviewStepView: View {
     let enabledMacros: Set<MacroType>
     let onRetake: () -> Void
     let onFinish: () -> Void
+    var targetDate: Date?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
-    @State private var geminiService = GeminiService()
+    @State private var aiService = AIService()
     @State private var isAnalyzing = false
     @State private var analysisErrorMessage: String?
     @State private var isLoadingRefinement = false
@@ -297,6 +345,10 @@ private struct FoodLogReviewStepView: View {
     private func analyzeFood() {
         guard !isAnalyzing else { return }
         guard draft.image != nil || !trimmedDescription.isEmpty else { return }
+        guard monetizationService?.canAccessAIFeatures ?? true else {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
+            return
+        }
 
         isAnalyzing = true
         analysisErrorMessage = nil
@@ -307,7 +359,7 @@ private struct FoodLogReviewStepView: View {
             defer { isAnalyzing = false }
 
             do {
-                let result = try await geminiService.analyzeFoodImage(
+                let result = try await aiService.analyzeFoodImage(
                     draft.image?.jpegData(compressionQuality: 0.8),
                     description: trimmedDescription.isEmpty ? nil : trimmedDescription
                 )
@@ -322,6 +374,10 @@ private struct FoodLogReviewStepView: View {
 
     private func refineFood(_ correction: String) {
         guard !isLoadingRefinement, let currentSuggestion else { return }
+        guard monetizationService?.canAccessAIFeatures ?? true else {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
+            return
+        }
 
         isLoadingRefinement = true
         refinementErrorMessage = nil
@@ -330,7 +386,7 @@ private struct FoodLogReviewStepView: View {
             defer { isLoadingRefinement = false }
 
             do {
-                let refinedSuggestion = try await geminiService.refineFoodAnalysis(
+                let refinedSuggestion = try await aiService.refineFoodAnalysis(
                     correction: correction,
                     currentSuggestion: currentSuggestion,
                     imageData: draft.image?.jpegData(compressionQuality: 0.8)
@@ -359,10 +415,12 @@ private struct FoodLogReviewStepView: View {
         entry.userDescription = trimmedDescription.isEmpty ? nil : trimmedDescription
         entry.aiAnalysis = isRefined ? "Refined from initial analysis" : draft.analysisResult?.notes
         entry.input = draft.inputSource.foodEntryInputMethod
+        entry.loggedAt = resolvedFoodLogDate(targetDate: targetDate, sessionId: draft.sessionId, modelContext: modelContext)
         entry.ensureDisplayMetadata()
 
         assignFoodSession(draft.sessionId, to: entry, modelContext: modelContext)
         modelContext.insert(entry)
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
 
         let behaviorSource = isRefined
             ? "refined_\(draft.inputSource.behaviorSource)"
@@ -382,6 +440,32 @@ private func assignFoodSession(_ sessionId: UUID?, to entry: FoodEntry, modelCon
         FetchDescriptor<FoodEntry>(predicate: #Predicate { $0.sessionId == sessionId })
     )
     entry.sessionOrder = existingCount ?? 0
+}
+
+func resolvedFoodLogDate(targetDate: Date?, sessionId: UUID?, modelContext: ModelContext) -> Date {
+    if let sessionId {
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.sessionId == sessionId },
+            sortBy: [SortDescriptor(\FoodEntry.sessionOrder)]
+        )
+
+        if let sessionDate = try? modelContext.fetch(descriptor).first?.loggedAt {
+            return sessionDate
+        }
+    }
+
+    guard let targetDate else { return Date() }
+    return combineDay(targetDate, withTimeFrom: Date())
+}
+
+private func combineDay(_ day: Date, withTimeFrom timeSource: Date) -> Date {
+    let calendar = Calendar.current
+    var dateComponents = calendar.dateComponents([.year, .month, .day], from: day)
+    let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: timeSource)
+    dateComponents.hour = timeComponents.hour
+    dateComponents.minute = timeComponents.minute
+    dateComponents.second = timeComponents.second
+    return calendar.date(from: dateComponents) ?? day
 }
 
 private func saveFoodMacrosToHealthKit(_ entry: FoodEntry, healthKitService: HealthKitService?) {

@@ -184,16 +184,25 @@ struct MacroBreakdownCard: View {
                 if orderedEnabledMacros.isEmpty {
                     emptyStateView
                 } else {
-                    HStack(spacing: TraiSpacing.md) {
-                        ForEach(orderedEnabledMacros) { macro in
-                            MacroRingItem(
-                                name: macro.displayName,
-                                current: macroValues[macro] ?? 0,
-                                goal: Double(macroGoals[macro] ?? 100),
-                                color: macro.color
-                            )
+                    GeometryReader { geometry in
+                        let layout = macroLayout(in: geometry.size.width)
+
+                        HStack(spacing: layout.spacing) {
+                            ForEach(orderedEnabledMacros) { macro in
+                                MacroRingItem(
+                                    name: macro.displayName,
+                                    compactLabel: macro.shortName,
+                                    current: macroValues[macro] ?? 0,
+                                    goal: Double(macroGoals[macro] ?? 100),
+                                    color: macro.color,
+                                    diameter: layout.diameter,
+                                    prefersCompactLabel: layout.useCompactLabels
+                                )
+                                .frame(width: layout.itemWidth)
+                            }
                         }
                     }
+                    .frame(height: macroLayoutHeight)
                 }
             }
             .traiCard()
@@ -214,22 +223,47 @@ struct MacroBreakdownCard: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
     }
+
+    private var macroLayoutHeight: CGFloat {
+        let count = orderedEnabledMacros.count
+        if count >= 5 {
+            return 90
+        }
+        if count == 4 {
+            return 94
+        }
+        return 100
+    }
+
+    private func macroLayout(in availableWidth: CGFloat) -> (itemWidth: CGFloat, diameter: CGFloat, spacing: CGFloat, useCompactLabels: Bool) {
+        let count = max(CGFloat(orderedEnabledMacros.count), 1)
+        let spacing: CGFloat = count >= 5 ? 8 : 12
+        let totalSpacing = spacing * max(count - 1, 0)
+        let itemWidth = max((availableWidth - totalSpacing) / count, 44)
+        let diameter = min(60, max(44, itemWidth - 8))
+        let useCompactLabels = itemWidth < 62
+        return (itemWidth, diameter, spacing, useCompactLabels)
+    }
 }
 
 // MARK: - Today's Activity Card
 
 struct TodaysActivityCard: View {
-    let steps: Int
-    let activeCalories: Int
-    let exerciseMinutes: Int
-    let workoutCount: Int
+    let title: String
+    let steps: Int?
+    let activeCalories: Int?
+    let activeCaloriesLabel: String
+    let exerciseMinutes: Int?
+    let exerciseMinutesLabel: String
+    let workoutCount: Int?
     var isLoading: Bool = false
 
     var body: some View {
         VStack(spacing: TraiSpacing.md) {
             HStack {
-                Text("Today's Activity")
+                Text(title)
                     .font(.traiHeadline())
+                    .accessibilityIdentifier("dashboardActivityTitle")
                 Spacer()
                 if isLoading {
                     ProgressView()
@@ -237,7 +271,7 @@ struct TodaysActivityCard: View {
                 }
             }
 
-            if isLoading && steps == 0 && activeCalories == 0 {
+            if isLoading && activityMetrics.isEmpty {
                 HStack(spacing: TraiSpacing.md) {
                     ForEach(0..<4, id: \.self) { _ in
                         ActivityMetricPlaceholder()
@@ -245,46 +279,84 @@ struct TodaysActivityCard: View {
                 }
             } else {
                 HStack(spacing: 0) {
-                    ActivityMetricItem(
-                        icon: "figure.walk",
-                        value: formatSteps(steps),
-                        label: "Steps",
-                        color: .green
-                    )
+                    ForEach(Array(activityMetrics.enumerated()), id: \.element.valueAccessibilityIdentifier) { index, metric in
+                        ActivityMetricItem(
+                            icon: metric.icon,
+                            value: metric.value,
+                            label: metric.label,
+                            color: metric.color,
+                            valueAccessibilityIdentifier: metric.valueAccessibilityIdentifier,
+                            labelAccessibilityIdentifier: metric.labelAccessibilityIdentifier
+                        )
 
-                    Divider()
-                        .frame(height: 40)
-
-                    ActivityMetricItem(
-                        icon: "flame.fill",
-                        value: "\(activeCalories)",
-                        label: "Active Cal",
-                        color: .orange
-                    )
-
-                    Divider()
-                        .frame(height: 40)
-
-                    ActivityMetricItem(
-                        icon: "figure.run",
-                        value: "\(exerciseMinutes)",
-                        label: "Exercise",
-                        color: .cyan
-                    )
-
-                    Divider()
-                        .frame(height: 40)
-
-                    ActivityMetricItem(
-                        icon: "dumbbell.fill",
-                        value: "\(workoutCount)",
-                        label: "Workouts",
-                        color: .purple
-                    )
+                        if index < activityMetrics.count - 1 {
+                            Divider()
+                                .frame(height: 40)
+                        }
+                    }
                 }
             }
         }
         .traiCard()
+        .accessibilityIdentifier("dashboardActivityCard")
+    }
+
+    private var activityMetrics: [ActivityMetric] {
+        var metrics: [ActivityMetric] = []
+
+        if let steps {
+            metrics.append(
+                ActivityMetric(
+                    icon: "figure.walk",
+                    value: formatSteps(steps),
+                    label: "Steps",
+                    color: .green,
+                    valueAccessibilityIdentifier: "dashboardActivityStepsValue",
+                    labelAccessibilityIdentifier: "dashboardActivityStepsLabel"
+                )
+            )
+        }
+
+        if let activeCalories {
+            metrics.append(
+                ActivityMetric(
+                    icon: "flame.fill",
+                    value: "\(activeCalories)",
+                    label: activeCaloriesLabel,
+                    color: .orange,
+                    valueAccessibilityIdentifier: "dashboardActivityCaloriesValue",
+                    labelAccessibilityIdentifier: "dashboardActivityCaloriesLabel"
+                )
+            )
+        }
+
+        if let exerciseMinutes {
+            metrics.append(
+                ActivityMetric(
+                    icon: "figure.run",
+                    value: "\(exerciseMinutes)",
+                    label: exerciseMinutesLabel,
+                    color: .cyan,
+                    valueAccessibilityIdentifier: "dashboardActivityExerciseValue",
+                    labelAccessibilityIdentifier: "dashboardActivityExerciseLabel"
+                )
+            )
+        }
+
+        if let workoutCount {
+            metrics.append(
+                ActivityMetric(
+                    icon: "dumbbell.fill",
+                    value: "\(workoutCount)",
+                    label: "Workouts",
+                    color: .purple,
+                    valueAccessibilityIdentifier: "dashboardActivityWorkoutsValue",
+                    labelAccessibilityIdentifier: "dashboardActivityWorkoutsLabel"
+                )
+            )
+        }
+
+        return metrics
     }
 
     private func formatSteps(_ steps: Int) -> String {
@@ -296,6 +368,15 @@ struct TodaysActivityCard: View {
     }
 }
 
+private struct ActivityMetric {
+    let icon: String
+    let value: String
+    let label: String
+    let color: Color
+    let valueAccessibilityIdentifier: String
+    let labelAccessibilityIdentifier: String
+}
+
 // MARK: - Activity Metric Item
 
 private struct ActivityMetricItem: View {
@@ -303,22 +384,25 @@ private struct ActivityMetricItem: View {
     let value: String
     let label: String
     let color: Color
+    let valueAccessibilityIdentifier: String
+    let labelAccessibilityIdentifier: String
 
     var body: some View {
         VStack(spacing: TraiSpacing.sm) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
-                .shadow(color: color.opacity(0.3), radius: 3, y: 1)
 
             Text(value)
                 .font(.traiBold(17))
                 .monospacedDigit()
                 .contentTransition(.numericText())
+                .accessibilityIdentifier(valueAccessibilityIdentifier)
 
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier(labelAccessibilityIdentifier)
         }
         .frame(maxWidth: .infinity)
     }

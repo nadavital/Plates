@@ -66,6 +66,24 @@ final class LiveWorkoutEntry {
         exerciseType == "strength"
     }
 
+    /// Whether this is a non-strength, non-cardio activity item.
+    var isGeneralActivity: Bool {
+        !isStrength && !isCardio
+    }
+
+    var activityIconName: String {
+        switch exerciseType {
+        case "strength":
+            return "dumbbell.fill"
+        case "cardio":
+            return "figure.run"
+        case "flexibility":
+            return "figure.cooldown"
+        default:
+            return "list.bullet.rectangle"
+        }
+    }
+
     init(exercise: Exercise, orderIndex: Int) {
         self.exerciseId = exercise.id
         self.exerciseName = exercise.name

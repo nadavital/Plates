@@ -66,6 +66,7 @@ struct FoodCameraViewfinder: View {
                         .background(.ultraThinMaterial)
                         .clipShape(.capsule)
                         .focused($isDescriptionFocused)
+                        .accessibilityIdentifier("foodCameraDescriptionField")
                         .onSubmit {
                             if canSubmitDescription {
                                 onSubmitDescription()
@@ -82,6 +83,7 @@ struct FoodCameraViewfinder: View {
                                     .font(.title)
                                     .foregroundStyle(.red)
                             }
+                            .accessibilityIdentifier("foodCameraDescriptionSubmitButton")
                         } else {
                             Button("Done") {
                                 isDescriptionFocused = false
@@ -137,6 +139,7 @@ struct FoodCameraViewfinder: View {
                         .foregroundStyle(.white)
                         .frame(width: 60, height: 60)
                     }
+                    .accessibilityIdentifier("foodCameraManualButton")
                 }
                 .padding(.top, 20)
                 .padding(.bottom, 40)

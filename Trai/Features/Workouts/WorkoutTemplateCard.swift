@@ -9,12 +9,12 @@ import SwiftUI
 
 struct WorkoutTemplateCard: View {
     let template: WorkoutPlan.WorkoutTemplate
-    let recoveryScore: Double
-    let recoveryReason: String
+    let recoveryInsight: (score: Double, reason: String)?
     let isRecommended: Bool
     let onStart: () -> Void
 
-    private var recoveryStatus: RecoveryDisplayStatus {
+    private var recoveryStatus: RecoveryDisplayStatus? {
+        guard let recoveryScore = recoveryInsight?.score else { return nil }
         if recoveryScore >= 0.9 {
             return .ready
         } else if recoveryScore >= 0.5 {
@@ -74,13 +74,15 @@ struct WorkoutTemplateCard: View {
                 Spacer()
 
                 // Recovery status badge
-                HStack(spacing: 4) {
-                    Image(systemName: recoveryStatus.icon)
-                        .font(.caption2)
-                    Text(recoveryStatus.label)
-                        .font(.caption)
+                if let recoveryStatus {
+                    HStack(spacing: 4) {
+                        Image(systemName: recoveryStatus.icon)
+                            .font(.caption2)
+                        Text(recoveryStatus.label)
+                            .font(.caption)
+                    }
+                    .foregroundStyle(recoveryStatus.color)
                 }
-                .foregroundStyle(recoveryStatus.color)
             }
 
             // Template name
@@ -88,22 +90,32 @@ struct WorkoutTemplateCard: View {
                 .font(.title3)
                 .bold()
 
-            // Target muscles
-            Text(template.muscleGroupsDisplay)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Label(template.sessionType.displayName, systemImage: template.sessionType.iconName)
+                    .font(.caption)
+                    .foregroundStyle(template.displayAccentColor)
+
+                Text(template.displaySubtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
 
             // Stats row
             HStack(spacing: 16) {
-                Label("\(template.exerciseCount) exercises", systemImage: "dumbbell")
+                if template.sessionType.prefersStructuredEntries {
+                    Label("\(template.exerciseCount) exercises", systemImage: "dumbbell")
+                } else {
+                    Label("Flexible session", systemImage: "list.bullet.rectangle")
+                }
                 Label("~\(template.estimatedDurationMinutes) min", systemImage: "clock")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
 
             // Recovery reason (if not fully ready)
-            if recoveryScore < 0.9 {
-                Text(recoveryReason)
+            if let recoveryInsight, let recoveryStatus, recoveryInsight.score < 0.9 {
+                Text(recoveryInsight.reason)
                     .font(.caption)
                     .foregroundStyle(recoveryStatus.color)
                     .padding(.horizontal, 8)
@@ -119,7 +131,7 @@ struct WorkoutTemplateCard: View {
             }) {
                 HStack {
                     Image(systemName: "play.fill")
-                    Text("Start Workout")
+                    Text(template.sessionType.prefersStructuredEntries ? "Start Workout" : "Start Session")
                 }
                 .font(.subheadline)
                 .bold()
@@ -136,11 +148,12 @@ struct WorkoutTemplateCard: View {
 
 struct CompactTemplateCard: View {
     let template: WorkoutPlan.WorkoutTemplate
-    let recoveryScore: Double
+    let recoveryScore: Double?
     let isRecommended: Bool
     let onTap: () -> Void
 
-    private var statusColor: Color {
+    private var statusColor: Color? {
+        guard let recoveryScore else { return nil }
         if recoveryScore >= 0.9 { return .green }
         else if recoveryScore >= 0.5 { return .orange }
         else { return .red }
@@ -151,9 +164,11 @@ struct CompactTemplateCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 // Status indicator
                 HStack {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
+                    if let statusColor {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+                    }
 
                     if isRecommended {
                         Image(systemName: "star.fill")
@@ -170,10 +185,9 @@ struct CompactTemplateCard: View {
                     .bold()
                     .lineLimit(1)
 
-                // Muscles
-                Text(template.targetMuscleGroups.prefix(2).joined(separator: ", ").capitalized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Label(template.sessionType.displayName, systemImage: template.sessionType.iconName)
+                    .font(.caption2)
+                    .foregroundStyle(template.displayAccentColor)
                     .lineLimit(1)
 
                 // Duration
@@ -185,11 +199,9 @@ struct CompactTemplateCard: View {
                 .foregroundStyle(.tertiary)
             }
             .frame(width: 120)
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 12))
+            .traiCard(cornerRadius: 14)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TraiPressStyle())
     }
 }
 
@@ -201,6 +213,10 @@ struct WorkoutTemplatesSection: View {
     let recommendedTemplateId: UUID?
     let onStartTemplate: (WorkoutPlan.WorkoutTemplate) -> Void
     var onCreatePlan: (() -> Void)?
+
+    private var featuredTemplateId: UUID? {
+        recommendedTemplateId ?? templates.first?.id
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -216,22 +232,20 @@ struct WorkoutTemplatesSection: View {
                 }
             } else {
                 // Show recommended template first (full card)
-                if let recommendedId = recommendedTemplateId,
-                   let recommended = templates.first(where: { $0.id == recommendedId }) {
-                    let recovery = recoveryScores[recommended.id] ?? (1.0, "Ready to train")
+                if let featuredTemplateId,
+                   let recommended = templates.first(where: { $0.id == featuredTemplateId }) {
                     WorkoutTemplateCard(
                         template: recommended,
-                        recoveryScore: recovery.score,
-                        recoveryReason: recovery.reason,
-                        isRecommended: true,
+                        recoveryInsight: recoveryScores[recommended.id],
+                        isRecommended: recommendedTemplateId == recommended.id,
                         onStart: { onStartTemplate(recommended) }
                     )
                 }
 
                 // Other templates in horizontal scroll
-                let otherTemplates = templates.filter { $0.id != recommendedTemplateId }
+                let otherTemplates = templates.filter { $0.id != featuredTemplateId }
                 if !otherTemplates.isEmpty {
-                    Text("Other options")
+                    Text("More sessions")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .padding(.top, 8)
@@ -239,11 +253,10 @@ struct WorkoutTemplatesSection: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(otherTemplates) { template in
-                                let recovery = recoveryScores[template.id] ?? (1.0, "Ready")
                                 CompactTemplateCard(
                                     template: template,
-                                    recoveryScore: recovery.score,
-                                    isRecommended: false,
+                                    recoveryScore: recoveryScores[template.id]?.score,
+                                    isRecommended: recommendedTemplateId == template.id,
                                     onTap: { onStartTemplate(template) }
                                 )
                             }
@@ -256,9 +269,9 @@ struct WorkoutTemplatesSection: View {
 
     private var emptyState: some View {
         HStack {
-            Image(systemName: "dumbbell")
+            Image(systemName: "list.bullet.rectangle")
                 .foregroundStyle(.secondary)
-            Text("Create a workout plan to see suggestions")
+            Text("Create a workout plan to see session suggestions")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -281,7 +294,7 @@ struct WorkoutTemplatesSection: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
 
-                    Text("Let Trai create a plan based on your goals")
+                    Text("Let Trai create a weekly plan around your goals and preferred workout styles")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -319,8 +332,7 @@ struct WorkoutTemplatesSection: View {
                     estimatedDurationMinutes: 45,
                     order: 0
                 ),
-                recoveryScore: 1.0,
-                recoveryReason: "All muscles recovered",
+                recoveryInsight: (1.0, "All muscles recovered"),
                 isRecommended: true,
                 onStart: {}
             )
@@ -333,8 +345,7 @@ struct WorkoutTemplatesSection: View {
                     estimatedDurationMinutes: 45,
                     order: 1
                 ),
-                recoveryScore: 0.6,
-                recoveryReason: "Back needs 8 more hours",
+                recoveryInsight: (0.6, "Back needs 8 more hours"),
                 isRecommended: false,
                 onStart: {}
             )

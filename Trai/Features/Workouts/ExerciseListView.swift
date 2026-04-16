@@ -15,6 +15,9 @@ private enum ExerciseSelectionPerformanceConfig {
 struct ExerciseListView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
 
     // Selection callback
@@ -43,6 +46,7 @@ struct ExerciseListView: View {
     @State private var usageSummaryCache: UsageSummary = .empty
     @State private var usageSummaryFingerprint: UsageSummaryFingerprint?
     @State private var pendingCustomExerciseCreation: PendingCustomExerciseCreation?
+    @State private var presentedAccountSetupContext: AccountSetupContext?
 
     // MARK: - Initializers
 
@@ -274,6 +278,14 @@ struct ExerciseListView: View {
         return selectedMuscleGroup ?? targetMuscleGroups.first
     }
 
+    private var canAccessExerciseAI: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var requiresAuthenticatedAccountForExerciseAI: Bool {
+        accountSessionService?.isAuthenticated != true
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -311,7 +323,13 @@ struct ExerciseListView: View {
                             .foregroundStyle(.primary)
 
                             Button {
-                                showingCamera = true
+                                if requiresAuthenticatedAccountForExerciseAI {
+                                    presentedAccountSetupContext = .aiFeatures
+                                } else if canAccessExerciseAI {
+                                    showingCamera = true
+                                } else {
+                                    proUpsellCoordinator?.present(source: .exerciseAnalysis)
+                                }
                             } label: {
                                 HStack {
                                     Image(systemName: "camera.fill")
@@ -409,6 +427,7 @@ struct ExerciseListView: View {
                         )
                     }
                 )
+                .traiSheetBranding()
             }
             .fullScreenCover(isPresented: $showingCamera) {
                 EquipmentCameraView { imageData in
@@ -419,6 +438,7 @@ struct ExerciseListView: View {
                     lastCapturedImageData = imageData
                     Task { await analyzeEquipmentPhoto(imageData) }
                 }
+                .traiSheetBranding()
             }
             .alert("Equipment Analysis Failed", isPresented: .init(
                 get: { photoAnalysisError != nil },
@@ -458,7 +478,12 @@ struct ExerciseListView: View {
                             )
                         }
                     )
+                    .traiSheetBranding()
                 }
+            }
+            .sheet(item: $presentedAccountSetupContext) { context in
+                AccountSetupView(context: context)
+                    .traiSheetBranding()
             }
             .overlay {
                 // Photo analysis loading overlay
@@ -504,21 +529,31 @@ struct ExerciseListView: View {
             }
             .accessibilityIdentifier("exerciseListView")
         }
+        .traiSheetBranding()
     }
 
     // MARK: - Photo Analysis
 
     private func analyzeEquipmentPhoto(_ imageData: Data) async {
+        guard !requiresAuthenticatedAccountForExerciseAI else {
+            presentedAccountSetupContext = .aiFeatures
+            return
+        }
+        guard canAccessExerciseAI else {
+            proUpsellCoordinator?.present(source: .exerciseAnalysis)
+            return
+        }
+
         isAnalyzingPhoto = true
         defer { isAnalyzingPhoto = false }
 
-        let geminiService = GeminiService()
+        let aiService = AIService()
 
-        // Pass existing exercise names so Gemini can match to them
+        // Pass existing exercise names so the AI service can match to them
         let existingNames = exercises.map(\.name)
 
         do {
-            let analysis = try await geminiService.analyzeExercisePhoto(
+            let analysis = try await aiService.analyzeExercisePhoto(
                 imageData: imageData,
                 existingExerciseNames: existingNames
             )

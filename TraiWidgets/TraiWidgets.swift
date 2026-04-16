@@ -684,10 +684,9 @@ struct TraiWidgets: Widget {
 
 // MARK: - Previews
 
-#Preview("Small", as: .systemSmall) {
-    TraiWidgets()
-} timeline: {
-    TraiWidgetEntry(date: .now, data: WidgetData(
+#if DEBUG
+private enum TraiWidgetsPreviewData {
+    static let smallEntry = TraiWidgetEntry(date: .now, data: WidgetData(
         caloriesConsumed: 1450,
         calorieGoal: 2000,
         proteinConsumed: 95,
@@ -702,12 +701,8 @@ struct TraiWidgets: Widget {
         todayWorkoutCompleted: false,
         lastUpdated: Date()
     ))
-}
 
-#Preview("Medium", as: .systemMedium) {
-    TraiWidgets()
-} timeline: {
-    TraiWidgetEntry(date: .now, data: WidgetData(
+    static let mediumEntry = TraiWidgetEntry(date: .now, data: WidgetData(
         caloriesConsumed: 1450,
         calorieGoal: 2000,
         proteinConsumed: 120,
@@ -722,12 +717,8 @@ struct TraiWidgets: Widget {
         todayWorkoutCompleted: false,
         lastUpdated: Date()
     ))
-}
 
-#Preview("Large", as: .systemLarge) {
-    TraiWidgets()
-} timeline: {
-    TraiWidgetEntry(date: .now, data: WidgetData(
+    static let largeEntry = TraiWidgetEntry(date: .now, data: WidgetData(
         caloriesConsumed: 1650,
         calorieGoal: 2000,
         proteinConsumed: 130,
@@ -743,3 +734,22 @@ struct TraiWidgets: Widget {
         lastUpdated: Date()
     ))
 }
+
+struct TraiWidgets_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            SmallWidgetView(entry: TraiWidgetsPreviewData.smallEntry)
+                .previewContext(WidgetPreviewContext(family: .systemSmall))
+                .previewDisplayName("Small")
+
+            MediumWidgetView(entry: TraiWidgetsPreviewData.mediumEntry)
+                .previewContext(WidgetPreviewContext(family: .systemMedium))
+                .previewDisplayName("Medium")
+
+            LargeWidgetView(entry: TraiWidgetsPreviewData.largeEntry)
+                .previewContext(WidgetPreviewContext(family: .systemLarge))
+                .previewDisplayName("Large")
+        }
+    }
+}
+#endif

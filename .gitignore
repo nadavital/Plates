@@ -5,9 +5,22 @@ Trai/Core/Services/Secrets.swift
 # Xcode user data
 *.xcuserstate
 xcuserdata/
+DerivedData/
+.derived-data/
+.derived-data-*/
+.deriveddata/
+.deriveddata-*/
+*.xcresult
+/build/
 
 CONTINUITY.md
 
 # Python generated artifacts
 __pycache__/
 *.pyc
+
+# Backend local artifacts
+Backend/node_modules/
+Backend/data/*.sqlite
+Backend/.env
+Backend/.env.local

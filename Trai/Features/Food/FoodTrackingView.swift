@@ -86,6 +86,7 @@ struct FoodTrackingView: View {
             }
             .sheet(isPresented: $showingAddFood) {
                 AddFoodView()
+                    .traiSheetBranding()
             }
         }
     }

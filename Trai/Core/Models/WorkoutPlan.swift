@@ -35,7 +35,7 @@ struct WorkoutPlan: Codable, Equatable {
             case .upperLower: "Upper/Lower"
             case .fullBody: "Full Body"
             case .bodyPartSplit: "Body Part Split"
-            case .custom: "Custom Split"
+            case .custom: "Custom Plan"
             }
         }
 
@@ -45,7 +45,7 @@ struct WorkoutPlan: Codable, Equatable {
             case .upperLower: "Alternate between upper and lower body workouts"
             case .fullBody: "Train your entire body each session"
             case .bodyPartSplit: "Dedicate each day to specific muscle groups"
-            case .custom: "A personalized split based on your preferences"
+            case .custom: "A personalized training plan based on your preferences"
             }
         }
 
@@ -75,15 +75,31 @@ struct WorkoutPlan: Codable, Equatable {
     struct WorkoutTemplate: Codable, Equatable, Identifiable {
         let id: UUID
         let name: String
+        let sessionType: WorkoutMode
+        let focusAreas: [String]
         let targetMuscleGroups: [String]
         let exercises: [ExerciseTemplate]
         let estimatedDurationMinutes: Int
         let order: Int
         let notes: String?
 
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case sessionType
+            case focusAreas
+            case targetMuscleGroups
+            case exercises
+            case estimatedDurationMinutes
+            case order
+            case notes
+        }
+
         init(
             id: UUID = UUID(),
             name: String,
+            sessionType: WorkoutMode = .strength,
+            focusAreas: [String]? = nil,
             targetMuscleGroups: [String],
             exercises: [ExerciseTemplate],
             estimatedDurationMinutes: Int,
@@ -92,6 +108,10 @@ struct WorkoutPlan: Codable, Equatable {
         ) {
             self.id = id
             self.name = name
+            self.sessionType = sessionType
+            self.focusAreas = (focusAreas ?? targetMuscleGroups)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
             self.targetMuscleGroups = targetMuscleGroups
             self.exercises = exercises
             self.estimatedDurationMinutes = estimatedDurationMinutes
@@ -99,12 +119,56 @@ struct WorkoutPlan: Codable, Equatable {
             self.notes = notes
         }
 
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+            name = try container.decode(String.self, forKey: .name)
+            targetMuscleGroups = try container.decodeIfPresent([String].self, forKey: .targetMuscleGroups) ?? []
+            exercises = try container.decodeIfPresent([ExerciseTemplate].self, forKey: .exercises) ?? []
+            estimatedDurationMinutes = try container.decode(Int.self, forKey: .estimatedDurationMinutes)
+            order = try container.decode(Int.self, forKey: .order)
+            notes = try container.decodeIfPresent(String.self, forKey: .notes)
+
+            let decodedFocusAreas = try container.decodeIfPresent([String].self, forKey: .focusAreas) ?? targetMuscleGroups
+            focusAreas = decodedFocusAreas
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            sessionType = try container.decodeIfPresent(WorkoutMode.self, forKey: .sessionType)
+                ?? WorkoutMode.infer(from: name, focusAreas: focusAreas, targetMuscleGroups: targetMuscleGroups)
+        }
+
         var exerciseCount: Int { exercises.count }
 
         var muscleGroupsDisplay: String {
-            targetMuscleGroups
-                .map { $0.capitalized }
+            (focusAreas.isEmpty ? targetMuscleGroups : focusAreas)
+                .map(Self.formatTargetGroupName)
                 .joined(separator: " • ")
+        }
+
+        var focusAreasDisplay: String {
+            muscleGroupsDisplay
+        }
+
+        private nonisolated static func formatTargetGroupName(_ raw: String) -> String {
+            let normalized = raw
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(
+                    of: #"(?<=[a-z])(?=[A-Z])"#,
+                    with: " ",
+                    options: .regularExpression
+                )
+
+            switch normalized.lowercased() {
+            case "hiit":
+                return "HIIT"
+            case "push pull legs":
+                return "Push/Pull/Legs"
+            default:
+                return normalized.localizedCapitalized
+            }
         }
     }
 

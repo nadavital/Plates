@@ -11,9 +11,12 @@ import SwiftData
 struct ManualFoodEntrySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @Query private var profiles: [UserProfile]
 
     let sessionId: UUID?
+    let targetDate: Date?
     let onSave: (FoodEntry) -> Void
 
     @State private var name = ""
@@ -39,10 +42,19 @@ struct ManualFoodEntrySheet: View {
         !name.isEmpty && Int(caloriesText) != nil
     }
 
+    private var shouldShowUpgradeRow: Bool {
+        !(monetizationService?.canAccessAIFeatures ?? true)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    if shouldShowUpgradeRow {
+                        upgradeRow
+                            .traiCard(cornerRadius: 16)
+                    }
+
                     VStack(alignment: .leading, spacing: 10) {
                         sectionTitle("Name", icon: "fork.knife")
                         TextField("Food name", text: $name)
@@ -102,6 +114,14 @@ struct ManualFoodEntrySheet: View {
                 }
             }
         }
+        .proUpsellPresenter()
+        .traiSheetBranding()
+    }
+
+    private var upgradeRow: some View {
+        ProUpsellInlineCard(source: .foodAnalysis) {
+            proUpsellCoordinator?.present(source: .foodAnalysis)
+        }
     }
 
     private func sectionTitle(_ title: String, icon: String) -> some View {
@@ -132,6 +152,7 @@ struct ManualFoodEntrySheet: View {
         entry.servingSize = servingSize.isEmpty ? nil : servingSize
         entry.inputMethod = "manual"
         entry.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: name)
+        entry.loggedAt = resolvedFoodLogDate(targetDate: targetDate, sessionId: sessionId, modelContext: modelContext)
         entry.ensureDisplayMetadata()
 
         // Assign session if adding to existing session

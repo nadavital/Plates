@@ -2,7 +2,7 @@
 //  ChatSuggestions.swift
 //  Trai
 //
-//  Shared suggestion models used across chat, persistence, and Gemini tool execution.
+//  Shared suggestion models used across chat, persistence, and AI tool execution.
 //
 
 import Foundation

@@ -26,32 +26,30 @@ struct WorkoutTrendDetailSheet: View {
     private var weekStats: WeekStats {
         let data = last7DaysData
         let totalWorkouts = data.reduce(0) { $0 + $1.workoutCount }
+        let totalItems = data.reduce(0) { $0 + $1.totalEntries }
         let totalVolume = data.reduce(0.0) { $0 + $1.totalVolume }
-        let totalSets = data.reduce(0) { $0 + $1.totalSets }
         let totalMinutes = data.reduce(0) { $0 + $1.totalDurationMinutes }
 
         return WeekStats(
             workouts: totalWorkouts,
+            items: totalItems,
             volume: totalVolume,
-            sets: totalSets,
             minutes: totalMinutes
         )
     }
 
     private struct WeekStats {
         let workouts: Int
+        let items: Int
         let volume: Double
-        let sets: Int
         let minutes: Int
     }
 
-    private var muscleGroupDistribution: [(group: String, count: Int)] {
+    private var sessionTypeDistribution: [(group: String, count: Int)] {
         var distribution: [String: Int] = [:]
 
         for workout in completedWorkouts.prefix(20) {
-            for muscle in workout.muscleGroups {
-                distribution[muscle.displayName, default: 0] += 1
-            }
+            distribution[workout.type.displayName, default: 0] += 1
         }
 
         return distribution.sorted { $0.value > $1.value }
@@ -72,14 +70,11 @@ struct WorkoutTrendDetailSheet: View {
                         title: "Workout Frequency"
                     )
 
-                    // Volume trend
-                    if weekStats.volume > 0 {
-                        WorkoutTrendChart(
-                            data: last7DaysData,
-                            metric: .volume,
-                            title: "Total Volume"
-                        )
-                    }
+                    WorkoutTrendChart(
+                        data: last7DaysData,
+                        metric: .items,
+                        title: "Logged Workout Items"
+                    )
 
                     // Duration trend
                     WorkoutTrendChart(
@@ -88,9 +83,16 @@ struct WorkoutTrendDetailSheet: View {
                         title: "Workout Duration"
                     )
 
-                    // Muscle group distribution
-                    if !muscleGroupDistribution.isEmpty {
-                        muscleDistributionCard
+                    if weekStats.volume > 0 {
+                        WorkoutTrendChart(
+                            data: last7DaysData,
+                            metric: .volume,
+                            title: "Strength Volume"
+                        )
+                    }
+
+                    if !sessionTypeDistribution.isEmpty {
+                        sessionTypeCard
                     }
 
                     // Recent workouts
@@ -138,25 +140,16 @@ struct WorkoutTrendDetailSheet: View {
                 StatItem(
                     value: "\(weekStats.workouts)",
                     label: "Workouts",
-                    icon: "figure.run",
+                    icon: "figure.mixed.cardio",
                     color: .orange
                 )
 
                 Divider().frame(height: 40)
 
                 StatItem(
-                    value: formatVolume(weekStats.volume),
-                    label: "Volume",
-                    icon: "scalemass.fill",
-                    color: .purple
-                )
-
-                Divider().frame(height: 40)
-
-                StatItem(
-                    value: "\(weekStats.sets)",
-                    label: "Sets",
-                    icon: "repeat",
+                    value: "\(weekStats.items)",
+                    label: "Items",
+                    icon: "list.bullet.rectangle",
                     color: .blue
                 )
 
@@ -168,6 +161,17 @@ struct WorkoutTrendDetailSheet: View {
                     icon: "clock.fill",
                     color: .green
                 )
+
+                if weekStats.volume > 0 {
+                    Divider().frame(height: 40)
+
+                    StatItem(
+                        value: formatVolume(weekStats.volume),
+                        label: "Strength Vol",
+                        icon: "scalemass.fill",
+                        color: .purple
+                    )
+                }
             }
         }
         .padding()
@@ -175,15 +179,15 @@ struct WorkoutTrendDetailSheet: View {
         .clipShape(.rect(cornerRadius: 16))
     }
 
-    // MARK: - Muscle Distribution Card
+    // MARK: - Session Type Card
 
-    private var muscleDistributionCard: some View {
+    private var sessionTypeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Muscle Groups")
+            Text("Session Types")
                 .font(.headline)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
-                ForEach(muscleGroupDistribution.prefix(6), id: \.group) { item in
+                ForEach(sessionTypeDistribution.prefix(6), id: \.group) { item in
                     HStack {
                         Text(item.group)
                             .font(.caption)
@@ -215,7 +219,7 @@ struct WorkoutTrendDetailSheet: View {
 
             if completedWorkouts.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "figure.run")
+                    Image(systemName: "figure.mixed.cardio")
                         .font(.largeTitle)
                         .foregroundStyle(.tertiary)
                     Text("No workouts yet")
@@ -279,6 +283,31 @@ private struct StatItem: View {
 private struct RecentWorkoutRow: View {
     let workout: LiveWorkout
 
+    private var entryCount: Int {
+        workout.entries?.count ?? 0
+    }
+
+    private var activitySummary: String? {
+        if workout.totalSets > 0 {
+            return "\(workout.totalSets) \(workout.totalSets == 1 ? "set" : "sets")"
+        }
+
+        guard entryCount > 0 else { return nil }
+        return "\(entryCount) \(entryCount == 1 ? "item" : "items")"
+    }
+
+    private var secondaryChips: [String] {
+        if !workout.focusAreas.isEmpty {
+            return Array(workout.focusAreas.prefix(2))
+        }
+
+        if !workout.muscleGroups.isEmpty {
+            return workout.muscleGroups.prefix(2).map(\.displayName)
+        }
+
+        return [workout.type.displayName]
+    }
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -293,8 +322,8 @@ private struct RecentWorkoutRow: View {
 
                     Label(workout.formattedDuration, systemImage: "clock")
 
-                    if workout.totalSets > 0 {
-                        Label("\(workout.totalSets) sets", systemImage: "repeat")
+                    if let activitySummary {
+                        Label(activitySummary, systemImage: workout.totalSets > 0 ? "repeat" : "list.bullet.rectangle")
                     }
                 }
                 .font(.caption)
@@ -303,16 +332,15 @@ private struct RecentWorkoutRow: View {
 
             Spacer()
 
-            // Muscle group chips
-            if !workout.muscleGroups.isEmpty {
+            if !secondaryChips.isEmpty {
                 HStack(spacing: 4) {
-                    ForEach(workout.muscleGroups.prefix(2)) { muscle in
-                        Text(muscle.displayName)
+                    ForEach(secondaryChips, id: \.self) { chip in
+                        Text(chip)
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15))
-                            .foregroundStyle(.orange)
+                            .background(Color.accentColor.opacity(0.12))
+                            .foregroundStyle(.accent)
                             .clipShape(.capsule)
                     }
                 }

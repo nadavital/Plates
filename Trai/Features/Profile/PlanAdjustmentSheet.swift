@@ -9,6 +9,8 @@ import SwiftData
 struct PlanAdjustmentSheet: View {
     @Bindable var profile: UserProfile
     @Environment(\.dismiss) private var dismiss
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     @State private var goalType: UserProfile.GoalType
     @State private var calories: Int
@@ -85,15 +87,21 @@ struct PlanAdjustmentSheet: View {
                             }
                         }
                 }
+                .traiSheetBranding()
             }
         }
+        .traiSheetBranding()
     }
 
     // MARK: - AI Coach Card
 
     private var aiCoachCard: some View {
         Button {
-            showAICoach = true
+            if monetizationService?.canAccessAIFeatures == false {
+                proUpsellCoordinator?.present(source: .nutritionPlan)
+            } else {
+                showAICoach = true
+            }
         } label: {
             HStack(spacing: 16) {
                 Circle()

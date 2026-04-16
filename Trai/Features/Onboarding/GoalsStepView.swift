@@ -70,7 +70,7 @@ struct GoalsStepView: View {
     private var headerSection: some View {
         VStack(spacing: 12) {
             TraiLensView(size: 54, state: .idle, palette: .energy)
-            .scaleEffect(headerVisible ? 1 : 0.8)
+                .scaleEffect(headerVisible ? 1 : 0.8)
 
             Text("Your Goals")
                 .font(.traiBold(28))
@@ -79,6 +79,12 @@ struct GoalsStepView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            Text("Choose `Build Muscle` if you want to intentionally gain scale weight. Choose `Recomposition` if you want to stay closer to the same weight while getting leaner and stronger.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
         }
         .opacity(headerVisible ? 1 : 0)
         .offset(y: headerVisible ? 0 : -20)

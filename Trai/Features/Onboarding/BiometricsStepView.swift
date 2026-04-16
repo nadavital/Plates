@@ -67,6 +67,13 @@ struct BiometricsStepView: View {
         }
         .onAppear {
             startEntranceAnimations()
+            syncDisplayedMeasurements()
+        }
+        .onChange(of: usesMetricHeight, initial: false) { _, isMetric in
+            handleHeightUnitChange(isMetric: isMetric)
+        }
+        .onChange(of: usesMetricWeight, initial: false) { oldValue, newValue in
+            handleWeightUnitChange(fromMetric: oldValue, toMetric: newValue)
         }
     }
 
@@ -311,6 +318,65 @@ struct BiometricsStepView: View {
         let totalInches = (feet * 12) + inches
         let cm = totalInches * 2.54
         heightValue = String(format: "%.0f", cm)
+    }
+
+    private func syncDisplayedMeasurements() {
+        if usesMetricHeight {
+            heightFeet = ""
+            heightInches = ""
+        } else {
+            syncImperialHeightFieldsFromStoredCentimeters()
+        }
+    }
+
+    private func handleHeightUnitChange(isMetric: Bool) {
+        if isMetric {
+            heightFeet = ""
+            heightInches = ""
+        } else {
+            syncImperialHeightFieldsFromStoredCentimeters()
+        }
+    }
+
+    private func syncImperialHeightFieldsFromStoredCentimeters() {
+        guard let centimeters = Double(heightValue), centimeters > 0 else {
+            heightFeet = ""
+            heightInches = ""
+            return
+        }
+
+        let roundedTotalInches = Int((centimeters / 2.54).rounded())
+        let feet = roundedTotalInches / 12
+        let inches = roundedTotalInches % 12
+
+        heightFeet = String(feet)
+        heightInches = String(inches)
+    }
+
+    private func handleWeightUnitChange(fromMetric: Bool, toMetric: Bool) {
+        guard fromMetric != toMetric else { return }
+
+        weightValue = convertedWeightString(weightValue, fromMetric: fromMetric, toMetric: toMetric)
+        targetWeightValue = convertedWeightString(targetWeightValue, fromMetric: fromMetric, toMetric: toMetric)
+    }
+
+    private func convertedWeightString(_ rawValue: String, fromMetric: Bool, toMetric: Bool) -> String {
+        guard let value = Double(rawValue), value > 0 else { return rawValue }
+
+        let convertedValue: Double
+        if fromMetric && !toMetric {
+            convertedValue = value / 0.453592
+        } else if !fromMetric && toMetric {
+            convertedValue = value * 0.453592
+        } else {
+            convertedValue = value
+        }
+
+        let roundedValue = (convertedValue * 10).rounded() / 10
+        if roundedValue.rounded() == roundedValue {
+            return String(Int(roundedValue))
+        }
+        return String(format: "%.1f", roundedValue)
     }
 }
 

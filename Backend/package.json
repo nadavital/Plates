@@ -1,0 +1,13 @@
+{
+  "name": "trai-backend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.mjs",
+    "start": "node src/server.mjs",
+    "verify:apple": "node scripts/check_apple_verification.mjs"
+  }
+}

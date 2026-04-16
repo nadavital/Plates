@@ -34,6 +34,7 @@ final class TrendsService {
         let id = UUID()
         let date: Date
         let workoutCount: Int
+        let totalEntries: Int
         let totalVolume: Double
         let totalSets: Int
         let totalDurationMinutes: Int
@@ -140,6 +141,7 @@ final class TrendsService {
                 dailyData[dayStart] = DailyWorkout(
                     date: dayStart,
                     workoutCount: 0,
+                    totalEntries: 0,
                     totalVolume: 0,
                     totalSets: 0,
                     totalDurationMinutes: 0
@@ -153,11 +155,13 @@ final class TrendsService {
             guard dayStart >= startDate else { continue }
 
             let durationMinutes = Int(workout.duration / 60)
+            let entryCount = workout.entries?.count ?? 0
 
             if let existing = dailyData[dayStart] {
                 dailyData[dayStart] = DailyWorkout(
                     date: dayStart,
                     workoutCount: existing.workoutCount + 1,
+                    totalEntries: existing.totalEntries + entryCount,
                     totalVolume: existing.totalVolume + workout.totalVolume,
                     totalSets: existing.totalSets + workout.totalSets,
                     totalDurationMinutes: existing.totalDurationMinutes + durationMinutes
