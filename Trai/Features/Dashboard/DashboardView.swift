@@ -736,6 +736,9 @@ struct DashboardView: View {
             )
             .traiEntrance(index: 1)
 
+            dashboardShortcutChips
+                .traiEntrance(index: 2)
+
             if !todaysReminderItems.isEmpty {
                 TodaysRemindersCard(
                     reminders: todaysReminderItems,
@@ -744,8 +747,42 @@ struct DashboardView: View {
                     onViewAll: {}
                 )
                 .id("reminders-section")
-                .traiEntrance(index: 2)
+                .traiEntrance(index: 3)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var dashboardShortcutChips: some View {
+        HStack(spacing: 8) {
+            if !todaysReminderItems.isEmpty {
+                ShortcutChipButton(
+                    title: "Reminders",
+                    icon: "bell.badge.fill",
+                    tint: .orange
+                ) {
+                    showRemindersBinding = true
+                }
+            }
+
+            NavigationLink {
+                CustomExercisesView()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "figure.strengthtraining.traditional")
+                        .font(.traiLabel(12))
+                    Text("Custom Exercises")
+                        .font(.traiLabel(12))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(TraiPressStyle(scale: 0.96))
+
+            Spacer(minLength: 0)
         }
     }
 

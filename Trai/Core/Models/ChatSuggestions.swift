@@ -50,6 +50,8 @@ struct PlanUpdateSuggestion: Codable, Sendable {
     let proteinGrams: Int?
     let carbsGrams: Int?
     let fatGrams: Int?
+    let fiberGrams: Int?
+    let sugarGrams: Int?
     let goal: String?
     let rationale: String?
 }

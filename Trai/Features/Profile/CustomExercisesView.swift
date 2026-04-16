@@ -16,6 +16,7 @@ struct CustomExercisesView: View {
     @State private var searchText = ""
     @State private var showingDeleteConfirmation = false
     @State private var exerciseToDelete: Exercise?
+    @State private var showingAddCustomExercise = false
 
     private var filteredExercises: [Exercise] {
         if searchText.isEmpty {
@@ -33,11 +34,20 @@ struct CustomExercisesView: View {
     var body: some View {
         List {
             if customExercises.isEmpty {
-                ContentUnavailableView(
-                    "No Custom Exercises",
-                    systemImage: "dumbbell",
-                    description: Text("Custom exercises you create will appear here")
-                )
+                VStack(spacing: 16) {
+                    ContentUnavailableView(
+                        "No Custom Exercises",
+                        systemImage: "dumbbell",
+                        description: Text("Custom exercises you create will appear here")
+                    )
+
+                    Button("Add Exercise", systemImage: "plus") {
+                        showingAddCustomExercise = true
+                    }
+                    .buttonStyle(.traiSecondary(color: .orange, fullWidth: false))
+                }
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
             } else if filteredExercises.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
@@ -60,8 +70,26 @@ struct CustomExercisesView: View {
         }
         .searchable(text: $searchText, prompt: "Search exercises")
         .navigationTitle("Custom Exercises")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add", systemImage: "plus") {
+                    showingAddCustomExercise = true
+                }
+            }
+        }
         .onAppear {
             fetchCustomExercises()
+        }
+        .sheet(isPresented: $showingAddCustomExercise) {
+            AddCustomExerciseSheet(initialName: "") { name, muscleGroup, category, secondaryMuscles in
+                addCustomExercise(
+                    name: name,
+                    muscleGroup: muscleGroup,
+                    category: category,
+                    secondaryMuscles: secondaryMuscles
+                )
+            }
+            .traiSheetBranding()
         }
         .confirmationDialog(
             "Delete Exercise?",
@@ -98,6 +126,52 @@ struct CustomExercisesView: View {
         HapticManager.lightTap()
         // Refresh the list
         fetchCustomExercises()
+    }
+
+    private func addCustomExercise(
+        name: String,
+        muscleGroup: Exercise.MuscleGroup?,
+        category: Exercise.Category,
+        secondaryMuscles: [String]? = nil
+    ) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let existing = existingExercise(named: trimmed) {
+            if existing.exerciseCategory == .strength,
+               existing.targetMuscleGroup == nil,
+               category == .strength,
+               let muscleGroup {
+                existing.targetMuscleGroup = muscleGroup
+            }
+            if let secondaryMuscles, !secondaryMuscles.isEmpty, (existing.secondaryMuscles?.isEmpty ?? true) {
+                existing.secondaryMuscles = secondaryMuscles.joined(separator: ",")
+            }
+            try? modelContext.save()
+            fetchCustomExercises()
+            HapticManager.success()
+            return
+        }
+
+        let exercise = Exercise(
+            name: trimmed,
+            category: category,
+            muscleGroup: category == .strength ? muscleGroup : nil
+        )
+        exercise.isCustom = true
+        if let secondaryMuscles, !secondaryMuscles.isEmpty {
+            exercise.secondaryMuscles = secondaryMuscles.joined(separator: ",")
+        }
+        modelContext.insert(exercise)
+        try? modelContext.save()
+        fetchCustomExercises()
+        HapticManager.success()
+    }
+
+    private func existingExercise(named name: String) -> Exercise? {
+        let descriptor = FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\.name)])
+        let allExercises = (try? modelContext.fetch(descriptor)) ?? []
+        return allExercises.first { $0.name.lowercased() == name.lowercased() }
     }
 }
 

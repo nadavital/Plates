@@ -15,6 +15,7 @@ struct StartWorkoutSection: View {
     let recommendedTemplateId: UUID?
     let onStartTemplate: (WorkoutPlan.WorkoutTemplate) -> Void
     let onStartCustomWorkout: () -> Void
+    let onOpenCustomExercises: () -> Void
     var onCreatePlan: (() -> Void)?
     var onEditPlan: (() -> Void)?
 
@@ -48,6 +49,7 @@ struct StartWorkoutSection: View {
                     recoveryScores: recoveryScores,
                     onStartTemplate: onStartTemplate,
                     onStartCustomWorkout: onStartCustomWorkout,
+                    onOpenCustomExercises: onOpenCustomExercises,
                     onEditPlan: onEditPlan
                 )
             } else if let onCreatePlan {
@@ -154,6 +156,7 @@ private struct MoreSessionsCard: View {
     let recoveryScores: [UUID: (score: Double, reason: String)]
     let onStartTemplate: (WorkoutPlan.WorkoutTemplate) -> Void
     let onStartCustomWorkout: () -> Void
+    let onOpenCustomExercises: () -> Void
     var onEditPlan: (() -> Void)?
 
     var body: some View {
@@ -164,6 +167,8 @@ private struct MoreSessionsCard: View {
                         Button("Edit", systemImage: "pencil", action: onEditPlan)
                             .buttonStyle(.traiTertiary(size: .compact, height: 28))
                     }
+                    Button("Exercises", systemImage: "figure.strengthtraining.traditional", action: onOpenCustomExercises)
+                        .buttonStyle(.traiTertiary(size: .compact, height: 28))
                     Button("Custom", systemImage: "plus", action: onStartCustomWorkout)
                         .buttonStyle(.traiTertiary(size: .compact, height: 28))
                 }
@@ -302,12 +307,14 @@ struct WorkoutsQuickActionsRow: View {
     let onPersonalRecords: () -> Void
     let onHistory: () -> Void
     let onRecovery: () -> Void
+    let onCustomExercises: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             WorkoutsQuickActionChip("Records", systemImage: "trophy.fill", color: .yellow, action: onPersonalRecords)
             WorkoutsQuickActionChip("History", systemImage: "clock.fill", color: .blue, action: onHistory)
             WorkoutsQuickActionChip("Recovery", systemImage: "waveform.path.ecg", color: .green, action: onRecovery)
+            WorkoutsQuickActionChip("Exercises", systemImage: "figure.strengthtraining.traditional", color: .orange, action: onCustomExercises)
         }
     }
 }

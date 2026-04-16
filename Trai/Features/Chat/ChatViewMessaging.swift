@@ -307,6 +307,8 @@ extension ChatView {
                 proteinGrams: planData.proteinGrams,
                 carbsGrams: planData.carbsGrams,
                 fatGrams: planData.fatGrams,
+                fiberGrams: planData.fiberGrams,
+                sugarGrams: planData.sugarGrams,
                 goal: planData.goal,
                 rationale: planData.rationale
             )

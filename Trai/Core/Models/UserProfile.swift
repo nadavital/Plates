@@ -458,10 +458,12 @@ extension UserProfile {
         selectedWorkoutTypes: [WorkoutPlanGenerationRequest.WorkoutType]? = nil,
         preferredSplit: WorkoutPlanGenerationRequest.PreferredSplit? = nil,
         cardioTypes: [WorkoutPlanGenerationRequest.CardioType]? = nil,
+        timePerWorkout: Int? = nil,
         specificGoals: [String]? = nil,
         weakPoints: [String]? = nil,
         injuries: String? = nil,
-        preferences: String? = nil
+        preferences: String? = nil,
+        conversationContext: [String]? = nil
     ) -> WorkoutPlanGenerationRequest {
         WorkoutPlanGenerationRequest(
             name: name,
@@ -474,7 +476,7 @@ extension UserProfile {
             experienceLevel: workoutExperience,
             equipmentAccess: workoutEquipment,
             availableDays: preferredWorkoutDays,
-            timePerWorkout: workoutTimePerSession,
+            timePerWorkout: timePerWorkout ?? workoutTimePerSession,
             preferredSplit: preferredSplit,
             cardioTypes: cardioTypes,
             customWorkoutType: nil,
@@ -484,7 +486,8 @@ extension UserProfile {
             specificGoals: specificGoals,
             weakPoints: weakPoints,
             injuries: injuries,
-            preferences: preferences
+            preferences: preferences,
+            conversationContext: conversationContext
         )
     }
 }

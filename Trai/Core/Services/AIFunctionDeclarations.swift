@@ -247,6 +247,14 @@ enum AIFunctionDeclarations {
                         "type": "integer",
                         "description": "New daily fat target in grams (e.g., 65)"
                     ],
+                    "fiber_grams": [
+                        "type": "integer",
+                        "description": "New daily fiber target in grams (e.g., 30)"
+                    ],
+                    "sugar_grams": [
+                        "type": "integer",
+                        "description": "New daily sugar target in grams (e.g., 50)"
+                    ],
                     "goal": [
                         "type": "string",
                         "description": "New fitness goal",

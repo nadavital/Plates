@@ -52,6 +52,7 @@ extension OnboardingView {
             profile.aiPlanRationale = plan.rationale
             profile.aiPlanGeneratedAt = Date()
             profile.dailyFiberGoal = plan.dailyTargets.fiber
+            profile.dailySugarGoal = plan.dailyTargets.sugar
         }
 
         // Workout plan (if user created one)

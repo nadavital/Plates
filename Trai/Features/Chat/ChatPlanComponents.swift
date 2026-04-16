@@ -15,6 +15,8 @@ struct PlanUpdateSuggestionCard: View {
     let currentProtein: Int?
     let currentCarbs: Int?
     let currentFat: Int?
+    let currentFiber: Int?
+    let currentSugar: Int?
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onAccept: () -> Void
     let onEdit: () -> Void
@@ -39,8 +41,37 @@ struct PlanUpdateSuggestionCard: View {
         suggestion.fatGrams != nil && suggestion.fatGrams != currentFat
     }
 
+    private var hasFiberChange: Bool {
+        enabledMacros.contains(.fiber) &&
+        suggestion.fiberGrams != nil && suggestion.fiberGrams != currentFiber
+    }
+
+    private var hasSugarChange: Bool {
+        enabledMacros.contains(.sugar) &&
+        suggestion.sugarGrams != nil && suggestion.sugarGrams != currentSugar
+    }
+
+    private var hiddenMacroChangeLabels: [String] {
+        var labels: [String] = []
+
+        if !enabledMacros.contains(.fiber),
+           suggestion.fiberGrams != nil,
+           suggestion.fiberGrams != currentFiber {
+            labels.append("Fiber")
+        }
+
+        if !enabledMacros.contains(.sugar),
+           suggestion.sugarGrams != nil,
+           suggestion.sugarGrams != currentSugar {
+            labels.append("Sugar")
+        }
+
+        return labels
+    }
+
     private var hasAnyChanges: Bool {
-        hasCalorieChange || hasProteinChange || hasCarbsChange || hasFatChange || suggestion.goal != nil
+        hasCalorieChange || hasProteinChange || hasCarbsChange || hasFatChange ||
+        hasFiberChange || hasSugarChange || !hiddenMacroChangeLabels.isEmpty || suggestion.goal != nil
     }
 
     var body: some View {
@@ -83,7 +114,7 @@ struct PlanUpdateSuggestionCard: View {
                             proposed: newCalories,
                             unit: "kcal"
                         )
-                        if hasProteinChange || hasCarbsChange || hasFatChange || suggestion.goalDisplayName != nil {
+                        if hasProteinChange || hasCarbsChange || hasFatChange || hasFiberChange || hasSugarChange || suggestion.goalDisplayName != nil {
                             Divider().padding(.leading, 24)
                         }
                     }
@@ -96,7 +127,7 @@ struct PlanUpdateSuggestionCard: View {
                             proposed: newProtein,
                             unit: "g"
                         )
-                        if hasCarbsChange || hasFatChange || suggestion.goalDisplayName != nil {
+                        if hasCarbsChange || hasFatChange || hasFiberChange || hasSugarChange || suggestion.goalDisplayName != nil {
                             Divider().padding(.leading, 24)
                         }
                     }
@@ -109,7 +140,7 @@ struct PlanUpdateSuggestionCard: View {
                             proposed: newCarbs,
                             unit: "g"
                         )
-                        if hasFatChange || suggestion.goalDisplayName != nil {
+                        if hasFatChange || hasFiberChange || hasSugarChange || suggestion.goalDisplayName != nil {
                             Divider().padding(.leading, 24)
                         }
                     }
@@ -122,6 +153,50 @@ struct PlanUpdateSuggestionCard: View {
                             proposed: newFat,
                             unit: "g"
                         )
+                        if hasFiberChange || hasSugarChange || suggestion.goalDisplayName != nil {
+                            Divider().padding(.leading, 24)
+                        }
+                    }
+
+                    if hasFiberChange, let newFiber = suggestion.fiberGrams, let current = currentFiber {
+                        PlanChangeRow(
+                            color: MacroType.fiber.color,
+                            label: "Fiber",
+                            current: current,
+                            proposed: newFiber,
+                            unit: "g"
+                        )
+                        if hasSugarChange || suggestion.goalDisplayName != nil {
+                            Divider().padding(.leading, 24)
+                        }
+                    }
+
+                    if hasSugarChange, let newSugar = suggestion.sugarGrams, let current = currentSugar {
+                        PlanChangeRow(
+                            color: MacroType.sugar.color,
+                            label: "Sugar",
+                            current: current,
+                            proposed: newSugar,
+                            unit: "g"
+                        )
+                        if suggestion.goalDisplayName != nil {
+                            Divider().padding(.leading, 24)
+                        }
+                    }
+
+                    if !hiddenMacroChangeLabels.isEmpty {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "eye.slash")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Text("Background targets also updated: \(hiddenMacroChangeLabels.joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
                         if suggestion.goalDisplayName != nil {
                             Divider().padding(.leading, 24)
                         }
@@ -314,6 +389,12 @@ struct PlanUpdateDetailSheet: View {
                     if let fat = plan.fatGrams {
                         AppliedChangeRow(label: "Fat", value: fat, unit: "g", color: MacroType.fat.color)
                     }
+                    if let fiber = plan.fiberGrams {
+                        AppliedChangeRow(label: "Fiber", value: fiber, unit: "g", color: MacroType.fiber.color)
+                    }
+                    if let sugar = plan.sugarGrams {
+                        AppliedChangeRow(label: "Sugar", value: sugar, unit: "g", color: MacroType.sugar.color)
+                    }
                     if let goalName = plan.goalDisplayName {
                         HStack(spacing: 8) {
                             Circle()
@@ -377,6 +458,8 @@ struct EditPlanSuggestionSheet: View {
     let currentProtein: Int
     let currentCarbs: Int
     let currentFat: Int
+    let currentFiber: Int
+    let currentSugar: Int
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let onSave: (PlanUpdateSuggestionEntry) -> Void
 
@@ -386,10 +469,12 @@ struct EditPlanSuggestionSheet: View {
     @State private var proteinText: String
     @State private var carbsText: String
     @State private var fatText: String
+    @State private var fiberText: String
+    @State private var sugarText: String
 
-    /// Macros that are tracked and relevant for plan (protein, carbs, fat only)
+    /// Macros that are tracked and relevant for plan display.
     private var planMacros: [MacroType] {
-        [.protein, .carbs, .fat].filter { enabledMacros.contains($0) }
+        [.protein, .carbs, .fat, .fiber, .sugar].filter { enabledMacros.contains($0) }
     }
 
     init(
@@ -398,6 +483,8 @@ struct EditPlanSuggestionSheet: View {
         currentProtein: Int,
         currentCarbs: Int,
         currentFat: Int,
+        currentFiber: Int,
+        currentSugar: Int,
         enabledMacros: Set<MacroType> = MacroType.defaultEnabled,
         onSave: @escaping (PlanUpdateSuggestionEntry) -> Void
     ) {
@@ -406,12 +493,16 @@ struct EditPlanSuggestionSheet: View {
         self.currentProtein = currentProtein
         self.currentCarbs = currentCarbs
         self.currentFat = currentFat
+        self.currentFiber = currentFiber
+        self.currentSugar = currentSugar
         self.enabledMacros = enabledMacros
         self.onSave = onSave
         _caloriesText = State(initialValue: String(suggestion.calories ?? currentCalories))
         _proteinText = State(initialValue: String(suggestion.proteinGrams ?? currentProtein))
         _carbsText = State(initialValue: String(suggestion.carbsGrams ?? currentCarbs))
         _fatText = State(initialValue: String(suggestion.fatGrams ?? currentFat))
+        _fiberText = State(initialValue: String(suggestion.fiberGrams ?? currentFiber))
+        _sugarText = State(initialValue: String(suggestion.sugarGrams ?? currentSugar))
     }
 
     private var isValid: Bool {
@@ -423,7 +514,8 @@ struct EditPlanSuggestionSheet: View {
         case .protein: $proteinText
         case .carbs: $carbsText
         case .fat: $fatText
-        default: $proteinText // Won't be used for fiber/sugar
+        case .fiber: $fiberText
+        case .sugar: $sugarText
         }
     }
 
@@ -471,6 +563,8 @@ struct EditPlanSuggestionSheet: View {
                             proteinGrams: Int(proteinText),
                             carbsGrams: Int(carbsText),
                             fatGrams: Int(fatText),
+                            fiberGrams: Int(fiberText),
+                            sugarGrams: Int(sugarText),
                             goal: suggestion.goal,
                             rationale: suggestion.rationale
                         )

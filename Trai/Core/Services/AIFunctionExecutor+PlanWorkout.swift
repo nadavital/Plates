@@ -28,8 +28,11 @@ extension AIFunctionExecutor {
                     "calories": profile.dailyCalorieGoal,
                     "protein": profile.dailyProteinGoal,
                     "carbs": profile.dailyCarbsGoal,
-                    "fat": profile.dailyFatGoal
+                    "fat": profile.dailyFatGoal,
+                    "fiber": profile.dailyFiberGoal,
+                    "sugar": profile.dailySugarGoal
                 ],
+                "enabled_macros": profile.enabledMacrosOrdered.map(\.rawValue),
                 "activity_level": profile.activityLevel,
                 "current_weight_kg": profile.currentWeightKg ?? 0,
                 "target_weight_kg": profile.targetWeightKg ?? 0
@@ -43,6 +46,8 @@ extension AIFunctionExecutor {
             proteinGrams: args["protein_grams"] as? Int,
             carbsGrams: args["carbs_grams"] as? Int,
             fatGrams: args["fat_grams"] as? Int,
+            fiberGrams: args["fiber_grams"] as? Int,
+            sugarGrams: args["sugar_grams"] as? Int,
             goal: args["goal"] as? String,
             rationale: args["rationale"] as? String
         )

@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var showPlanAdjustment = false
     @State private var showWorkoutPlanSetup = false
     @State private var showWorkoutPlanEdit = false
+    @State private var pendingEnabledMacroReveal: MacroType?
     @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
 
     var body: some View {
@@ -226,6 +227,7 @@ struct SettingsView: View {
                             profile.enabledMacros.remove(macro)
                         } else {
                             profile.enabledMacros.insert(macro)
+                            pendingEnabledMacroReveal = macro
                         }
                     }
                 }
@@ -265,6 +267,16 @@ struct SettingsView: View {
         .sheet(isPresented: $showPlanAdjustment) {
             PlanAdjustmentSheet(profile: profile)
                 .traiSheetBranding()
+        }
+        .alert(item: $pendingEnabledMacroReveal) { macro in
+            Alert(
+                title: Text("\(macro.displayName) target ready"),
+                message: Text("\(profile.goalFor(macro))g per day is already saved in your Trai plan for \(macro.displayName.lowercased()). Keep it, or review your plan if you want to change it."),
+                primaryButton: .default(Text("Review Plan")) {
+                    showPlanAdjustment = true
+                },
+                secondaryButton: .cancel(Text("Keep Target"))
+            )
         }
         .sheet(isPresented: $showWorkoutPlanSetup) {
             WorkoutPlanChatFlow()

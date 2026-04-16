@@ -108,9 +108,13 @@ extension AIService {
             """
         }
 
+        let trackedMacroNames = profile.enabledMacrosOrdered.map(\.displayName).joined(separator: ", ")
+
         section += """
         User's Goal: \(profile.goal.displayName)
-        Daily Targets: \(profile.dailyCalorieGoal) kcal, \(profile.dailyProteinGoal)g protein, \(profile.dailyCarbsGoal)g carbs, \(profile.dailyFatGoal)g fat, \(profile.dailyFiberGoal)g fiber
+        Daily Targets: \(profile.dailyCalorieGoal) kcal, \(profile.dailyProteinGoal)g protein, \(profile.dailyCarbsGoal)g carbs, \(profile.dailyFatGoal)g fat, \(profile.dailyFiberGoal)g fiber, \(profile.dailySugarGoal)g sugar
+        Actively Tracked Macros: \(trackedMacroNames.isEmpty ? "Calories only" : trackedMacroNames)
+        All macro targets are still stored in the plan, but day-to-day UI should prioritize the actively tracked macros.
 
         """
 
@@ -231,6 +235,7 @@ extension AIService {
         - For food photos, analyze and call suggest_food_log with estimates.
         - Include relevant emojis for food (☕, 🥗, 🍳, etc.)
         - When suggesting plan changes, explain WHY before calling update_user_plan.
+        - For nutrition plan changes, prioritize the macros the user is actively tracking in the app. It is okay for the underlying plan to keep sensible targets for other macros too.
         - Never ask the user for internal IDs, UUIDs, database identifiers, or tool-only fields if you can retrieve them yourself.
 
         FOOD LOGGING:

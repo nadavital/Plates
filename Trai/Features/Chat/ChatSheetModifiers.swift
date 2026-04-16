@@ -77,6 +77,8 @@ extension View {
         currentProtein: Int,
         currentCarbs: Int,
         currentFat: Int,
+        currentFiber: Int,
+        currentSugar: Int,
         enabledMacros: Set<MacroType> = MacroType.defaultEnabled,
         onSave: @escaping (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     ) -> some View {
@@ -91,6 +93,8 @@ extension View {
                     currentProtein: currentProtein,
                     currentCarbs: currentCarbs,
                     currentFat: currentFat,
+                    currentFiber: currentFiber,
+                    currentSugar: currentSugar,
                     enabledMacros: enabledMacros
                 ) { updatedPlan in
                     onSave(updatedPlan, editing.message)

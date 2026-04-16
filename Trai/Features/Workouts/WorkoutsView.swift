@@ -68,6 +68,7 @@ struct WorkoutsView: View {
     @State private var showingAllWorkouts = false
     @State private var showingWorkoutSheet = false
     @State private var showingCustomWorkoutSetup = false
+    @State private var showingCustomExercises = false
     @State private var showingPersonalRecords = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
@@ -295,6 +296,7 @@ struct WorkoutsView: View {
                         recommendedTemplateId: recommendedTemplateId,
                         onStartTemplate: startWorkoutFromTemplate,
                         onStartCustomWorkout: { showingCustomWorkoutSetup = true },
+                        onOpenCustomExercises: { showingCustomExercises = true },
                         onCreatePlan: workoutPlan == nil ? { showingPlanSetup = true } : nil,
                         onEditPlan: workoutPlan != nil ? { showingPlanSetup = true } : nil
                     )
@@ -302,7 +304,8 @@ struct WorkoutsView: View {
                     WorkoutsQuickActionsRow(
                         onPersonalRecords: { showingPersonalRecords = true },
                         onHistory: { showingAllWorkouts = true },
-                        onRecovery: { showingMuscleRecoveryDetail = true }
+                        onRecovery: { showingMuscleRecoveryDetail = true },
+                        onCustomExercises: { showingCustomExercises = true }
                     )
 
                     WorkoutGoalsOverviewSection(
@@ -467,6 +470,12 @@ struct WorkoutsView: View {
                     },
                     orderedWorkoutTypes: personalizedWorkoutTypes
                 )
+                .traiSheetBranding()
+            }
+            .sheet(isPresented: $showingCustomExercises) {
+                NavigationStack {
+                    CustomExercisesView()
+                }
                 .traiSheetBranding()
             }
             .onChange(of: showingCustomWorkoutSetup) { _, isShowing in

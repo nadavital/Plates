@@ -48,6 +48,7 @@ extension AIPromptBuilder {
         // Add macro tracking preferences
         let macroNames = request.enabledMacros.map { $0.displayName }.sorted().joined(separator: ", ")
         prompt += "\n- Tracking Macros: \(macroNames.isEmpty ? "Calories only" : macroNames)"
+        prompt += "\n- User-Facing Priority: Focus explanations and recommendations on the macros they actively track in the app"
 
         if request.enabledMacros.contains(.sugar) {
             prompt += "\n  (User wants to monitor sugar intake)"
@@ -64,6 +65,8 @@ extension AIPromptBuilder {
 
         INSTRUCTIONS:
         Create a personalized nutrition plan. You may adjust the suggested calories if you have good reason based on the user's specific situation, but keep the calorie target inside the safe starting range unless there is an exceptionally strong reason.
+        Always populate calories, protein, carbs, fat, fiber, and sugar in the saved plan. The user may not actively display every macro today, but the background plan should still stay complete.
+        Prioritize your rationale and recommendations around the macros the user is actively tracking.
 
         Include progress insights with realistic estimates:
         - estimatedWeeklyChange: Expected weekly weight change (e.g., "-0.5 kg" for deficit, "+0.2 kg" for surplus, "Maintain" for maintenance)
@@ -152,6 +155,8 @@ extension AIPromptBuilder {
         conversationHistory: [PlanChatMessage],
         tone: TraiCoachTone = .sharedPreference
     ) -> String {
+        let trackedMacroNames = request.enabledMacros.map(\.displayName).sorted().joined(separator: ", ")
+
         var prompt = """
         You are Trai, a friendly nutrition coach chatting with the user about their plan. Never refer to yourself as an AI or assistant. This is a casual chat, so keep responses SHORT and conversational (1-3 sentences max).
         Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
@@ -169,6 +174,7 @@ extension AIPromptBuilder {
         - Weight: \(String(format: "%.1f", request.weightKg)) kg
         - Activity Level: \(request.activityLevel.displayName)
         - Goal: \(request.goal.displayName)
+        - Actively Tracked Macros: \(trackedMacroNames.isEmpty ? "Calories only" : trackedMacroNames)
 
         CURRENT PLAN:
         - Calories: \(currentPlan.dailyTargets.calories) kcal
@@ -198,6 +204,7 @@ extension AIPromptBuilder {
         - Prefer making a reasonable proposal when the user intent is clear
         - Ask AT MOST one short follow-up only when a missing detail would materially change the plan
         - If they ask to change something directionally (lower calories, more protein, leaner, more filling, etc.), propose a concrete adjustment instead of asking for exact numbers first
+        - Keep the underlying plan complete across all macros, but focus your user-facing explanation on the macros they actively track
         - Only use "proposePlan" when you have enough info to make a good suggestion
         - Only use "planUpdate" if the user explicitly accepts a proposal or gives very clear instructions
         - Keep the selected coach tone consistent with the rest of the app
