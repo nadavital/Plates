@@ -52,7 +52,7 @@ struct WorkoutPlanChatFlow: View {
     // MARK: - Question Flow
 
     private var allQuestions: [WorkoutPlanQuestion] {
-        [.workoutType, .experience, .equipment, .schedule, .cardio, .goals, .injuries]
+        [.workoutType, .schedule, .equipment, .background, .constraints]
     }
 
     private var visibleQuestions: [WorkoutPlanQuestion] {
@@ -762,11 +762,16 @@ struct WorkoutPlanChatFlow: View {
             if let days = parseDays(from: collectedAnswers.answers(for: "schedule")) {
                 profile.preferredWorkoutDays = days
             }
-            if let experience = parseExperience(from: collectedAnswers.answers(for: "experience")) {
+            if let experience = parseExperience(
+                from: collectedAnswers.answers(for: "background") + collectedAnswers.answers(for: "experience")
+            ) {
                 profile.workoutExperience = experience
             }
             if let equipment = parseEquipment(from: collectedAnswers.answers(for: "equipment")) {
                 profile.workoutEquipment = equipment
+            }
+            if let duration = acceptedSessionDuration(for: plan) {
+                profile.workoutTimePerSession = duration
             }
 
             try? modelContext.save()
@@ -786,23 +791,42 @@ struct WorkoutPlanChatFlow: View {
 
         // Parse workout types
         let workoutTypeAnswers = collectedAnswers.answers(for: "workoutType")
+        let scheduleAnswers = collectedAnswers.answers(for: "schedule")
+        let equipmentAnswers = collectedAnswers.answers(for: "equipment")
+        let backgroundAnswers = collectedAnswers.answers(for: "background")
+        let constraintAnswers = collectedAnswers.answers(for: "constraints")
         let workoutTypes = parseWorkoutTypes(from: workoutTypeAnswers)
         let primaryType: WorkoutPlanGenerationRequest.WorkoutType = workoutTypes.count == 1 ? workoutTypes.first ?? .mixed : .mixed
 
         // Parse other fields
-        let experience = parseExperience(from: collectedAnswers.answers(for: "experience"))
-        let equipment = parseEquipment(from: collectedAnswers.answers(for: "equipment"))
-        let days = parseDays(from: collectedAnswers.answers(for: "schedule"))
-        let cardioTypes = parseCardioTypes(from: collectedAnswers.answers(for: "cardio"))
+        let experience = parseExperience(from: backgroundAnswers)
+        let equipment = parseEquipment(from: equipmentAnswers)
+        let days = parseDays(from: scheduleAnswers)
+        let cardioTypes = parseCardioTypes(from: workoutTypeAnswers + constraintAnswers)
+        let timePerWorkout = parseSessionDuration(
+            from: workoutTypeAnswers + scheduleAnswers + equipmentAnswers + backgroundAnswers + constraintAnswers
+        )
 
         // Custom text from non-standard answers
         let customWorkoutTypes = workoutTypeAnswers.filter { !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed"].contains($0) }
         let customWorkoutType = customWorkoutTypes.isEmpty ? nil : customWorkoutTypes.joined(separator: ", ")
-        let customExperience = collectedAnswers.answers(for: "experience").first { !["Beginner", "Intermediate", "Advanced"].contains($0) }
-        let customEquipment = collectedAnswers.answers(for: "equipment").first { !["Full Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"].contains($0) }
-        let customModalities = collectedAnswers.answers(for: "cardio").filter {
-            !["Running", "Cycling", "Swimming", "Climbing", "Rowing", "Walking", "Jump Rope", "Anything works"].contains($0)
+        let customExperience = backgroundAnswers.first { !["Beginner", "Returning", "Intermediate", "Advanced"].contains($0) }
+        let customEquipment = equipmentAnswers.first { !["Full Gym", "Home - Dumbbells", "Home - Full Setup", "Bodyweight Only"].contains($0) }
+        let customModalities = (workoutTypeAnswers + constraintAnswers).filter {
+            !["Strength", "Cardio", "HIIT", "Flexibility", "Mixed", "Climbing", "Yoga", "Pilates", "Mobility", "Running", "Cycling", "Swimming", "Rowing", "Walking", "Jump Rope", "Need cardio included", "Let Trai decide"].contains($0)
         }
+        let preferences = buildPreferenceSummary(
+            scheduleAnswers: scheduleAnswers,
+            backgroundAnswers: backgroundAnswers,
+            constraintAnswers: constraintAnswers
+        )
+        let conversationContext = buildConversationContext(
+            workoutTypeAnswers: workoutTypeAnswers,
+            scheduleAnswers: scheduleAnswers,
+            equipmentAnswers: equipmentAnswers,
+            backgroundAnswers: backgroundAnswers,
+            constraintAnswers: constraintAnswers
+        )
 
         return WorkoutPlanGenerationRequest(
             name: profile?.name ?? "User",
@@ -815,17 +839,18 @@ struct WorkoutPlanChatFlow: View {
             experienceLevel: experience,
             equipmentAccess: equipment,
             availableDays: days,
-            timePerWorkout: 45,
+            timePerWorkout: timePerWorkout,
             preferredSplit: nil,
             cardioTypes: cardioTypes.isEmpty ? nil : cardioTypes,
             customWorkoutType: customWorkoutType,
             customExperience: customExperience,
             customEquipment: customEquipment,
             customCardioType: customModalities.isEmpty ? nil : customModalities.joined(separator: ", "),
-            specificGoals: collectedAnswers.answers(for: "goals").isEmpty ? nil : collectedAnswers.answers(for: "goals"),
+            specificGoals: nil,
             weakPoints: nil,
-            injuries: collectedAnswers.answers(for: "injuries").first,
-            preferences: nil
+            injuries: extractLimitations(from: constraintAnswers),
+            preferences: preferences,
+            conversationContext: conversationContext
         )
     }
 
@@ -861,7 +886,8 @@ struct WorkoutPlanChatFlow: View {
                 workoutType: primaryWorkoutType,
                 selectedWorkoutTypes: inferredWorkoutTypes.isEmpty ? nil : inferredWorkoutTypes,
                 preferredSplit: preferredSplit,
-                cardioTypes: inferredCardioTypes.isEmpty ? nil : inferredCardioTypes
+                cardioTypes: inferredCardioTypes.isEmpty ? nil : inferredCardioTypes,
+                timePerWorkout: inferSessionDuration(from: currentPlan)
             )
         }
 
@@ -876,7 +902,7 @@ struct WorkoutPlanChatFlow: View {
             experienceLevel: nil,
             equipmentAccess: nil,
             availableDays: currentPlan?.daysPerWeek,
-            timePerWorkout: 45,
+            timePerWorkout: inferSessionDuration(from: currentPlan),
             preferredSplit: preferredSplit,
             cardioTypes: inferredCardioTypes.isEmpty ? nil : inferredCardioTypes,
             customWorkoutType: nil,
@@ -886,7 +912,8 @@ struct WorkoutPlanChatFlow: View {
             specificGoals: nil,
             weakPoints: nil,
             injuries: nil,
-            preferences: nil
+            preferences: nil,
+            conversationContext: nil
         )
     }
 
@@ -994,6 +1021,7 @@ struct WorkoutPlanChatFlow: View {
         guard let answer = answers.first else { return nil }
         switch answer {
         case "Beginner": return .beginner
+        case "Returning": return .intermediate
         case "Intermediate": return .intermediate
         case "Advanced": return .advanced
         default: return nil
@@ -1013,15 +1041,29 @@ struct WorkoutPlanChatFlow: View {
 
     private func parseDays(from answers: [String]) -> Int? {
         guard let answer = answers.first else { return nil }
-        if answer == "Flexible" { return nil }
-        // Extract number from "2 days", "3 days", etc.
-        let digits = answer.filter { $0.isNumber }
-        return Int(digits)
+        let lowered = answer.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if lowered == "flexible" { return nil }
+
+        let numberTokens = numericTokens(in: lowered)
+        guard numberTokens.count == 1 else { return nil }
+        guard lowered.contains("day")
+            || lowered.contains("per week")
+            || lowered.contains("/week")
+            || lowered.contains("x/week")
+            || lowered.contains("x week")
+        else {
+            return nil
+        }
+
+        let days = numberTokens[0]
+        guard (1...7).contains(days) else { return nil }
+        return days
     }
 
     private func parseCardioTypes(from answers: [String]) -> [WorkoutPlanGenerationRequest.CardioType] {
         answers.compactMap { answer in
             switch answer {
+            case "Cardio", "Need cardio included": return .anyCardio
             case "Running": return .running
             case "Cycling": return .cycling
             case "Swimming": return .swimming
@@ -1033,6 +1075,124 @@ struct WorkoutPlanChatFlow: View {
             default: return nil
             }
         }
+    }
+
+    private func parseSessionDuration(from answers: [String]) -> Int? {
+        for answer in answers {
+            let lowered = answer.lowercased()
+            let numberTokens = numericTokens(in: lowered)
+            guard numberTokens.count == 1 else { continue }
+            let value = numberTokens[0]
+            if lowered.contains("hour") {
+                return value * 60
+            }
+            if lowered.contains("min") || lowered.contains("minute") {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func numericTokens(in text: String) -> [Int] {
+        text.split { !$0.isNumber }.compactMap { Int($0) }
+    }
+
+    private func acceptedSessionDuration(for plan: WorkoutPlan) -> Int? {
+        parseSessionDuration(
+            from: collectedAnswers.answers(for: "workoutType")
+                + collectedAnswers.answers(for: "schedule")
+                + collectedAnswers.answers(for: "equipment")
+                + collectedAnswers.answers(for: "background")
+                + collectedAnswers.answers(for: "constraints")
+        ) ?? inferSessionDuration(from: plan)
+    }
+
+    private func buildPreferenceSummary(
+        scheduleAnswers: [String],
+        backgroundAnswers: [String],
+        constraintAnswers: [String]
+    ) -> String? {
+        var notes: [String] = []
+        let customSchedule = scheduleAnswers.filter { !["2 days", "3 days", "4 days", "5 days", "Flexible"].contains($0) }
+        if !customSchedule.isEmpty {
+            notes.append("Schedule details: \(customSchedule.joined(separator: ", "))")
+        }
+        let customBackground = backgroundAnswers.filter { !["Beginner", "Returning", "Intermediate", "Advanced"].contains($0) }
+        if !customBackground.isEmpty {
+            notes.append("Training background: \(customBackground.joined(separator: ", "))")
+        }
+        let customConstraints = constraintAnswers.filter {
+            !["Short sessions", "Need cardio included", "Low impact", "Want variety", "Working around an injury", "Let Trai decide"].contains($0)
+        }
+        if !customConstraints.isEmpty {
+            notes.append("Constraints and preferences: \(customConstraints.joined(separator: ", "))")
+        }
+        return notes.isEmpty ? nil : notes.joined(separator: " | ")
+    }
+
+    private func buildConversationContext(
+        workoutTypeAnswers: [String],
+        scheduleAnswers: [String],
+        equipmentAnswers: [String],
+        backgroundAnswers: [String],
+        constraintAnswers: [String]
+    ) -> [String]? {
+        var context: [String] = []
+
+        if !workoutTypeAnswers.isEmpty {
+            context.append("Requested training styles: \(workoutTypeAnswers.joined(separator: ", "))")
+        }
+        if !scheduleAnswers.isEmpty {
+            context.append("Schedule context: \(scheduleAnswers.joined(separator: ", "))")
+        }
+        if !equipmentAnswers.isEmpty {
+            context.append("Equipment context: \(equipmentAnswers.joined(separator: ", "))")
+        }
+        if !backgroundAnswers.isEmpty {
+            context.append("Training background: \(backgroundAnswers.joined(separator: ", "))")
+        }
+        if !constraintAnswers.isEmpty {
+            context.append("Goals, constraints, or preferences: \(constraintAnswers.joined(separator: ", "))")
+        }
+
+        return context.isEmpty ? nil : context
+    }
+
+    private func extractLimitations(from answers: [String]) -> String? {
+        let explicitNotes = answers.filter { answer in
+            let lowered = answer.lowercased()
+            return lowered.contains("injur")
+                || lowered.contains("pain")
+                || lowered.contains("issue")
+                || lowered.contains("problem")
+                || lowered.contains("bad ")
+                || lowered.contains("limited")
+                || lowered.contains("recover")
+                || lowered.contains("can't")
+                || lowered.contains("cant")
+        }
+
+        if !explicitNotes.isEmpty {
+            return explicitNotes.joined(separator: ", ")
+        }
+
+        if answers.contains("Working around an injury") {
+            return "Working around an injury"
+        }
+
+        if answers.contains("Low impact") {
+            return "Prefers lower-impact training"
+        }
+
+        return nil
+    }
+
+    private func inferSessionDuration(from plan: WorkoutPlan?) -> Int? {
+        guard let plan, !plan.templates.isEmpty else { return nil }
+        let durations = plan.templates.map(\.estimatedDurationMinutes).filter { $0 > 0 }
+        guard !durations.isEmpty else { return nil }
+        let total = durations.reduce(0, +)
+        return Int((Double(total) / Double(durations.count)).rounded())
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {

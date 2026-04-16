@@ -192,19 +192,21 @@ struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
 /// Plan update suggested by AI for user confirmation
 struct PlanUpdateSuggestionEntry: Codable, Sendable, Identifiable {
     var id: String {
-        "\(calories ?? 0)-\(proteinGrams ?? 0)-\(carbsGrams ?? 0)-\(fatGrams ?? 0)-\(goal ?? "")"
+        "\(calories ?? 0)-\(proteinGrams ?? 0)-\(carbsGrams ?? 0)-\(fatGrams ?? 0)-\(fiberGrams ?? 0)-\(sugarGrams ?? 0)-\(goal ?? "")"
     }
     let calories: Int?
     let proteinGrams: Int?
     let carbsGrams: Int?
     let fatGrams: Int?
+    let fiberGrams: Int?
+    let sugarGrams: Int?
     let goal: String?
     let rationale: String?
 
     /// Whether this suggestion contains any changes
     var hasChanges: Bool {
         calories != nil || proteinGrams != nil || carbsGrams != nil ||
-        fatGrams != nil || goal != nil
+        fatGrams != nil || fiberGrams != nil || sugarGrams != nil || goal != nil
     }
 
     /// Formatted goal display name
@@ -229,6 +231,8 @@ struct PlanUpdateSuggestionEntry: Codable, Sendable, Identifiable {
         proteinGrams: Int? = nil,
         carbsGrams: Int? = nil,
         fatGrams: Int? = nil,
+        fiberGrams: Int? = nil,
+        sugarGrams: Int? = nil,
         goal: String? = nil,
         rationale: String? = nil
     ) {
@@ -236,6 +240,8 @@ struct PlanUpdateSuggestionEntry: Codable, Sendable, Identifiable {
         self.proteinGrams = proteinGrams
         self.carbsGrams = carbsGrams
         self.fatGrams = fatGrams
+        self.fiberGrams = fiberGrams
+        self.sugarGrams = sugarGrams
         self.goal = goal
         self.rationale = rationale
     }

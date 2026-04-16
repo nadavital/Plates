@@ -115,12 +115,20 @@ struct TraiApp: App {
                     isStoredInMemoryOnly: true,
                     cloudKitDatabase: .none
                 )
-            } else {
+            } else if Self.hasAccessibleSharedGroupContainer {
                 modelConfiguration = ModelConfiguration(
                     schema: schema,
                     isStoredInMemoryOnly: false,
                     groupContainer: .identifier(SharedStorageKeys.AppGroup.suiteName),
                     cloudKitDatabase: .automatic
+                )
+            } else {
+                // Keep simulator/test persistence working even when app-group
+                // entitlements are unavailable in the current build environment.
+                modelConfiguration = ModelConfiguration(
+                    schema: schema,
+                    isStoredInMemoryOnly: false,
+                    cloudKitDatabase: .none
                 )
             }
 
@@ -498,6 +506,12 @@ struct TraiApp: App {
         } catch {
             // Handle silently to avoid blocking app startup.
         }
+    }
+
+    private static var hasAccessibleSharedGroupContainer: Bool {
+        FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: SharedStorageKeys.AppGroup.suiteName
+        ) != nil
     }
 
     private static func primeSharedStoreDirectoryIfNeeded(usesInMemoryStore: Bool) {

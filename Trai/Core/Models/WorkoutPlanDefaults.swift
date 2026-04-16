@@ -21,7 +21,7 @@ extension WorkoutPlan {
             request: request,
             equipment: equipment,
             experience: experience,
-            duration: request.timePerWorkout
+            duration: request.fallbackSessionDuration
         )
 
         let rationale = buildDefaultRationale(request: request, splitType: splitType)

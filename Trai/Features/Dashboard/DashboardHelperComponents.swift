@@ -128,6 +128,33 @@ struct QuickActionButton: View {
     }
 }
 
+struct ShortcutChipButton: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            HapticManager.lightTap()
+            action()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.traiLabel(12))
+                Text(title)
+                    .font(.traiLabel(12))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(tint.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(TraiPressStyle(scale: 0.96))
+    }
+}
+
 struct ChatWithTraiCard: View {
     let isUnlocked: Bool
     let action: () -> Void

@@ -22,7 +22,7 @@ struct WorkoutPlanGenerationRequest {
     let experienceLevel: ExperienceLevel?
     let equipmentAccess: EquipmentAccess?
     let availableDays: Int?  // nil = flexible/as available
-    let timePerWorkout: Int
+    let timePerWorkout: Int?
 
     // Conditional/optional preferences
     let preferredSplit: PreferredSplit?
@@ -39,6 +39,7 @@ struct WorkoutPlanGenerationRequest {
     let weakPoints: [String]?         // "shoulders are lagging", "weak core"
     let injuries: String?             // "bad knee", "lower back issues"
     let preferences: String?          // "I love deadlifts", "hate burpees"
+    let conversationContext: [String]? // Labeled notes from the intake conversation
 
     /// Whether cardio should be included in the plan
     var includesCardio: Bool {
@@ -46,6 +47,12 @@ struct WorkoutPlanGenerationRequest {
             return types.contains(.cardio) || types.contains(.mixed) || types.contains(.hiit)
         }
         return workoutType == .cardio || workoutType == .mixed || workoutType == .hiit
+    }
+
+    /// Safe fallback when we need a concrete duration for non-AI defaults.
+    var fallbackSessionDuration: Int {
+        let bounded = max(20, min(timePerWorkout ?? 45, 120))
+        return bounded
     }
 
     // MARK: - Workout Type

@@ -393,6 +393,8 @@ struct ChatView: View {
             currentProtein: profile?.dailyProteinGoal,
             currentCarbs: profile?.dailyCarbsGoal,
             currentFat: profile?.dailyFatGoal,
+            currentFiber: profile?.dailyFiberGoal,
+            currentSugar: profile?.dailySugarGoal,
             enabledMacros: enabledMacrosValue,
             planRecommendation: pendingPlanRecommendation,
             planRecommendationMessage: planRecommendationMessage,
@@ -497,6 +499,8 @@ struct ChatView: View {
                         currentProtein: profile?.dailyProteinGoal ?? 150,
                         currentCarbs: profile?.dailyCarbsGoal ?? 200,
                         currentFat: profile?.dailyFatGoal ?? 65,
+                        currentFiber: profile?.dailyFiberGoal ?? 30,
+                        currentSugar: profile?.dailySugarGoal ?? 50,
                         onAcceptPlan: { plan, message in acceptPlanSuggestion(plan, for: message) },
                         viewingFoodEntry: viewingFoodEntry,
                         viewingLoggedMealId: $viewingLoggedMealId,
@@ -1036,6 +1040,8 @@ private struct ChatRootView: View {
     let currentProtein: Int
     let currentCarbs: Int
     let currentFat: Int
+    let currentFiber: Int
+    let currentSugar: Int
     let onAcceptPlan: (PlanUpdateSuggestionEntry, ChatMessage) -> Void
     let viewingFoodEntry: FoodEntry?
     @Binding var viewingLoggedMealId: UUID?
@@ -1101,6 +1107,8 @@ private struct ChatRootView: View {
             currentProtein: currentProtein,
             currentCarbs: currentCarbs,
             currentFat: currentFat,
+            currentFiber: currentFiber,
+            currentSugar: currentSugar,
             enabledMacros: enabledMacrosValue
         ) { plan, message in
             onAcceptPlan(plan, message)
@@ -1125,6 +1133,8 @@ private struct ChatContentSection: View {
     let currentProtein: Int?
     let currentCarbs: Int?
     let currentFat: Int?
+    let currentFiber: Int?
+    let currentSugar: Int?
     let enabledMacros: Set<MacroType>
     let planRecommendation: PlanRecommendation?
     let planRecommendationMessage: String?
@@ -1166,6 +1176,8 @@ private struct ChatContentSection: View {
             currentProtein: currentProtein,
             currentCarbs: currentCarbs,
             currentFat: currentFat,
+            currentFiber: currentFiber,
+            currentSugar: currentSugar,
             enabledMacros: enabledMacros,
             planRecommendation: planRecommendation,
             planRecommendationMessage: planRecommendationMessage,

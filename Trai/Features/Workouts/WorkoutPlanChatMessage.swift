@@ -56,12 +56,10 @@ struct WorkoutPlanFlowMessage: Identifiable {
 /// All the questions Trai asks during workout plan creation
 enum WorkoutPlanQuestion: String, CaseIterable {
     case workoutType
-    case experience
-    case equipment
     case schedule
-    case cardio      // Conditional: only for cardio/mixed/hiit
-    case goals
-    case injuries
+    case equipment
+    case background
+    case constraints
 
     var config: TraiQuestionConfig {
         switch self {
@@ -83,17 +81,19 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 placeholder: "Or describe any custom split or activity mix..."
             )
 
-        case .experience:
+        case .schedule:
             return TraiQuestionConfig(
                 id: rawValue,
-                question: "How would you describe your experience level?",
+                question: "What does your week realistically look like for training?",
                 suggestions: [
-                    TraiSuggestion("Beginner", subtitle: "New to working out"),
-                    TraiSuggestion("Intermediate", subtitle: "1-3 years of training"),
-                    TraiSuggestion("Advanced", subtitle: "3+ years, solid form")
+                    TraiSuggestion("2 days", subtitle: "Keep it minimal and sustainable"),
+                    TraiSuggestion("3 days", subtitle: "A balanced weekly rhythm"),
+                    TraiSuggestion("4 days", subtitle: "More structure and variety"),
+                    TraiSuggestion("5 days", subtitle: "High-frequency training week"),
+                    TraiSuggestion("Flexible", subtitle: "Let Trai adapt the structure")
                 ],
                 selectionMode: .single,
-                placeholder: "Or tell me more about your background..."
+                placeholder: "Mention your schedule, session length, or anything else that matters..."
             )
 
         case .equipment:
@@ -110,94 +110,41 @@ enum WorkoutPlanQuestion: String, CaseIterable {
                 placeholder: "Or describe what you have..."
             )
 
-        case .schedule:
+        case .background:
             return TraiQuestionConfig(
                 id: rawValue,
-                question: "How many days per week can you train?",
+                question: "What should I know about your training background?",
                 suggestions: [
-                    TraiSuggestion("2 days"),
-                    TraiSuggestion("3 days"),
-                    TraiSuggestion("4 days"),
-                    TraiSuggestion("5 days"),
-                    TraiSuggestion("6 days"),
-                    TraiSuggestion("Flexible")
+                    TraiSuggestion("Beginner", subtitle: "I need simple, approachable structure"),
+                    TraiSuggestion("Returning", subtitle: "I’ve trained before but I’m rebuilding"),
+                    TraiSuggestion("Intermediate", subtitle: "I know the basics and can handle volume"),
+                    TraiSuggestion("Advanced", subtitle: "I want something specific and challenging")
                 ],
                 selectionMode: .single,
-                placeholder: "Or tell me about your schedule..."
+                placeholder: "Tell me about your experience, current fitness, or sport background..."
             )
 
-        case .cardio:
+        case .constraints:
             return TraiQuestionConfig(
                 id: rawValue,
-                question: "Any specific modalities you want included?",
+                question: "Anything else I should build around?",
                 suggestions: [
-                    TraiSuggestion("Running"),
-                    TraiSuggestion("Cycling"),
-                    TraiSuggestion("Swimming"),
-                    TraiSuggestion("Climbing"),
-                    TraiSuggestion("Yoga"),
-                    TraiSuggestion("Pilates"),
-                    TraiSuggestion("Rowing"),
-                    TraiSuggestion("Walking"),
-                    TraiSuggestion("Anything works", isSkip: true)
+                    TraiSuggestion("Short sessions", subtitle: "Keep workouts efficient"),
+                    TraiSuggestion("Need cardio included", subtitle: "Make conditioning part of the plan"),
+                    TraiSuggestion("Low impact", subtitle: "Be mindful of joints and recovery"),
+                    TraiSuggestion("Want variety", subtitle: "Avoid repetitive weeks"),
+                    TraiSuggestion("Working around an injury", subtitle: "Adjust exercise choices"),
+                    TraiSuggestion("Let Trai decide", isSkip: true)
                 ],
                 selectionMode: .multiple,
-                placeholder: "Or describe the modalities you want..."
+                placeholder: "Share goals, limitations, favorite activities, or anything Trai should optimize around..."
             )
-
-        case .goals:
-            return TraiQuestionConfig(
-                id: rawValue,
-                question: "Do you have any specific fitness goals?",
-                suggestions: goalSuggestions,
-                selectionMode: .multiple,
-                placeholder: "Type your goal...",
-                skipText: "No specific goal"
-            )
-
-        case .injuries:
-            return TraiQuestionConfig(
-                id: rawValue,
-                question: "Any injuries or limitations I should know about?",
-                suggestions: [
-                    TraiSuggestion("Bad knee"),
-                    TraiSuggestion("Lower back issues"),
-                    TraiSuggestion("Shoulder problem"),
-                    TraiSuggestion("Wrist pain"),
-                    TraiSuggestion("No injuries", isSkip: true)
-                ],
-                selectionMode: .single,
-                placeholder: "Describe any limitations..."
-            )
-
         }
-    }
-
-    // Dynamic suggestions based on workout type
-    private var goalSuggestions: [TraiSuggestion] {
-        [
-            TraiSuggestion("Do a pull-up"),
-            TraiSuggestion("Bench my bodyweight"),
-            TraiSuggestion("See my abs"),
-            TraiSuggestion("Get stronger overall"),
-            TraiSuggestion("Build muscle"),
-            TraiSuggestion("Improve endurance"),
-            TraiSuggestion("No specific goal", isSkip: true)
-        ]
     }
 
     /// Whether this question should be shown based on user's previous answers
     func shouldShow(given answers: TraiCollectedAnswers) -> Bool {
-        switch self {
-        case .cardio:
-            // Show the modality follow-up for anything beyond pure strength.
-            let workoutTypes = answers.answers(for: WorkoutPlanQuestion.workoutType.rawValue)
-            guard !workoutTypes.isEmpty else { return false }
-            return !workoutTypes.allSatisfy { $0 == "Strength" }
-
-        default:
-            return true
-        }
+        true
     }
 }
 

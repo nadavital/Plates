@@ -145,27 +145,49 @@ private struct MacroRingsDisplay: View {
     }
 
     var body: some View {
-        HStack(spacing: 20) {
-            ForEach(orderedMacros) { macro in
-                MacroRing(
-                    name: macro.displayName,
-                    current: macroValues[macro] ?? 0,
-                    goal: Double(macroGoals[macro] ?? 100),
-                    color: macro.color,
-                    unit: "g"
-                )
+        GeometryReader { geometry in
+            let layout = ringLayout(for: geometry.size.width)
+
+            HStack(spacing: layout.spacing) {
+                ForEach(orderedMacros) { macro in
+                    MacroRing(
+                        name: macro.displayName,
+                        compactLabel: macro.shortName,
+                        current: macroValues[macro] ?? 0,
+                        goal: Double(macroGoals[macro] ?? 100),
+                        color: macro.color,
+                        unit: "g",
+                        diameter: layout.diameter,
+                        prefersCompactLabel: layout.useCompactLabels
+                    )
+                    .frame(width: layout.itemWidth)
+                }
             }
         }
+        .frame(height: orderedMacros.count >= 5 ? 126 : 138)
         .traiCard()
+    }
+
+    private func ringLayout(for availableWidth: CGFloat) -> (itemWidth: CGFloat, diameter: CGFloat, spacing: CGFloat, useCompactLabels: Bool) {
+        let count = max(CGFloat(orderedMacros.count), 1)
+        let spacing: CGFloat = count >= 5 ? 8 : 12
+        let totalSpacing = spacing * max(count - 1, 0)
+        let itemWidth = max((availableWidth - totalSpacing) / count, 48)
+        let diameter = min(80, max(52, itemWidth - 6))
+        let useCompactLabels = itemWidth < 66
+        return (itemWidth, diameter, spacing, useCompactLabels)
     }
 }
 
 private struct MacroRing: View {
     let name: String
+    let compactLabel: String
     let current: Double
     let goal: Double
     let color: Color
     let unit: String
+    let diameter: CGFloat
+    let prefersCompactLabel: Bool
 
     private var progress: Double {
         min(current / goal, 1.0)
@@ -173,6 +195,10 @@ private struct MacroRing: View {
 
     private var remaining: Double {
         max(goal - current, 0)
+    }
+
+    private var labelText: String {
+        prefersCompactLabel ? compactLabel : name
     }
 
     var body: some View {
@@ -189,7 +215,7 @@ private struct MacroRing: View {
 
                 VStack(spacing: 2) {
                     Text("\(Int(current))")
-                        .font(.title2)
+                        .font(.system(size: diameter < 62 ? 18 : 22, weight: .bold, design: .rounded))
                         .bold()
 
                     Text(unit)
@@ -197,15 +223,19 @@ private struct MacroRing: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 80, height: 80)
+            .frame(width: diameter, height: diameter)
 
-            Text(name)
+            Text(labelText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
 
             Text("\(Int(remaining))\(unit) left")
                 .font(.caption2)
                 .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
     }
 }

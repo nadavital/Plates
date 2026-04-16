@@ -39,7 +39,7 @@ extension AIPromptBuilder {
         prompt += """
 
         - Available Days Per Week: \(request.availableDays.map { "\($0)" } ?? "Flexible")
-        - Time Per Session: \(request.timePerWorkout) minutes
+        - Preferred Session Duration: \(request.timePerWorkout.map { "\($0) minutes" } ?? "Not fixed - choose what fits best")
         - Equipment Access: \(request.equipmentAccess?.displayName ?? "Not specified")\(request.customEquipment.map { " (Custom: \($0))" } ?? "")
         - Experience Level: \(request.experienceLevel?.displayName ?? "Not specified")\(request.customExperience.map { " (Custom: \($0))" } ?? "")
         """
@@ -79,22 +79,28 @@ extension AIPromptBuilder {
             prompt += "\n- Additional Preferences: \(prefs)"
         }
 
+        if let context = request.conversationContext, !context.isEmpty {
+            prompt += "\n- Intake Notes:"
+            for entry in context {
+                prompt += "\n  - \(entry)"
+            }
+        }
+
         prompt += """
 
 
-        RECOMMENDED SPLIT: \(request.recommendedSplit.displayName)
-        (Based on \(request.availableDays.map { "\($0)" } ?? "flexible") days/week, \(request.workoutType.displayName), and \(request.experienceLevel?.rawValue ?? "intermediate") experience)
-
         INSTRUCTIONS:
         Create a personalized \(request.workoutType.displayName.lowercased()) plan with:
-        1. Choose an appropriate split type for their schedule, training type, and experience
-        2. Design workout templates with specific exercises matching their training type
-        3. Include 4-8 exercises per workout template
-        4. Specify sets and rep ranges appropriate for their goal and training type
-        5. Include a progression strategy appropriate for their experience level
-        6. Add practical guidelines for warm-up, rest periods, and recovery
-        7. Address any specific goals, weak points, or injuries mentioned
-        8. For EVERY workout template, set:
+        1. You have full control over the structure. Do NOT force a standard gym split unless it genuinely fits the user.
+        2. Custom, activity-first, hybrid, skill-based, and nontraditional weekly structures are all valid.
+        3. Choose the split, session count, and session durations that best fit the user. If duration is unspecified, decide what makes each session realistic.
+        4. Design workout templates with exercises OR activities that match the user's actual preferences, equipment, and constraints.
+        5. Include 4-8 exercises per template when it is an exercise-based session. For activity-based sessions, structure the session in the most natural way for that modality.
+        6. Specify sets, reps, intervals, pace guidance, or effort targets appropriate for the training type.
+        7. Include a progression strategy appropriate for their experience level and goals.
+        8. Add practical guidelines for warm-up, rest periods, recovery, and any important safety considerations.
+        9. Address any specific goals, weak points, injuries, and conversation notes mentioned.
+        10. For EVERY workout template, set:
            - sessionType: one of strength, cardio, hiit, climbing, yoga, pilates, flexibility, mobility, mixed, recovery, custom
            - focusAreas: short labels describing the session focus (e.g. ["Push", "Chest"], ["Yoga Flow", "Recovery"], ["Climbing", "Technique"])
 
@@ -105,11 +111,11 @@ extension AIPromptBuilder {
         - For bodyweight only: Use bodyweight exercises only
 
         TRAINING TYPE CONSIDERATIONS:
-        - Strength: Focus on compound lifts with lower reps (3-6)
-        - Cardio: Include running, cycling, or other endurance work as dedicated sessions
-        - HIIT: Design high-intensity interval circuits
-        - Flexibility: Include yoga poses, stretches, mobility work
-        - Mixed: MUST include BOTH strength training AND cardio sessions in the same plan
+        - Strength: Focus on appropriate strength or hypertrophy work for their goal, not just generic powerlifting templates
+        - Cardio: Include dedicated endurance or conditioning sessions when cardio is part of the request
+        - HIIT: Design high-intensity interval circuits only if they fit the user's goal and recovery capacity
+        - Flexibility: Include yoga, mobility, or recovery-focused sessions when requested
+        - Mixed: Blend the requested modalities in a sustainable week, but do not assume it must look like a classic gym split
         """
 
         // Add specific cardio instruction when user selected cardio
@@ -268,6 +274,9 @@ extension AIPromptBuilder {
         }
         if let cardio = request.cardioTypes, !cardio.isEmpty {
             prompt += "\n- Cardio Preferences: \(cardio.map { $0.displayName }.joined(separator: ", "))"
+        }
+        if let duration = request.timePerWorkout {
+            prompt += "\n- Current Plan Session Duration: \(duration) minutes"
         }
 
         prompt += """

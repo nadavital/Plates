@@ -156,6 +156,12 @@ extension ChatView {
         if let fat = plan.fatGrams {
             profile.dailyFatGoal = fat
         }
+        if let fiber = plan.fiberGrams {
+            profile.dailyFiberGoal = fiber
+        }
+        if let sugar = plan.sugarGrams {
+            profile.dailySugarGoal = sugar
+        }
         if let goalString = plan.goal {
             // Convert goal string to GoalType (handles various formats)
             let normalizedGoal = goalString.lowercased().replacing("_", with: "")
