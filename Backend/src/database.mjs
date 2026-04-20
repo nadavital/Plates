@@ -163,12 +163,31 @@ function applySQLiteMigrations(db) {
       FOREIGN KEY(quota_period_id) REFERENCES quota_periods(id) ON DELETE SET NULL
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS subscription_overrides (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      plan TEXT NOT NULL,
+      status TEXT NOT NULL,
+      source TEXT NOT NULL,
+      renews_at TEXT,
+      expires_at TEXT,
+      reason TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      revoked_at TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
   db.exec('CREATE INDEX IF NOT EXISTS usage_ledger_user_created_at_idx ON usage_ledger (user_id, created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS usage_ledger_created_at_idx ON usage_ledger (created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS ai_requests_user_created_at_idx ON ai_requests (user_id, created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS ai_requests_created_at_idx ON ai_requests (created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS ai_requests_provider_model_created_at_idx ON ai_requests (provider, model, created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS subscription_overrides_user_active_idx ON subscription_overrides (user_id, revoked_at, expires_at, updated_at)');
   backfillSubscriptionSourcesSQLite(db);
+  backfillSubscriptionOverridesSQLite(db);
 }
 
 function ensureSQLiteColumn(db, tableName, columnName, columnDefinition) {
@@ -240,7 +259,29 @@ async function applyPostgresMigrations(db) {
     CREATE INDEX IF NOT EXISTS ai_requests_provider_model_created_at_idx
       ON ai_requests (provider, model, created_at)
   `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS subscription_overrides (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      plan TEXT NOT NULL,
+      status TEXT NOT NULL,
+      source TEXT NOT NULL,
+      renews_at TEXT,
+      expires_at TEXT,
+      reason TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      revoked_at TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS subscription_overrides_user_active_idx
+      ON subscription_overrides (user_id, revoked_at, expires_at, updated_at)
+  `);
   await backfillSubscriptionSourcesPostgres(db);
+  await backfillSubscriptionOverridesPostgres(db);
 }
 
 function backfillSubscriptionSourcesSQLite(db) {
@@ -281,6 +322,66 @@ async function backfillSubscriptionSourcesPostgres(db) {
           source_transaction_id IS NOT NULL
           OR plan <> 'free'
         )
+      )
+  `);
+}
+
+function backfillSubscriptionOverridesSQLite(db) {
+  db.exec(`
+    INSERT INTO subscription_overrides (
+      id, user_id, plan, status, source, renews_at, expires_at, reason, created_by, created_at, updated_at, revoked_at
+    )
+    SELECT
+      'sov_legacy_' || lower(hex(randomblob(12))),
+      s.user_id,
+      s.plan,
+      s.status,
+      s.source,
+      s.renews_at,
+      s.expires_at,
+      'migrated legacy subscription override',
+      'migration',
+      s.updated_at,
+      s.updated_at,
+      NULL
+    FROM subscriptions s
+    WHERE s.plan != 'free'
+      AND s.source IN ('adminGrant', 'promo', 'developer')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM subscription_overrides o
+        WHERE o.user_id = s.user_id
+          AND o.revoked_at IS NULL
+      )
+  `);
+}
+
+async function backfillSubscriptionOverridesPostgres(db) {
+  await db.query(`
+    INSERT INTO subscription_overrides (
+      id, user_id, plan, status, source, renews_at, expires_at, reason, created_by, created_at, updated_at, revoked_at
+    )
+    SELECT
+      'sov_legacy_' || md5(random()::text || clock_timestamp()::text || s.user_id),
+      s.user_id,
+      s.plan,
+      s.status,
+      s.source,
+      s.renews_at,
+      s.expires_at,
+      'migrated legacy subscription override',
+      'migration',
+      s.updated_at,
+      s.updated_at,
+      NULL
+    FROM subscriptions s
+    WHERE s.plan <> 'free'
+      AND s.source IN ('adminGrant', 'promo', 'developer')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM subscription_overrides o
+        WHERE o.user_id = s.user_id
+          AND o.revoked_at IS NULL
       )
   `);
 }

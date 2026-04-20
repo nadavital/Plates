@@ -9,6 +9,7 @@ import SwiftUI
 
 struct FoodCameraReviewView: View {
     let image: UIImage?
+    let inputSource: FoodLogInputSource
     @Binding var description: String
     let isAnalyzing: Bool
     let analysisResult: FoodAnalysis?
@@ -43,7 +44,12 @@ struct FoodCameraReviewView: View {
             fiberGrams: result.fiberGrams,
             sugarGrams: result.sugarGrams,
             servingSize: result.servingSize,
-            emoji: result.emoji
+            emoji: result.emoji,
+            components: result.components?.map(SuggestedFoodComponent.init(component:)) ?? [],
+            mealKind: result.mealKind,
+            notes: result.notes,
+            confidence: result.confidence,
+            schemaVersion: 2
         )
     }
 
@@ -58,13 +64,12 @@ struct FoodCameraReviewView: View {
                         .frame(height: 300)
                         .clipShape(.rect(cornerRadius: 16))
                 } else {
-                    // Text-only mode header
                     VStack(spacing: 16) {
-                        Image(systemName: "text.bubble.fill")
+                        Image(systemName: headerSystemImage)
                             .font(.system(size: 50))
                             .foregroundStyle(.tint)
 
-                        Text("Analyzing from description")
+                        Text(headerTitle)
                             .font(.headline)
                             .foregroundStyle(.secondary)
                     }
@@ -76,7 +81,7 @@ struct FoodCameraReviewView: View {
 
                 // Description input
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(isTextOnly ? "Description" : "Description (optional)")
+                    Text(descriptionLabel)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
@@ -85,7 +90,7 @@ struct FoodCameraReviewView: View {
                         .padding()
                         .background(Color(.secondarySystemBackground))
                         .clipShape(.rect(cornerRadius: 12))
-                        .disabled(isTextOnly && analysisResult != nil)
+                        .disabled(isTextOnly && analysisResult != nil && inputSource != .memorySuggestion)
                 }
 
                 // Analysis section
@@ -134,7 +139,7 @@ struct FoodCameraReviewView: View {
                 }
 
                 // Initial analyze button
-                if analysisResult == nil && errorMessage == nil {
+                if currentSuggestion == nil && errorMessage == nil {
                     Button(action: onAnalyze) {
                         if isAnalyzing {
                             HStack {
@@ -163,6 +168,37 @@ struct FoodCameraReviewView: View {
             }
             refinementText = ""
             isRefinementFocused = false
+        }
+    }
+
+    private var headerTitle: String {
+        switch inputSource {
+        case .memorySuggestion:
+            return "Using remembered food"
+        case .description:
+            return "Analyzing from description"
+        default:
+            return "Review your food"
+        }
+    }
+
+    private var headerSystemImage: String {
+        switch inputSource {
+        case .memorySuggestion:
+            return "sparkles.rectangle.stack.fill"
+        case .description:
+            return "text.bubble.fill"
+        default:
+            return "fork.knife.circle.fill"
+        }
+    }
+
+    private var descriptionLabel: String {
+        switch inputSource {
+        case .memorySuggestion:
+            return "Notes (optional)"
+        default:
+            return isTextOnly ? "Description" : "Description (optional)"
         }
     }
 

@@ -24,6 +24,7 @@ const trustedAppStoreRoots = loadTrustedAppStoreRoots(config);
 const db = await createDatabase(config);
 
 async function buildAdminUserInspection(userID) {
+  const now = isoNow();
   const user = await db.prepare(`
     SELECT id, created_at, updated_at, status
     FROM users
@@ -51,6 +52,10 @@ async function buildAdminUserInspection(userID) {
     WHERE user_id = ?
   `).get(userID);
 
+  const subscriptionOverride = await getActiveSubscriptionOverride(userID, now);
+  const effectiveSubscription = subscription
+    ? resolveEffectiveSubscription(subscription, subscriptionOverride)
+    : null;
   const latestQuotaPeriod = await db.prepare(`
     SELECT *
     FROM quota_periods
@@ -125,6 +130,8 @@ async function buildAdminUserInspection(userID) {
     identities,
     sessions,
     subscription,
+    subscriptionOverride: subscriptionOverride ?? null,
+    effectiveSubscription,
     latestQuotaPeriod,
     quotaStatus: latestQuotaPeriod ? summarizeQuotaPeriod(latestQuotaPeriod) : null,
     usageAnalytics: await buildUsageAnalytics(userID, latestQuotaPeriod),
@@ -468,6 +475,9 @@ const {
 
 const {
   ensureQuotaPeriod,
+  getActiveSubscriptionOverride,
+  getEffectiveSubscription,
+  resolveEffectiveSubscription,
   ensureQuotaAvailable,
   reserveQuotaUsage,
   releaseReservedQuotaUsage,
@@ -482,7 +492,8 @@ const {
   buildGlobalUsageAnalytics,
   normalizeAdminReason,
   applyQuotaAdjustment,
-  resetQuotaUsage
+  resetQuotaUsage,
+  recordAdminAdjustment
 } = createMonetizationHelpers({
   db,
   config,
@@ -521,6 +532,8 @@ const { routeRequest, handleServerError } = createRouteHandlers({
   resolveAdminLookup,
   resolveAdminUserID,
   ensureQuotaPeriod,
+  getActiveSubscriptionOverride,
+  getEffectiveSubscription,
   ensureQuotaAvailable,
   reserveQuotaUsage,
   releaseReservedQuotaUsage,
@@ -532,6 +545,7 @@ const { routeRequest, handleServerError } = createRouteHandlers({
   normalizeAdminReason,
   applyQuotaAdjustment,
   resetQuotaUsage,
+  recordAdminAdjustment,
   applyStoreKitSubscriptionState,
   applyNotificationLifecycleUpdate,
   reconcileUserSubscriptionFromLedger,

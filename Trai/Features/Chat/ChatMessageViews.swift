@@ -637,6 +637,8 @@ struct ChatBubble: View {
     var onDismissPlan: (() -> Void)?
     var onAcceptFoodEdit: ((SuggestedFoodEdit) -> Void)?
     var onDismissFoodEdit: (() -> Void)?
+    var onAcceptFoodComponentEdit: ((SuggestedFoodComponentEdit) -> Void)?
+    var onDismissFoodComponentEdit: (() -> Void)?
     var onAcceptWorkoutPlan: ((WorkoutPlanSuggestionEntry) -> Void)?
     var onDismissWorkoutPlan: (() -> Void)?
     var onAcceptWorkout: ((SuggestedWorkoutEntry) -> Void)?
@@ -784,6 +786,23 @@ struct ChatBubble: View {
             // Show applied edit badge
             if message.hasAppliedFoodEdit, let edit = message.suggestedFoodEdit {
                 AppliedEditBadge(edit: edit)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
+            if message.hasPendingFoodComponentEdit, let edit = message.suggestedFoodComponentEdit {
+                SuggestedComponentEditCard(
+                    edit: edit,
+                    onAccept: { onAcceptFoodComponentEdit?(edit) },
+                    onDismiss: { onDismissFoodComponentEdit?() }
+                )
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.9).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+            }
+
+            if message.hasAppliedFoodComponentEdit, let edit = message.suggestedFoodComponentEdit {
+                AppliedComponentEditBadge(edit: edit)
                     .transition(.scale.combined(with: .opacity))
             }
 

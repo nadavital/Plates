@@ -95,6 +95,9 @@ final class ChatMessage {
     /// Food edit confirmation data (JSON encoded) - shows changes made to existing food entry
     @Attribute(.externalStorage) var foodEditData: Data?
 
+    /// Food component edit confirmation data (JSON encoded)
+    @Attribute(.externalStorage) var foodComponentEditData: Data?
+
     init() {}
 
     init(content: String, isFromUser: Bool, sessionId: UUID? = nil, imageData: Data? = nil) {
@@ -320,6 +323,37 @@ final class ChatMessage {
             foodEditData = try? JSONEncoder().encode(edit)
         } else {
             foodEditData = nil
+        }
+    }
+
+    /// Whether the user has dismissed the suggested food component edit
+    var suggestedFoodComponentEditDismissed: Bool = false
+
+    /// Whether the food component edit has been applied
+    var foodComponentEditApplied: Bool = false
+
+    /// Whether this message has a pending food component edit suggestion
+    var hasPendingFoodComponentEdit: Bool {
+        foodComponentEditData != nil && !foodComponentEditApplied && !suggestedFoodComponentEditDismissed
+    }
+
+    /// Whether this message has an applied food component edit
+    var hasAppliedFoodComponentEdit: Bool {
+        foodComponentEditData != nil && foodComponentEditApplied
+    }
+
+    /// Decode the suggested food component edit
+    var suggestedFoodComponentEdit: SuggestedFoodComponentEdit? {
+        guard let data = foodComponentEditData else { return nil }
+        return try? JSONDecoder().decode(SuggestedFoodComponentEdit.self, from: data)
+    }
+
+    /// Set the suggested food component edit data
+    func setSuggestedFoodComponentEdit(_ edit: SuggestedFoodComponentEdit?) {
+        if let edit {
+            foodComponentEditData = try? JSONEncoder().encode(edit)
+        } else {
+            foodComponentEditData = nil
         }
     }
 

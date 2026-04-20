@@ -107,6 +107,22 @@ CREATE TABLE IF NOT EXISTS admin_adjustments (
   FOREIGN KEY(quota_period_id) REFERENCES quota_periods(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS subscription_overrides (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  plan TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source TEXT NOT NULL,
+  renews_at TEXT,
+  expires_at TEXT,
+  reason TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revoked_at TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS storekit_transactions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -149,3 +165,6 @@ CREATE INDEX IF NOT EXISTS ai_requests_user_created_at_idx
 
 CREATE INDEX IF NOT EXISTS ai_requests_created_at_idx
   ON ai_requests (created_at);
+
+CREATE INDEX IF NOT EXISTS subscription_overrides_user_active_idx
+  ON subscription_overrides (user_id, revoked_at, expires_at, updated_at);

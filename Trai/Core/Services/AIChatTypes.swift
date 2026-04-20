@@ -122,6 +122,7 @@ extension AIService {
         let suggestedFoods: [SuggestedFoodEntry]
         let planUpdate: PlanUpdateSuggestion?
         let suggestedFoodEdit: SuggestedFoodEdit?
+        let suggestedFoodComponentEdit: SuggestedFoodComponentEdit?
         let suggestedWorkoutPlan: WorkoutPlanSuggestionEntry?
         let suggestedWorkout: SuggestedWorkoutEntry?
         let suggestedWorkoutLog: SuggestedWorkoutLog?
@@ -138,6 +139,7 @@ extension AIService {
         var suggestedFoods: [SuggestedFoodEntry] = []
         var planUpdate: PlanUpdateSuggestion?
         var suggestedFoodEdit: SuggestedFoodEdit?
+        var suggestedFoodComponentEdit: SuggestedFoodComponentEdit?
         var suggestedWorkoutPlan: WorkoutPlanSuggestionEntry?
         var suggestedWorkout: SuggestedWorkoutEntry?
         var suggestedWorkoutLog: SuggestedWorkoutLog?

@@ -21,6 +21,10 @@ final class FoodCameraPresentation: Identifiable {
     }
 }
 
+private enum FoodCameraRoute: Hashable {
+    case review
+}
+
 struct FoodCameraView: View {
     /// Session ID to add this food entry to (for grouping related entries)
     var sessionId: UUID?
@@ -35,6 +39,7 @@ struct FoodCameraView: View {
     @Query private var profiles: [UserProfile]
 
     @State private var draft: FoodLogDraft?
+    @State private var navigationPath: [FoodCameraRoute] = []
     @State private var showingManualEntry = false
     @State private var pendingManualEntry: FoodEntry?
 
@@ -58,24 +63,27 @@ struct FoodCameraView: View {
             } else if requiresAuthenticatedAccountForFoodAI {
                 AccountSetupView(context: .aiFeatures)
             } else {
-                NavigationStack {
-                    if draft == nil {
-                        FoodLogCaptureStepView(
-                            sessionId: sessionId,
-                            onDraftReady: { draft in
-                                self.draft = draft
-                            },
-                            onManualEntryRequested: { showingManualEntry = true },
-                            onCancel: { dismiss() }
-                        )
-                    } else {
-                        FoodLogReviewStepView(
-                            draft: draftBinding,
-                            enabledMacros: enabledMacros,
-                            onRetake: { draft = nil },
-                            onFinish: { dismiss() },
-                            targetDate: targetDate
-                        )
+                NavigationStack(path: $navigationPath) {
+                    FoodLogCaptureStepView(
+                        sessionId: sessionId,
+                        targetDate: targetDate,
+                        onDraftReady: { nextDraft in
+                            draft = nextDraft
+                            navigationPath = [.review]
+                        },
+                        onManualEntryRequested: { showingManualEntry = true },
+                        onCancel: { dismiss() }
+                    )
+                    .navigationDestination(for: FoodCameraRoute.self) { route in
+                        switch route {
+                        case .review:
+                            FoodLogReviewStepView(
+                                draft: draftBinding,
+                                enabledMacros: enabledMacros,
+                                onFinish: { dismiss() },
+                                targetDate: targetDate
+                            )
+                        }
                     }
                 }
             }
@@ -102,6 +110,11 @@ struct FoodCameraView: View {
                 showingManualEntry = true
             }
         }
+        .onChange(of: navigationPath) { _, newPath in
+            if newPath.isEmpty, draft != nil {
+                draft = nil
+            }
+        }
         .tint(TraiColors.brandAccent)
         .accentColor(TraiColors.brandAccent)
         .proUpsellPresenter()
@@ -115,7 +128,18 @@ struct FoodCameraView: View {
     }
 
     private func saveManualEntry(_ entry: FoodEntry) {
+        if entry.acceptedSnapshot == nil {
+            let acceptedSnapshot = FoodSnapshotBuilder().buildAcceptedSnapshot(
+                from: entry,
+                source: .manual,
+                userEditedFields: ["manualEntry"]
+            )
+            entry.setAcceptedSnapshot(acceptedSnapshot)
+        }
         modelContext.insert(entry)
+        Task { @MainActor in
+            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
+        }
         WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         recordFoodLogBehavior(entry: entry, source: "manual_entry", modelContext: modelContext)
         saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
@@ -126,10 +150,12 @@ struct FoodCameraView: View {
 
 private struct FoodLogCaptureStepView: View {
     let sessionId: UUID?
+    let targetDate: Date?
     let onDraftReady: (FoodLogDraft) -> Void
     let onManualEntryRequested: () -> Void
     let onCancel: () -> Void
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
 
     @State private var cameraService = CameraService()
@@ -137,13 +163,16 @@ private struct FoodLogCaptureStepView: View {
     @State private var foodDescription = ""
     @State private var isCapturingPhoto = false
     @State private var showingCameraPermissionAlert = false
+    @State private var memorySuggestions: [FoodSuggestion] = []
 
     var body: some View {
         FoodCameraViewfinder(
             cameraService: cameraService,
             isCapturingPhoto: isCapturingPhoto,
             description: $foodDescription,
+            suggestions: memorySuggestions,
             onCapture: capturePhoto,
+            onSelectSuggestion: applyMemorySuggestion,
             onManualEntry: onManualEntryRequested,
             onSubmitDescription: submitTextDescription,
             selectedPhotoItem: $selectedPhotoItem
@@ -174,17 +203,22 @@ private struct FoodLogCaptureStepView: View {
                 }
 
                 onDraftReady(
-                    FoodLogDraft(
-                        sessionId: sessionId,
-                        image: image,
-                        description: trimmedDescription,
-                        inputSource: .photo
-                    )
+                    {
+                        var draft = FoodLogDraft(
+                            sessionId: sessionId,
+                            image: image,
+                            description: trimmedDescription,
+                            inputSource: .photo
+                        )
+                        draft.shownSuggestionIDs = memorySuggestions.map(\.memoryID)
+                        return draft
+                    }()
                 )
                 selectedPhotoItem = nil
             }
         }
         .task {
+            loadSuggestions()
             guard !AppLaunchArguments.isUITesting else { return }
             await cameraService.requestPermission()
             if !cameraService.isAuthorized {
@@ -231,12 +265,16 @@ private struct FoodLogCaptureStepView: View {
             guard let image = await cameraService.capturePhoto() else { return }
             HapticManager.mediumTap()
             onDraftReady(
-                FoodLogDraft(
-                    sessionId: sessionId,
-                    image: image,
-                    description: trimmedDescription,
-                    inputSource: .camera
-                )
+                {
+                    var draft = FoodLogDraft(
+                        sessionId: sessionId,
+                        image: image,
+                        description: trimmedDescription,
+                        inputSource: .camera
+                    )
+                    draft.shownSuggestionIDs = memorySuggestions.map(\.memoryID)
+                    return draft
+                }()
             )
         }
     }
@@ -244,20 +282,53 @@ private struct FoodLogCaptureStepView: View {
     private func submitTextDescription() {
         guard !trimmedDescription.isEmpty else { return }
         onDraftReady(
-            FoodLogDraft(
-                sessionId: sessionId,
-                image: nil,
-                description: trimmedDescription,
-                inputSource: .description
-            )
+            {
+                var draft = FoodLogDraft(
+                    sessionId: sessionId,
+                    image: nil,
+                    description: trimmedDescription,
+                    inputSource: .description
+                )
+                draft.shownSuggestionIDs = memorySuggestions.map(\.memoryID)
+                return draft
+            }()
         )
+    }
+
+    private func applyMemorySuggestion(_ suggestion: FoodSuggestion) {
+        var draft = FoodLogDraft(
+            sessionId: sessionId,
+            image: nil,
+            description: "",
+            inputSource: .memorySuggestion
+        )
+        draft.memorySuggestionID = suggestion.memoryID
+        draft.shownSuggestionIDs = memorySuggestions.map(\.memoryID)
+        draft.refinedSuggestion = suggestion.suggestedEntry
+        Task { @MainActor in
+            try? FoodSuggestionService().recordOutcome(
+                .tapped,
+                for: suggestion.memoryID,
+                modelContext: modelContext
+            )
+        }
+        HapticManager.mediumTap()
+        onDraftReady(draft)
+    }
+
+    private func loadSuggestions() {
+        memorySuggestions = (try? FoodSuggestionService().cameraSuggestions(
+            limit: 3,
+            targetDate: targetDate,
+            sessionId: sessionId,
+            modelContext: modelContext
+        )) ?? []
     }
 }
 
 private struct FoodLogReviewStepView: View {
     @Binding var draft: FoodLogDraft
     let enabledMacros: Set<MacroType>
-    let onRetake: () -> Void
     let onFinish: () -> Void
     var targetDate: Date?
 
@@ -275,6 +346,7 @@ private struct FoodLogReviewStepView: View {
     var body: some View {
         FoodCameraReviewView(
             image: draft.image,
+            inputSource: draft.inputSource,
             description: $draft.description,
             isAnalyzing: isAnalyzing,
             analysisResult: draft.analysisResult,
@@ -288,19 +360,6 @@ private struct FoodLogReviewStepView: View {
             onRefine: refineFood
         )
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    onRetake()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Retake")
-                    }
-                }
-                .disabled(isAnalyzing || isLoadingRefinement)
-            }
-        }
         .toolbarBackground(.visible, for: .navigationBar)
         .task(id: autoAnalyzeKey) {
             guard shouldAutoAnalyzeDescription else { return }
@@ -338,7 +397,12 @@ private struct FoodLogReviewStepView: View {
             fiberGrams: analysisResult.fiberGrams,
             sugarGrams: analysisResult.sugarGrams,
             servingSize: analysisResult.servingSize,
-            emoji: analysisResult.emoji
+            emoji: analysisResult.emoji,
+            components: analysisResult.components?.map(SuggestedFoodComponent.init(component:)) ?? [],
+            mealKind: analysisResult.mealKind,
+            notes: analysisResult.notes,
+            confidence: analysisResult.confidence,
+            schemaVersion: 2
         )
     }
 
@@ -401,6 +465,7 @@ private struct FoodLogReviewStepView: View {
     }
 
     private func saveEntry(_ suggestion: SuggestedFoodEntry, isRefined: Bool) {
+        let snapshotBuilder = FoodSnapshotBuilder()
         let entry = FoodEntry()
         entry.name = suggestion.name
         entry.calories = suggestion.calories
@@ -413,13 +478,29 @@ private struct FoodLogReviewStepView: View {
         entry.emoji = FoodEmojiResolver.resolve(preferred: suggestion.emoji, foodName: suggestion.name)
         entry.imageData = draft.image?.jpegData(compressionQuality: 0.8)
         entry.userDescription = trimmedDescription.isEmpty ? nil : trimmedDescription
-        entry.aiAnalysis = isRefined ? "Refined from initial analysis" : draft.analysisResult?.notes
+        entry.aiAnalysis = if draft.inputSource == .memorySuggestion {
+            "Saved from remembered food suggestion"
+        } else if isRefined {
+            "Refined from initial analysis"
+        } else {
+            draft.analysisResult?.notes
+        }
         entry.input = draft.inputSource.foodEntryInputMethod
         entry.loggedAt = resolvedFoodLogDate(targetDate: targetDate, sessionId: draft.sessionId, modelContext: modelContext)
         entry.ensureDisplayMetadata()
+        let acceptedSnapshot = snapshotBuilder.buildAcceptedSnapshot(
+            from: suggestion,
+            source: acceptedSource(for: draft.inputSource),
+            loggedAt: entry.loggedAt,
+            userEditedFields: isRefined ? ["refinement"] : []
+        )
+        entry.setAcceptedSnapshot(acceptedSnapshot)
 
         assignFoodSession(draft.sessionId, to: entry, modelContext: modelContext)
         modelContext.insert(entry)
+        Task { @MainActor in
+            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
+        }
         WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
 
         let behaviorSource = isRefined
@@ -428,8 +509,31 @@ private struct FoodLogReviewStepView: View {
         recordFoodLogBehavior(entry: entry, source: behaviorSource, modelContext: modelContext)
         saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
 
+        try? FoodSuggestionService().reconcileShownSuggestions(
+            draft.shownSuggestionIDs,
+            preferredMemoryID: draft.memorySuggestionID,
+            with: acceptedSnapshot,
+            isRefined: isRefined,
+            modelContext: modelContext
+        )
+
         HapticManager.success()
         onFinish()
+    }
+
+    private func acceptedSource(for inputSource: FoodLogInputSource) -> AcceptedFoodSource {
+        switch inputSource {
+        case .camera:
+            return .camera
+        case .photo:
+            return .photo
+        case .description:
+            return .description
+        case .manual:
+            return .manual
+        case .memorySuggestion:
+            return .memorySuggestion
+        }
     }
 }
 

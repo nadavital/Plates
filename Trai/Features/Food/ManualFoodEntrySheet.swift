@@ -141,6 +141,7 @@ struct ManualFoodEntrySheet: View {
     }
 
     private func saveEntry() {
+        let snapshotBuilder = FoodSnapshotBuilder()
         let entry = FoodEntry()
         entry.name = name
         entry.calories = Int(caloriesText) ?? 0
@@ -164,6 +165,13 @@ struct ManualFoodEntrySheet: View {
             )
             entry.sessionOrder = existingCount ?? 0
         }
+
+        let acceptedSnapshot = snapshotBuilder.buildAcceptedSnapshot(
+            from: entry,
+            source: .manual,
+            userEditedFields: ["manualEntry"]
+        )
+        entry.setAcceptedSnapshot(acceptedSnapshot)
 
         onSave(entry)
     }

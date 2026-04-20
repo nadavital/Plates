@@ -80,6 +80,8 @@ extension ChatView {
             return "Analyzing food..."
         case "edit_food_entry":
             return "Preparing edit..."
+        case "edit_food_components":
+            return "Adjusting meal..."
         case "get_food_log", "get_todays_food_log":
             return "Getting food log..."
         case "get_user_plan":
@@ -321,6 +323,13 @@ extension ChatView {
         if let editData = result.suggestedFoodEdit {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 aiMessage.setSuggestedFoodEdit(editData)
+            }
+            HapticManager.lightTap()
+        }
+
+        if let componentEditData = result.suggestedFoodComponentEdit {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                aiMessage.setSuggestedFoodComponentEdit(componentEditData)
             }
             HapticManager.lightTap()
         }

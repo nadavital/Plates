@@ -75,9 +75,18 @@ extension ChatView {
         } else {
             logDate = entry.loggedAt
         }
+        let acceptedSnapshot = FoodSnapshotBuilder().buildAcceptedSnapshot(
+            from: meal,
+            source: .chat,
+            loggedAt: entry.loggedAt
+        )
+        entry.setAcceptedSnapshot(acceptedSnapshot)
 
         message.replaceSuggestedMeal(meal)
         modelContext.insert(entry)
+        Task { @MainActor in
+            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
+        }
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.logFood,
             domain: .nutrition,
@@ -496,6 +505,10 @@ extension ChatView {
         )
 
         guard let entry = try? modelContext.fetch(descriptor).first else { return }
+        entry.bootstrapLoggedComponentsIfNeeded()
+        let touchedMacroField = edit.changes.contains {
+            ["calories", "proteinGrams", "carbsGrams", "fatGrams", "fiberGrams", "sugarGrams"].contains($0.fieldKey)
+        }
 
         for change in edit.changes {
             switch change.fieldKey {
@@ -518,6 +531,10 @@ extension ChatView {
             case "fiberGrams":
                 if let value = change.newNumericValue {
                     entry.fiberGrams = value
+                }
+            case "sugarGrams":
+                if let value = change.newNumericValue {
+                    entry.sugarGrams = value
                 }
             case "name", "title":
                 if let value = change.newStringValue {
@@ -562,7 +579,16 @@ extension ChatView {
             }
         }
 
+        if touchedMacroField {
+            entry.replaceLoggedComponentsWithDerivedCurrentTotals()
+        }
+        refreshFoodEntrySnapshot(entry, userEditedFields: Set(edit.changes.map(\.fieldKey)))
+
         try? modelContext.save()
+        Task { @MainActor in
+            _ = try? FoodMemoryService().resolveEntry(id: entry.id, modelContext: modelContext)
+        }
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.editFood,
@@ -574,6 +600,82 @@ extension ChatView {
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.foodEditApplied = true
+        }
+
+        HapticManager.success()
+    }
+
+    func acceptFoodComponentEditSuggestion(_ edit: SuggestedFoodComponentEdit, for message: ChatMessage) {
+        let descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate { $0.id == edit.entryId }
+        )
+
+        guard let entry = try? modelContext.fetch(descriptor).first else { return }
+        entry.bootstrapLoggedComponentsIfNeeded()
+        var updatedComponents = entry.loggedComponents
+
+        for operation in edit.operations {
+            switch operation.type {
+            case .remove:
+                guard let componentId = operation.componentId,
+                      let index = updatedComponents.firstIndex(where: { $0.id == componentId }) else { continue }
+                updatedComponents[index].status = .removed
+                updatedComponents[index].fractionOfOriginal = 0
+
+            case .restore:
+                guard let componentId = operation.componentId,
+                      let index = updatedComponents.firstIndex(where: { $0.id == componentId }) else { continue }
+                updatedComponents[index].status = .active
+                updatedComponents[index].fractionOfOriginal = max(operation.fractionOfOriginal ?? 1, 1)
+
+            case .setFraction:
+                guard let componentId = operation.componentId,
+                      let index = updatedComponents.firstIndex(where: { $0.id == componentId }) else { continue }
+                let fraction = max(operation.fractionOfOriginal ?? 0, 0)
+                updatedComponents[index].fractionOfOriginal = fraction
+                updatedComponents[index].status = fraction == 0 ? .removed : .active
+
+            case .add:
+                if let payload = operation.componentPayload {
+                    updatedComponents.append(payload)
+                }
+
+            case .update:
+                guard let componentId = operation.componentId,
+                      let payload = operation.componentPayload,
+                      let index = updatedComponents.firstIndex(where: { $0.id == componentId }) else { continue }
+                updatedComponents[index] = payload
+            }
+        }
+
+        entry.loggedComponents = updatedComponents
+        entry.recalculateNutritionFromLoggedComponents()
+        let shouldResolveUpdatedEntry = !entry.activeLoggedComponents.isEmpty
+
+        if !shouldResolveUpdatedEntry {
+            modelContext.delete(entry)
+        } else {
+            refreshFoodEntrySnapshot(entry, userEditedFields: ["component_edit"])
+        }
+
+        try? modelContext.save()
+        if shouldResolveUpdatedEntry {
+            Task { @MainActor in
+                _ = try? FoodMemoryService().resolveEntry(id: entry.id, modelContext: modelContext)
+            }
+        }
+        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.editFood,
+            domain: .nutrition,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: edit.entryId
+        )
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.foodComponentEditApplied = true
         }
 
         HapticManager.success()
@@ -591,6 +693,49 @@ extension ChatView {
             relatedEntityId: message.id
         )
         HapticManager.lightTap()
+    }
+
+    func dismissFoodComponentEditSuggestion(for message: ChatMessage) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            message.suggestedFoodComponentEditDismissed = true
+        }
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.editFood,
+            domain: .nutrition,
+            surface: .chat,
+            outcome: .dismissed,
+            relatedEntityId: message.id
+        )
+        HapticManager.lightTap()
+    }
+}
+
+private extension ChatView {
+    func refreshFoodEntrySnapshot(_ entry: FoodEntry, userEditedFields: Set<String>) {
+        let source: AcceptedFoodSource
+        switch entry.input {
+        case .manual:
+            source = .manual
+        case .camera:
+            source = .camera
+        case .photo:
+            source = .photo
+        case .description:
+            source = .description
+        case .memorySuggestion:
+            source = .memorySuggestion
+        case .chat:
+            source = .chat
+        case .appIntent:
+            source = .appIntent
+        }
+
+        let snapshot = FoodSnapshotBuilder().buildAcceptedSnapshot(
+            from: entry,
+            source: source,
+            userEditedFields: userEditedFields
+        )
+        entry.setAcceptedSnapshot(snapshot)
     }
 }
 

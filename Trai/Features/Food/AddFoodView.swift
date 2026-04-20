@@ -367,6 +367,7 @@ struct AddFoodView: View {
     private func saveEntry() {
         guard let result = analysisResult else { return }
 
+        let snapshotBuilder = FoodSnapshotBuilder()
         let entry = FoodEntry(
             name: result.name,
             mealType: selectedMealType.rawValue,
@@ -382,10 +383,20 @@ struct AddFoodView: View {
         entry.imageData = selectedImageData
         entry.userDescription = foodDescription
         entry.aiAnalysis = result.notes
+        entry.input = selectedImageData == nil ? .description : .photo
         entry.emoji = FoodEmojiResolver.resolve(preferred: result.emoji, foodName: result.name)
         entry.ensureDisplayMetadata()
+        let acceptedSnapshot = snapshotBuilder.buildAcceptedSnapshot(
+            from: result,
+            source: selectedImageData == nil ? .description : .photo,
+            loggedAt: entry.loggedAt
+        )
+        entry.setAcceptedSnapshot(acceptedSnapshot)
 
         modelContext.insert(entry)
+        Task { @MainActor in
+            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
+        }
         WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         saveMacrosToHealthKit(entry)
         dismiss()
@@ -395,6 +406,7 @@ struct AddFoodView: View {
         guard !manualName.isEmpty,
               let calories = Int(manualCalories) else { return }
 
+        let snapshotBuilder = FoodSnapshotBuilder()
         let entry = FoodEntry(
             name: manualName,
             mealType: selectedMealType.rawValue,
@@ -406,10 +418,20 @@ struct AddFoodView: View {
 
         entry.servingSize = manualServingSize.isEmpty ? nil : manualServingSize
         entry.imageData = selectedImageData
+        entry.input = .manual
         entry.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: manualName)
         entry.ensureDisplayMetadata()
+        let acceptedSnapshot = snapshotBuilder.buildAcceptedSnapshot(
+            from: entry,
+            source: .manual,
+            userEditedFields: ["manualEntry"]
+        )
+        entry.setAcceptedSnapshot(acceptedSnapshot)
 
         modelContext.insert(entry)
+        Task { @MainActor in
+            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
+        }
         WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
         saveMacrosToHealthKit(entry)
         dismiss()

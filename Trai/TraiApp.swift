@@ -105,7 +105,8 @@ struct TraiApp: App {
                 CustomReminder.self,
                 ReminderCompletion.self,
                 SuggestionUsage.self,
-                BehaviorEvent.self
+                BehaviorEvent.self,
+                FoodMemory.self
             ])
 
             let modelConfiguration: ModelConfiguration
@@ -201,6 +202,13 @@ struct TraiApp: App {
                         scheduleStartupMigrationIfNeeded()
                         scheduleReminderScheduleRefreshIfNeeded()
                         scheduleReminderBackgroundRefresh()
+                        Task { @MainActor in
+                            try? FoodMemoryService().runMaintenance(
+                                backfillLimit: 24,
+                                resolveLimit: 12,
+                                modelContext: modelContainer.mainContext
+                            )
+                        }
                     }
                     .onOpenURL { url in
                         handleDeepLink(url)

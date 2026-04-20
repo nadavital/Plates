@@ -41,6 +41,8 @@ final class AIFunctionExecutor {
         case suggestedPlanUpdate(PlanUpdateSuggestion)
         /// Food edit suggestion to show user (needs confirmation before applying)
         case suggestedFoodEdit(SuggestedFoodEdit)
+        /// Food component edit suggestion to show user (needs confirmation before applying)
+        case suggestedFoodComponentEdit(SuggestedFoodComponentEdit)
         /// Workout plan update suggestion (needs confirmation)
         case suggestedWorkoutPlanUpdate(WorkoutPlanSuggestionEntry)
         /// Workout suggestion to show user (needs confirmation)
@@ -106,6 +108,9 @@ final class AIFunctionExecutor {
 
         case "edit_food_entry":
             return executeEditFoodEntry(call.arguments)
+
+        case "edit_food_components":
+            return executeEditFoodComponents(call.arguments)
 
         case "get_food_log":
             return executeGetFoodLog(call.arguments)

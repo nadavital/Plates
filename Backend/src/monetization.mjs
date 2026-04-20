@@ -62,6 +62,44 @@ export function createMonetizationHelpers({
     return period;
   }
 
+  async function getActiveSubscriptionOverride(userID, now) {
+    return await db.prepare(`
+      SELECT *
+      FROM subscription_overrides
+      WHERE user_id = ?
+        AND revoked_at IS NULL
+        AND (
+          expires_at IS NULL
+          OR expires_at > ?
+        )
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(userID, now);
+  }
+
+  function resolveEffectiveSubscription(subscription, subscriptionOverride) {
+    if (!subscriptionOverride) {
+      return subscription;
+    }
+
+    return {
+      ...subscription,
+      plan: subscriptionOverride.plan,
+      status: subscriptionOverride.status,
+      source: subscriptionOverride.source,
+      source_transaction_id: null,
+      renews_at: subscriptionOverride.renews_at ?? null,
+      expires_at: subscriptionOverride.expires_at ?? null,
+      effective_override_id: subscriptionOverride.id
+    };
+  }
+
+  async function getEffectiveSubscription(userID, now) {
+    const subscription = await ensureSubscription(userID, now);
+    const subscriptionOverride = await getActiveSubscriptionOverride(userID, now);
+    return resolveEffectiveSubscription(subscription, subscriptionOverride);
+  }
+
   function ensureQuotaAvailable(quotaPeriod, unitCost) {
     const effectiveLimit = effectiveQuotaLimit(quotaPeriod);
     if (effectiveLimit == null) {
@@ -250,7 +288,7 @@ export function createMonetizationHelpers({
   }
 
   async function buildBillingPayload(userID, installationID, appAccountToken, now) {
-    const subscription = await ensureSubscription(userID, now);
+    const subscription = await getEffectiveSubscription(userID, now);
     const quotaPeriod = await ensureQuotaPeriod(userID, subscription.plan, now);
 
     return {
@@ -954,6 +992,9 @@ export function createMonetizationHelpers({
 
   return {
     ensureQuotaPeriod,
+    getActiveSubscriptionOverride,
+    getEffectiveSubscription,
+    resolveEffectiveSubscription,
     ensureQuotaAvailable,
     reserveQuotaUsage,
     releaseReservedQuotaUsage,

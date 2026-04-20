@@ -30,6 +30,8 @@ export function createRouteHandlers({
   resolveAdminLookup,
   resolveAdminUserID,
   ensureQuotaPeriod,
+  getActiveSubscriptionOverride,
+  getEffectiveSubscription,
   ensureQuotaAvailable,
   reserveQuotaUsage,
   releaseReservedQuotaUsage,
@@ -41,6 +43,7 @@ export function createRouteHandlers({
   normalizeAdminReason,
   applyQuotaAdjustment,
   resetQuotaUsage,
+  recordAdminAdjustment,
   applyStoreKitSubscriptionState,
   applyNotificationLifecycleUpdate,
   reconcileUserSubscriptionFromLedger,
@@ -438,78 +441,96 @@ export function createRouteHandlers({
       });
     }
 
-    const plan = String(body.plan ?? '').trim();
-    const allowedPlans = new Set(['free', 'pro', 'developer']);
-    if (!allowedPlans.has(plan)) {
-      throw new HttpError(400, {
-        error: 'invalid_plan',
-        message: 'plan must be one of: free, pro, developer.'
-      });
-    }
-
-    const status = String(body.status ?? 'active').trim();
-    const allowedStatuses = new Set(['active', 'trial', 'gracePeriod', 'billingRetry', 'expired', 'refunded', 'revoked']);
-    if (!allowedStatuses.has(status)) {
-      throw new HttpError(400, {
-        error: 'invalid_status',
-        message: 'status is not recognized.'
-      });
-    }
-
-    const source = normalizeAdminSubscriptionSource(body.source, plan);
-    if (!allowedAdminSubscriptionSources.has(source)) {
-      throw new HttpError(400, {
-        error: 'invalid_source',
-        message: 'source must be one of: system, adminGrant, promo, developer.'
-      });
-    }
-
     const now = isoNow();
+    const clearOverride = body.clearOverride === true;
     const currentSubscription = await ensureSubscription(userID, now);
+    const currentEffectiveSubscription = await getEffectiveSubscription(userID, now);
     const reason = normalizeAdminReason(body.reason) ?? 'manual subscription override';
 
-    await db.prepare(`
-      UPDATE subscriptions
-      SET plan = ?, status = ?, source = ?, source_transaction_id = ?, renews_at = ?, expires_at = ?, updated_at = ?
-      WHERE user_id = ?
-    `).run(
-      plan,
-      status,
-      source,
-      null,
-      body.renewsAt ?? currentSubscription.renews_at ?? null,
-      body.expiresAt ?? currentSubscription.expires_at ?? null,
-      now,
-      userID
-    );
+    if (clearOverride) {
+      await revokeActiveSubscriptionOverrides(userID, now);
+    } else {
+      const plan = String(body.plan ?? '').trim();
+      const allowedPlans = new Set(['free', 'pro', 'developer']);
+      if (!allowedPlans.has(plan)) {
+        throw new HttpError(400, {
+          error: 'invalid_plan',
+          message: 'plan must be one of: free, pro, developer.'
+        });
+      }
 
+      const status = String(body.status ?? 'active').trim();
+      const allowedStatuses = new Set(['active', 'trial', 'gracePeriod', 'billingRetry', 'expired', 'refunded', 'revoked']);
+      if (!allowedStatuses.has(status)) {
+        throw new HttpError(400, {
+          error: 'invalid_status',
+          message: 'status is not recognized.'
+        });
+      }
+
+      const source = normalizeAdminSubscriptionSource(body.source, plan);
+      if (!allowedAdminSubscriptionSources.has(source)) {
+        throw new HttpError(400, {
+          error: 'invalid_source',
+          message: 'source must be one of: system, adminGrant, promo, developer.'
+        });
+      }
+
+      await revokeActiveSubscriptionOverrides(userID, now);
+      await db.prepare(`
+        INSERT INTO subscription_overrides (
+          id, user_id, plan, status, source, renews_at, expires_at, reason, created_by, created_at, updated_at, revoked_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        `sov_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`,
+        userID,
+        plan,
+        status,
+        source,
+        body.renewsAt ?? null,
+        body.expiresAt ?? null,
+        reason,
+        body.createdBy ?? 'admin',
+        now,
+        now,
+        null
+      );
+    }
+
+    const updatedOverride = await getActiveSubscriptionOverride(userID, now);
     const updatedSubscription = await ensureSubscription(userID, now);
-    const quotaPeriod = await ensureQuotaPeriod(userID, updatedSubscription.plan, now);
+    const updatedEffectiveSubscription = await getEffectiveSubscription(userID, now);
+    const quotaPeriod = await ensureQuotaPeriod(userID, updatedEffectiveSubscription.plan, now);
 
-    await db.prepare(`
-      INSERT INTO admin_adjustments (
-        id, user_id, quota_period_id, adjustment_type, unit_delta, previous_units_used, new_units_used, reason, created_by, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      `adm_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`,
+    await recordAdminAdjustment({
       userID,
-      quotaPeriod?.id ?? null,
-      'subscription_override',
-      0,
-      quotaPeriod?.units_used ?? null,
-      quotaPeriod?.units_used ?? null,
-      `plan ${currentSubscription.plan}/${currentSubscription.status}/${currentSubscription.source ?? 'system'} -> ${updatedSubscription.plan}/${updatedSubscription.status}/${updatedSubscription.source ?? source}; ${reason}`,
-      body.createdBy ?? 'admin',
-      now
-    );
+      quotaPeriodID: quotaPeriod?.id ?? null,
+      adjustmentType: clearOverride ? 'subscription_override_clear' : 'subscription_override',
+      unitDelta: 0,
+      previousUnitsUsed: quotaPeriod?.units_used ?? null,
+      newUnitsUsed: quotaPeriod?.units_used ?? null,
+      reason: `effective ${currentEffectiveSubscription.plan}/${currentEffectiveSubscription.status}/${currentEffectiveSubscription.source ?? 'system'} -> ${updatedEffectiveSubscription.plan}/${updatedEffectiveSubscription.status}/${updatedEffectiveSubscription.source ?? 'system'}; raw ${currentSubscription.plan}/${currentSubscription.status}/${currentSubscription.source ?? 'system'}; ${reason}`,
+      createdBy: body.createdBy ?? 'admin'
+    }, now);
 
     sendJson(res, 200, {
       userID,
       overriddenAt: now,
-      subscription: updatedSubscription,
+      subscription: updatedEffectiveSubscription,
+      rawSubscription: updatedSubscription,
+      subscriptionOverride: updatedOverride ?? null,
       quotaSnapshot: await buildQuotaSnapshot(quotaPeriod),
       analytics: await buildUsageAnalytics(userID, quotaPeriod)
     });
+  }
+
+  async function revokeActiveSubscriptionOverrides(userID, now) {
+    await db.prepare(`
+      UPDATE subscription_overrides
+      SET revoked_at = ?, updated_at = ?
+      WHERE user_id = ?
+        AND revoked_at IS NULL
+    `).run(now, now, userID);
   }
 
   function normalizeAdminSubscriptionSource(value, plan) {
@@ -556,7 +577,7 @@ export function createRouteHandlers({
     }
 
     const now = isoNow();
-    const subscription = await ensureSubscription(userID, now);
+    const subscription = await getEffectiveSubscription(userID, now);
     const quotaPeriod = await ensureQuotaPeriod(userID, subscription.plan, now);
     const reason = normalizeAdminReason(body.reason);
 
@@ -604,7 +625,7 @@ export function createRouteHandlers({
     }
 
     const now = isoNow();
-    const subscription = await ensureSubscription(userID, now);
+    const subscription = await getEffectiveSubscription(userID, now);
     const quotaPeriod = await ensureQuotaPeriod(userID, subscription.plan, now);
     const reason = normalizeAdminReason(body.reason);
 
@@ -747,7 +768,7 @@ export function createRouteHandlers({
     const traiRequest = normalizeIncomingTraiRequest(requestBody);
     const feature = normalizeAIProxyFeature(req.headers['x-trai-ai-feature'], traiRequest);
 
-    const subscription = await ensureSubscription(auth.user.id, isoNow());
+    const subscription = await getEffectiveSubscription(auth.user.id, isoNow());
     ensureEntitled(subscription);
     const unitCost = FEATURE_COSTS[feature] ?? FEATURE_COSTS.coachChat;
     await enforceAIProxyBurstLimits(auth.user.id, subscription.plan, unitCost);

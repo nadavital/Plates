@@ -229,7 +229,12 @@ extension AIService {
             servingSize: decoded.servingSize,
             emoji: decoded.emoji,
             loggedAtDateString: originalSuggestion?.loggedAtDateString,
-            loggedAtTime: originalSuggestion?.loggedAtTime
+            loggedAtTime: originalSuggestion?.loggedAtTime,
+            components: originalSuggestion?.components ?? [],
+            mealKind: originalSuggestion?.mealKind,
+            notes: originalSuggestion?.notes,
+            confidence: originalSuggestion?.confidence,
+            schemaVersion: originalSuggestion?.schemaVersion ?? 1
         )
     }
 
@@ -249,7 +254,9 @@ extension AIService {
             servingSize: "1 serving",
             confidence: "high",
             notes: "Mocked food analysis for UI testing",
-            emoji: "🥗"
+            emoji: "🥗",
+            components: nil,
+            mealKind: nil
         )
     }
 
@@ -287,7 +294,12 @@ extension AIService {
             servingSize: currentSuggestion.servingSize,
             emoji: currentSuggestion.emoji ?? "🥗",
             loggedAtDateString: currentSuggestion.loggedAtDateString,
-            loggedAtTime: currentSuggestion.loggedAtTime
+            loggedAtTime: currentSuggestion.loggedAtTime,
+            components: currentSuggestion.components,
+            mealKind: currentSuggestion.mealKind,
+            notes: currentSuggestion.notes,
+            confidence: currentSuggestion.confidence,
+            schemaVersion: currentSuggestion.schemaVersion
         )
     }
 
@@ -310,10 +322,15 @@ extension AIService {
                 let carbsGrams: Double
                 let fatGrams: Double
                 let fiberGrams: Double?
+                let sugarGrams: Double?
                 let servingSize: String?
                 let emoji: String?
                 let loggedAtDate: String?
                 let loggedAtTime: String?
+                let components: [FoodAnalysisComponent]?
+                let mealKind: String?
+                let notes: String?
+                let confidence: String?
             }
         }
 
@@ -330,10 +347,16 @@ extension AIService {
                     carbsGrams: meal.carbsGrams,
                     fatGrams: meal.fatGrams,
                     fiberGrams: meal.fiberGrams,
+                    sugarGrams: meal.sugarGrams,
                     servingSize: meal.servingSize,
                     emoji: meal.emoji,
                     loggedAtDateString: meal.loggedAtDate,
-                    loggedAtTime: meal.loggedAtTime
+                    loggedAtTime: meal.loggedAtTime,
+                    components: meal.components?.map(SuggestedFoodComponent.init(component:)) ?? [],
+                    mealKind: meal.mealKind,
+                    notes: meal.notes,
+                    confidence: meal.confidence,
+                    schemaVersion: 2
                 )
                 let emoji = meal.emoji ?? "🍽️"
                 var logMessage = "\(emoji) AI suggests logging: \(meal.name) - \(meal.calories) kcal"

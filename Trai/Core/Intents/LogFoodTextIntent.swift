@@ -55,6 +55,7 @@ struct LogFoodTextIntent: AppIntent {
         let aiService = AIService()
         do {
             let analysis = try await aiService.analyzeFoodDescription(food)
+            let snapshotBuilder = FoodSnapshotBuilder()
 
             // Create food entry from analysis
             let entry = FoodEntry(
@@ -68,11 +69,18 @@ struct LogFoodTextIntent: AppIntent {
             entry.fiberGrams = analysis.fiber
             entry.sugarGrams = analysis.sugar
             entry.servingSize = "\(analysis.servingSize) \(analysis.servingUnit)"
-            entry.inputMethod = "description"
+            entry.input = .appIntent
             entry.emoji = FoodEmojiResolver.resolve(preferred: analysis.emoji, foodName: analysis.name)
             entry.ensureDisplayMetadata()
+            let acceptedSnapshot = snapshotBuilder.buildAcceptedSnapshot(
+                from: entry,
+                source: .appIntent,
+                userEditedFields: ["appIntent"]
+            )
+            entry.setAcceptedSnapshot(acceptedSnapshot)
 
             context.insert(entry)
+            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: context)
             BehaviorTracker(modelContext: context).record(
                 actionKey: BehaviorActionKey.logFood,
                 domain: .nutrition,

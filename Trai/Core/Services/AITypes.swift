@@ -20,6 +20,8 @@ struct FoodAnalysis: Codable, Sendable {
     let confidence: String?
     let notes: String?
     let emoji: String?
+    let components: [FoodAnalysisComponent]?
+    let mealKind: String?
 
     /// Display emoji with fallback
     var displayEmoji: String {
@@ -44,6 +46,49 @@ struct FoodAnalysis: Codable, Sendable {
     }
 }
 
+struct FoodAnalysisComponent: Codable, Sendable, Equatable {
+    let id: String?
+    let displayName: String
+    let role: String?
+    let quantity: Double?
+    let unit: String?
+    let calories: Int
+    let proteinGrams: Double
+    let carbsGrams: Double
+    let fatGrams: Double
+    let fiberGrams: Double?
+    let sugarGrams: Double?
+    let confidence: String?
+
+    init(
+        id: String? = nil,
+        displayName: String,
+        role: String? = nil,
+        quantity: Double? = nil,
+        unit: String? = nil,
+        calories: Int,
+        proteinGrams: Double,
+        carbsGrams: Double,
+        fatGrams: Double,
+        fiberGrams: Double? = nil,
+        sugarGrams: Double? = nil,
+        confidence: String? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.role = role
+        self.quantity = quantity
+        self.unit = unit
+        self.calories = calories
+        self.proteinGrams = proteinGrams
+        self.carbsGrams = carbsGrams
+        self.fatGrams = fatGrams
+        self.fiberGrams = fiberGrams
+        self.sugarGrams = sugarGrams
+        self.confidence = confidence
+    }
+}
+
 /// Result from chat-based food analysis (with optional meal logging)
 struct ChatFoodAnalysisResult: Sendable {
     let message: String
@@ -64,6 +109,31 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
     let emoji: String?  // Relevant emoji for the food (☕, 🥗, 🍳, etc.)
     let loggedAtDateString: String?  // YYYY-MM-DD format if user specified a date
     let loggedAtTime: String?  // HH:mm format if user specified a time
+    let components: [SuggestedFoodComponent]
+    let mealKind: String?
+    let notes: String?
+    let confidence: String?
+    let schemaVersion: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case calories
+        case proteinGrams
+        case carbsGrams
+        case fatGrams
+        case fiberGrams
+        case sugarGrams
+        case servingSize
+        case emoji
+        case loggedAtDateString
+        case loggedAtTime
+        case components
+        case mealKind
+        case notes
+        case confidence
+        case schemaVersion
+    }
 
     /// Parse the logged date/time into a concrete Date in the current calendar.
     var loggedAtDate: Date? {
@@ -107,7 +177,25 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
         emoji ?? "🍽️"
     }
 
-    init(id: String = UUID().uuidString, name: String, calories: Int, proteinGrams: Double, carbsGrams: Double, fatGrams: Double, fiberGrams: Double? = nil, sugarGrams: Double? = nil, servingSize: String?, emoji: String? = nil, loggedAtDateString: String? = nil, loggedAtTime: String? = nil) {
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        calories: Int,
+        proteinGrams: Double,
+        carbsGrams: Double,
+        fatGrams: Double,
+        fiberGrams: Double? = nil,
+        sugarGrams: Double? = nil,
+        servingSize: String?,
+        emoji: String? = nil,
+        loggedAtDateString: String? = nil,
+        loggedAtTime: String? = nil,
+        components: [SuggestedFoodComponent] = [],
+        mealKind: String? = nil,
+        notes: String? = nil,
+        confidence: String? = nil,
+        schemaVersion: Int = 1
+    ) {
         self.id = id
         self.name = name
         self.calories = calories
@@ -120,6 +208,94 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
         self.emoji = emoji
         self.loggedAtDateString = loggedAtDateString
         self.loggedAtTime = loggedAtTime
+        self.components = components
+        self.mealKind = mealKind
+        self.notes = notes
+        self.confidence = confidence
+        self.schemaVersion = schemaVersion
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        name = try container.decode(String.self, forKey: .name)
+        calories = try container.decode(Int.self, forKey: .calories)
+        proteinGrams = try container.decode(Double.self, forKey: .proteinGrams)
+        carbsGrams = try container.decode(Double.self, forKey: .carbsGrams)
+        fatGrams = try container.decode(Double.self, forKey: .fatGrams)
+        fiberGrams = try container.decodeIfPresent(Double.self, forKey: .fiberGrams)
+        sugarGrams = try container.decodeIfPresent(Double.self, forKey: .sugarGrams)
+        servingSize = try container.decodeIfPresent(String.self, forKey: .servingSize)
+        emoji = try container.decodeIfPresent(String.self, forKey: .emoji)
+        loggedAtDateString = try container.decodeIfPresent(String.self, forKey: .loggedAtDateString)
+        loggedAtTime = try container.decodeIfPresent(String.self, forKey: .loggedAtTime)
+        components = try container.decodeIfPresent([SuggestedFoodComponent].self, forKey: .components) ?? []
+        mealKind = try container.decodeIfPresent(String.self, forKey: .mealKind)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        confidence = try container.decodeIfPresent(String.self, forKey: .confidence)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+    }
+}
+
+struct SuggestedFoodComponent: Codable, Sendable, Equatable, Hashable {
+    let id: String
+    let displayName: String
+    let role: String?
+    let quantity: Double?
+    let unit: String?
+    let calories: Int
+    let proteinGrams: Double
+    let carbsGrams: Double
+    let fatGrams: Double
+    let fiberGrams: Double?
+    let sugarGrams: Double?
+    let confidence: String?
+
+    nonisolated init(
+        id: String = UUID().uuidString,
+        displayName: String,
+        role: String? = nil,
+        quantity: Double? = nil,
+        unit: String? = nil,
+        calories: Int,
+        proteinGrams: Double,
+        carbsGrams: Double,
+        fatGrams: Double,
+        fiberGrams: Double? = nil,
+        sugarGrams: Double? = nil,
+        confidence: String? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.role = role
+        self.quantity = quantity
+        self.unit = unit
+        self.calories = calories
+        self.proteinGrams = proteinGrams
+        self.carbsGrams = carbsGrams
+        self.fatGrams = fatGrams
+        self.fiberGrams = fiberGrams
+        self.sugarGrams = sugarGrams
+        self.confidence = confidence
+    }
+}
+
+extension SuggestedFoodComponent {
+    nonisolated init(component: FoodAnalysisComponent) {
+        self.init(
+            id: component.id ?? UUID().uuidString,
+            displayName: component.displayName,
+            role: component.role,
+            quantity: component.quantity,
+            unit: component.unit,
+            calories: component.calories,
+            proteinGrams: component.proteinGrams,
+            carbsGrams: component.carbsGrams,
+            fatGrams: component.fatGrams,
+            fiberGrams: component.fiberGrams,
+            sugarGrams: component.sugarGrams,
+            confidence: component.confidence
+        )
     }
 }
 
@@ -184,6 +360,63 @@ struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
     /// Summary of changes for display
     var changesSummary: String {
         changes.map { "\($0.field): \($0.oldValue) → \($0.newValue)" }.joined(separator: ", ")
+    }
+}
+
+struct SuggestedFoodComponentEdit: Codable, Sendable, Identifiable {
+    let entryId: UUID
+    let name: String
+    let emoji: String?
+    let operations: [Operation]
+    let beforeTotals: NutritionSnapshot
+    let afterTotals: NutritionSnapshot
+
+    var id: UUID { entryId }
+
+    struct NutritionSnapshot: Codable, Sendable {
+        let calories: Int
+        let proteinGrams: Double
+        let carbsGrams: Double
+        let fatGrams: Double
+        let fiberGrams: Double?
+        let sugarGrams: Double?
+
+        var summary: String {
+            let protein = Int(proteinGrams.rounded())
+            let carbs = Int(carbsGrams.rounded())
+            let fat = Int(fatGrams.rounded())
+            return "\(calories) kcal, \(protein)g protein, \(carbs)g carbs, \(fat)g fat"
+        }
+    }
+
+    struct Operation: Codable, Sendable, Identifiable {
+        enum OperationType: String, Codable, Sendable {
+            case remove
+            case restore
+            case setFraction = "set_fraction"
+            case add
+            case update
+        }
+
+        let id: String
+        let type: OperationType
+        let componentId: String?
+        let componentName: String
+        let fractionOfOriginal: Double?
+        let componentPayload: LoggedFoodComponent?
+        let summary: String
+
+        var summaryLine: String {
+            summary
+        }
+    }
+
+    var displayEmoji: String {
+        emoji ?? "🍽️"
+    }
+
+    var operationsSummary: String {
+        operations.map(\.summaryLine).joined(separator: ", ")
     }
 }
 

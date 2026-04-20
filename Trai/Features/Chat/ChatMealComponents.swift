@@ -117,6 +117,117 @@ struct AppliedEditBadge: View {
     }
 }
 
+struct SuggestedComponentEditCard: View {
+    let edit: SuggestedFoodComponentEdit
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                HStack(spacing: 6) {
+                    Text(edit.displayEmoji)
+                    Text("Adjust this meal?")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.orange)
+
+                Spacer()
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .background(Color(.tertiarySystemBackground))
+                        .clipShape(.circle)
+                }
+            }
+
+            Text(edit.name)
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(edit.operations) { operation in
+                    Text("• \(operation.summaryLine)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Before")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(edit.beforeTotals.summary)
+                        .font(.subheadline)
+                }
+
+                Spacer()
+
+                Image(systemName: "arrow.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("After")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(edit.afterTotals.summary)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button("Cancel", action: onDismiss)
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.traiTertiary())
+
+                Button(action: onAccept) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Update")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.traiPrimary(color: .orange))
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(.rect(cornerRadius: 16))
+    }
+}
+
+struct AppliedComponentEditBadge: View {
+    let edit: SuggestedFoodComponentEdit
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(edit.displayEmoji)
+            Text("Updated \(edit.name)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Image(systemName: "checkmark")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.1))
+        .clipShape(.capsule)
+    }
+}
+
 // MARK: - Logged Meal Badge
 
 struct LoggedMealBadge: View {

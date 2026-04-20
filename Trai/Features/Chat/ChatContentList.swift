@@ -33,6 +33,8 @@ struct ChatContentList: View {
     let onDismissPlan: (ChatMessage) -> Void
     let onAcceptFoodEdit: (SuggestedFoodEdit, ChatMessage) -> Void
     let onDismissFoodEdit: (ChatMessage) -> Void
+    let onAcceptFoodComponentEdit: (SuggestedFoodComponentEdit, ChatMessage) -> Void
+    let onDismissFoodComponentEdit: (ChatMessage) -> Void
     let onAcceptWorkoutPlan: (WorkoutPlanSuggestionEntry, ChatMessage) -> Void
     let onDismissWorkoutPlan: (ChatMessage) -> Void
     let onAcceptWorkout: (SuggestedWorkoutEntry, ChatMessage) -> Void
@@ -141,6 +143,12 @@ struct ChatContentList: View {
                             onDismissFoodEdit: {
                                 onDismissFoodEdit(message)
                             },
+                            onAcceptFoodComponentEdit: { edit in
+                                onAcceptFoodComponentEdit(edit, message)
+                            },
+                            onDismissFoodComponentEdit: {
+                                onDismissFoodComponentEdit(message)
+                            },
                             onAcceptWorkoutPlan: { suggestion in
                                 onAcceptWorkoutPlan(suggestion, message)
                             },
@@ -200,6 +208,8 @@ struct ChatContentList: View {
         message.hasAppliedWorkoutPlanSuggestion ||
         message.hasPendingFoodEdit ||
         message.hasAppliedFoodEdit ||
+        message.hasPendingFoodComponentEdit ||
+        message.hasAppliedFoodComponentEdit ||
         message.hasPendingWorkoutSuggestion ||
         message.hasStartedWorkout ||
         message.hasPendingWorkoutLogSuggestion ||

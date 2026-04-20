@@ -584,6 +584,19 @@ export function createAppStoreHelpers({
     return config.appStoreTrustedRootSubjects.some((subjectFragment) => certificate.subject.includes(subjectFragment));
   }
 
+  function assertAllowedAppStoreEnvironment(environment, error, message) {
+    if (
+      config.environment === 'production'
+      && typeof environment === 'string'
+      && environment.trim().toLowerCase() === 'sandbox'
+    ) {
+      throw new HttpError(409, {
+        error,
+        message
+      });
+    }
+  }
+
   function validateStoreKitPayload(payload) {
     if (typeof payload.bundleId !== 'string' || !config.appStoreExpectedBundleIDs.includes(payload.bundleId)) {
       throw new HttpError(401, {
@@ -605,6 +618,12 @@ export function createAppStoreHelpers({
         message: 'StoreKit transaction identifier is invalid.'
       });
     }
+
+    assertAllowedAppStoreEnvironment(
+      payload.environment,
+      'sandbox_storekit_not_allowed',
+      'Sandbox StoreKit transactions are not accepted by the production backend.'
+    );
   }
 
   async function persistStoreKitTransactions(userID, transactions, signedTransactions, now) {
@@ -750,6 +769,12 @@ export function createAppStoreHelpers({
         message: 'App Store notification bundle identifier is invalid.'
       });
     }
+
+    assertAllowedAppStoreEnvironment(
+      payload.data?.environment ?? payload.environment,
+      'sandbox_app_store_notification_not_allowed',
+      'Sandbox App Store notifications are not accepted by the production backend.'
+    );
   }
 
   function validateAppStoreRenewalInfoPayload(payload) {
@@ -766,6 +791,12 @@ export function createAppStoreHelpers({
         message: 'App Store renewal info product identifier is not recognized.'
       });
     }
+
+    assertAllowedAppStoreEnvironment(
+      payload.environment,
+      'sandbox_app_store_renewal_not_allowed',
+      'Sandbox App Store renewal metadata is not accepted by the production backend.'
+    );
   }
 
   function deriveSubscriptionStatus(notification, renewalInfo, transaction, currentStatus) {

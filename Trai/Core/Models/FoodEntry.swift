@@ -75,6 +75,28 @@ final class FoodEntry {
     /// Emoji representing the food (from AI suggestion)
     var emoji: String?
 
+    /// Accepted structured snapshot for food-memory matching.
+    var acceptedSnapshotData: Data?
+
+    /// Denormalized component list for quick access without decoding the full snapshot.
+    var acceptedComponentsData: Data?
+
+    /// Immutable baseline of the originally accepted meal components for user-facing edits.
+    var originalLoggedComponentsData: Data?
+
+    /// Current editable meal composition. Parent macros are recalculated from this when present.
+    var loggedComponentsData: Data?
+
+    /// Linked canonical food-memory identifier once resolved.
+    var foodMemoryIdString: String?
+    var foodMemoryMatchConfidence: Double = 0
+    var foodMemoryMatchVersion: Int = 0
+    var foodMemoryResolutionStateRaw: String = FoodMemoryResolutionState.unresolved.rawValue
+    var foodMemoryResolvedAt: Date?
+    var foodMemoryNeedsResolution: Bool = false
+    var foodMemoryWasUserEdited: Bool = false
+    var foodMemoryResolutionExplanationData: Data?
+
     var loggedAt: Date = Date()
 
     init() {}
@@ -141,6 +163,9 @@ extension FoodEntry {
         case camera = "camera"
         case photo = "photo"
         case description = "description"
+        case memorySuggestion = "memorySuggestion"
+        case chat = "chat"
+        case appIntent = "appIntent"
 
         var id: String { rawValue }
 
@@ -150,6 +175,9 @@ extension FoodEntry {
             case .camera: "Camera Capture"
             case .photo: "Photo Library"
             case .description: "Text Description"
+            case .memorySuggestion: "Remembered Food"
+            case .chat: "Chat Suggestion"
+            case .appIntent: "App Intent"
             }
         }
 
@@ -159,6 +187,9 @@ extension FoodEntry {
             case .camera: "camera.fill"
             case .photo: "photo.fill"
             case .description: "text.bubble.fill"
+            case .memorySuggestion: "sparkles.rectangle.stack.fill"
+            case .chat: "message.fill"
+            case .appIntent: "sparkles"
             }
         }
     }
@@ -172,6 +203,9 @@ extension FoodEntry {
 // MARK: - Computed Properties
 
 extension FoodEntry {
+    private static let snapshotEncoder = JSONEncoder()
+    private static let snapshotDecoder = JSONDecoder()
+
     private var localImageKey: String {
         "food-\(id.uuidString.lowercased())"
     }
@@ -194,6 +228,163 @@ extension FoodEntry {
     /// Display emoji with fallback to fork and knife
     var displayEmoji: String {
         FoodEmojiResolver.resolve(preferred: emoji, foodName: name)
+    }
+
+    var acceptedSnapshot: AcceptedFoodSnapshot? {
+        get {
+            guard let acceptedSnapshotData else { return nil }
+            return try? Self.snapshotDecoder.decode(AcceptedFoodSnapshot.self, from: acceptedSnapshotData)
+        }
+        set {
+            if let newValue {
+                acceptedSnapshotData = try? Self.snapshotEncoder.encode(newValue)
+            } else {
+                acceptedSnapshotData = nil
+            }
+        }
+    }
+
+    var acceptedComponents: [AcceptedFoodComponent] {
+        get {
+            guard let acceptedComponentsData else { return [] }
+            return (try? Self.snapshotDecoder.decode([AcceptedFoodComponent].self, from: acceptedComponentsData)) ?? []
+        }
+        set {
+            acceptedComponentsData = newValue.isEmpty ? nil : (try? Self.snapshotEncoder.encode(newValue))
+        }
+    }
+
+    var originalLoggedComponents: [LoggedFoodComponent] {
+        get {
+            guard let originalLoggedComponentsData else { return [] }
+            return (try? Self.snapshotDecoder.decode([LoggedFoodComponent].self, from: originalLoggedComponentsData)) ?? []
+        }
+        set {
+            originalLoggedComponentsData = newValue.isEmpty ? nil : (try? Self.snapshotEncoder.encode(newValue))
+        }
+    }
+
+    var loggedComponents: [LoggedFoodComponent] {
+        get {
+            guard let loggedComponentsData else { return [] }
+            return (try? Self.snapshotDecoder.decode([LoggedFoodComponent].self, from: loggedComponentsData)) ?? []
+        }
+        set {
+            loggedComponentsData = newValue.isEmpty ? nil : (try? Self.snapshotEncoder.encode(newValue))
+        }
+    }
+
+    var activeLoggedComponents: [LoggedFoodComponent] {
+        loggedComponents.filter(\.isActive)
+    }
+
+    var foodMemoryResolutionState: FoodMemoryResolutionState {
+        get { FoodMemoryResolutionState(rawValue: foodMemoryResolutionStateRaw) ?? .unresolved }
+        set { foodMemoryResolutionStateRaw = newValue.rawValue }
+    }
+
+    var foodMemoryResolutionExplanation: FoodMemoryMatchExplanation? {
+        get {
+            guard let foodMemoryResolutionExplanationData else { return nil }
+            return try? Self.snapshotDecoder.decode(FoodMemoryMatchExplanation.self, from: foodMemoryResolutionExplanationData)
+        }
+        set {
+            if let newValue {
+                foodMemoryResolutionExplanationData = try? Self.snapshotEncoder.encode(newValue)
+            } else {
+                foodMemoryResolutionExplanationData = nil
+            }
+        }
+    }
+
+    func setAcceptedSnapshot(_ snapshot: AcceptedFoodSnapshot, matchVersion: Int = 0) {
+        acceptedSnapshot = snapshot
+        acceptedComponents = snapshot.components
+        bootstrapLoggedComponentsIfNeeded(from: snapshot)
+        foodMemoryNeedsResolution = true
+        foodMemoryWasUserEdited = snapshot.wasUserEdited
+        foodMemoryMatchVersion = matchVersion
+        foodMemoryIdString = nil
+        foodMemoryMatchConfidence = 0
+        foodMemoryResolvedAt = nil
+        foodMemoryResolutionState = .queued
+        foodMemoryResolutionExplanation = nil
+    }
+
+    func bootstrapLoggedComponentsIfNeeded(from snapshot: AcceptedFoodSnapshot? = nil) {
+        let baseline: [LoggedFoodComponent]
+        if let snapshot {
+            baseline = snapshot.components.map(LoggedFoodComponent.init(component:))
+        } else if let acceptedSnapshot {
+            baseline = acceptedSnapshot.components.map(LoggedFoodComponent.init(component:))
+        } else if !acceptedComponents.isEmpty {
+            baseline = acceptedComponents.map(LoggedFoodComponent.init(component:))
+        } else {
+            baseline = [derivedLoggedComponent()]
+        }
+
+        if originalLoggedComponents.isEmpty {
+            originalLoggedComponents = baseline
+        }
+        if loggedComponents.isEmpty {
+            loggedComponents = originalLoggedComponents.isEmpty ? baseline : originalLoggedComponents
+        }
+    }
+
+    func recalculateNutritionFromLoggedComponents() {
+        bootstrapLoggedComponentsIfNeeded()
+
+        let activeComponents = activeLoggedComponents
+        guard !activeComponents.isEmpty else {
+            calories = 0
+            proteinGrams = 0
+            carbsGrams = 0
+            fatGrams = 0
+            fiberGrams = nil
+            sugarGrams = nil
+            return
+        }
+
+        calories = Int(activeComponents.reduce(0.0) { $0 + $1.effectiveCalories }.rounded())
+        proteinGrams = activeComponents.reduce(0.0) { $0 + $1.effectiveProteinGrams }
+        carbsGrams = activeComponents.reduce(0.0) { $0 + $1.effectiveCarbsGrams }
+        fatGrams = activeComponents.reduce(0.0) { $0 + $1.effectiveFatGrams }
+
+        let fiberTotal = activeComponents.reduce(0.0) { partialResult, component in
+            partialResult + (component.effectiveFiberGrams ?? 0)
+        }
+        fiberGrams = fiberTotal > 0 ? fiberTotal : nil
+
+        let sugarTotal = activeComponents.reduce(0.0) { partialResult, component in
+            partialResult + (component.effectiveSugarGrams ?? 0)
+        }
+        sugarGrams = sugarTotal > 0 ? sugarTotal : nil
+    }
+
+    func replaceLoggedComponentsWithDerivedCurrentTotals() {
+        loggedComponents = [derivedLoggedComponent()]
+    }
+
+    private func derivedLoggedComponent() -> LoggedFoodComponent {
+        let normalizedName = FoodNormalizationService().normalizeFoodName(name)
+        return LoggedFoodComponent(
+            id: normalizedName.isEmpty ? id.uuidString.lowercased() : normalizedName,
+            originalComponentID: normalizedName.isEmpty ? id.uuidString.lowercased() : normalizedName,
+            displayName: name,
+            normalizedName: normalizedName,
+            role: .other,
+            quantity: servingQuantity > 0 ? servingQuantity : nil,
+            unit: nil,
+            calories: calories,
+            proteinGrams: proteinGrams,
+            carbsGrams: carbsGrams,
+            fatGrams: fatGrams,
+            fiberGrams: fiberGrams,
+            sugarGrams: sugarGrams,
+            preparation: nil,
+            confidence: nil,
+            source: .derived
+        )
     }
 
     /// Total macros in grams

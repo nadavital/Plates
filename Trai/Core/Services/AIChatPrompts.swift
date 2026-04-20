@@ -52,6 +52,7 @@ extension AIPromptBuilder {
         If the user mentions they ate at a specific time, include loggedAtTime in HH:mm 24-hour format.
         If the user mentions a specific day other than today, include loggedAtDate in YYYY-MM-DD format.
         Include a relevant emoji for the food (e.g., ☕ for coffee, 🥗 for salad, 🍳 for eggs).
+        If the meal has multiple clear components, include a structured components array with the major items and their approximate macros.
 
         Keep your message brief (1-2 sentences).
         """
@@ -109,6 +110,7 @@ extension AIPromptBuilder {
         If the user mentions they ate at a specific time (e.g., "I had lunch at 2pm"), include loggedAtTime in HH:mm 24-hour format.
         If the user mentions a specific day other than today (e.g., "I had this yesterday" or "log this for April 10"), include loggedAtDate in YYYY-MM-DD format.
         Include a relevant emoji for the food (e.g., ☕ for coffee, 🥗 for salad, 🍳 for eggs).
+        If the meal has multiple clear components, include a structured components array with the major items and their approximate macros.
 
         Keep your response brief and conversational (1-3 sentences).
         """
@@ -133,7 +135,23 @@ extension AIPromptBuilder {
                         "proteinGrams": ["type": "number"],
                         "carbsGrams": ["type": "number"],
                         "fatGrams": ["type": "number"],
+                        "fiberGrams": ["type": "number", "nullable": true],
+                        "sugarGrams": ["type": "number", "nullable": true],
                         "servingSize": ["type": "string", "nullable": true],
+                        "mealKind": [
+                            "type": "string",
+                            "enum": ["food", "meal"],
+                            "nullable": true
+                        ],
+                        "notes": [
+                            "type": "string",
+                            "nullable": true
+                        ],
+                        "confidence": [
+                            "type": "string",
+                            "enum": ["high", "medium", "low"],
+                            "nullable": true
+                        ],
                         "emoji": [
                             "type": "string",
                             "description": "A single relevant emoji for this food (e.g., ☕, 🥗, 🍳, 🍕)"
@@ -147,6 +165,36 @@ extension AIPromptBuilder {
                             "type": "string",
                             "description": "Time the meal was eaten in HH:mm format (24-hour). Only include if user specified a different time than now.",
                             "nullable": true
+                        ],
+                        "components": [
+                            "type": "array",
+                            "nullable": true,
+                            "items": [
+                                "type": "object",
+                                "properties": [
+                                    "id": ["type": "string", "nullable": true],
+                                    "displayName": ["type": "string"],
+                                    "role": [
+                                        "type": "string",
+                                        "enum": ["protein", "carb", "fat", "vegetable", "fruit", "sauce", "drink", "mixed", "other"],
+                                        "nullable": true
+                                    ],
+                                    "quantity": ["type": "number", "nullable": true],
+                                    "unit": ["type": "string", "nullable": true],
+                                    "calories": ["type": "integer"],
+                                    "proteinGrams": ["type": "number"],
+                                    "carbsGrams": ["type": "number"],
+                                    "fatGrams": ["type": "number"],
+                                    "fiberGrams": ["type": "number", "nullable": true],
+                                    "sugarGrams": ["type": "number", "nullable": true],
+                                    "confidence": [
+                                        "type": "string",
+                                        "enum": ["high", "medium", "low"],
+                                        "nullable": true
+                                    ]
+                                ],
+                                "required": ["displayName", "calories", "proteinGrams", "carbsGrams", "fatGrams"]
+                            ]
                         ]
                     ],
                     "required": ["name", "calories", "proteinGrams", "carbsGrams", "fatGrams", "emoji"]

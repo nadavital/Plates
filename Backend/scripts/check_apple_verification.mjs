@@ -321,6 +321,39 @@ try {
   assert.ok(Array.isArray(inspectPayload.recentTransactions));
   assert.ok(Array.isArray(inspectPayload.recentNotifications));
 
+  const overrideResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/subscription-override`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`
+    },
+    body: JSON.stringify({
+      userID: successPayload.session.userID,
+      plan: 'pro',
+      status: 'active',
+      source: 'adminGrant',
+      reason: 'Test override'
+    })
+  });
+  assert.equal(overrideResponse.status, 200, 'expected admin subscription override to succeed');
+  const overridePayload = await overrideResponse.json();
+  assert.equal(overridePayload.subscription?.plan, 'pro');
+  assert.equal(overridePayload.subscription?.source, 'adminGrant');
+  assert.equal(overridePayload.rawSubscription?.status, 'refunded');
+  assert.equal(overridePayload.subscriptionOverride?.plan, 'pro');
+
+  const overriddenBillingStatusResponse = await fetch(`http://127.0.0.1:${port}/v1/billing/status`, {
+    headers: {
+      Authorization: `Bearer ${successPayload.session.accessToken}`,
+      'X-Trai-App-Account-Token': sharedBody.appAccountToken
+    }
+  });
+  assert.equal(overriddenBillingStatusResponse.status, 200, 'expected billing status request after override to succeed');
+  const overriddenBillingStatusPayload = await overriddenBillingStatusResponse.json();
+  assert.equal(overriddenBillingStatusPayload.entitlementSnapshot?.plan, 'pro');
+  assert.equal(overriddenBillingStatusPayload.entitlementSnapshot?.status, 'active');
+  assert.equal(overriddenBillingStatusPayload.entitlementSnapshot?.sourceDescription, 'adminGrant');
+
   const creditResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/quota-adjustment`, {
     method: 'POST',
     headers: {
@@ -367,6 +400,35 @@ try {
   assert.equal(reconcileResponse.status, 200, 'expected admin reconciliation to succeed');
   const reconcilePayload = await reconcileResponse.json();
   assert.equal(reconcilePayload.subscription?.status, 'refunded');
+
+  const preservedOverrideStatusResponse = await fetch(`http://127.0.0.1:${port}/v1/billing/status`, {
+    headers: {
+      Authorization: `Bearer ${successPayload.session.accessToken}`,
+      'X-Trai-App-Account-Token': sharedBody.appAccountToken
+    }
+  });
+  assert.equal(preservedOverrideStatusResponse.status, 200, 'expected billing status after reconciliation to succeed');
+  const preservedOverrideStatusPayload = await preservedOverrideStatusResponse.json();
+  assert.equal(preservedOverrideStatusPayload.entitlementSnapshot?.plan, 'pro');
+  assert.equal(preservedOverrideStatusPayload.entitlementSnapshot?.status, 'active');
+  assert.equal(preservedOverrideStatusPayload.entitlementSnapshot?.sourceDescription, 'adminGrant');
+
+  const clearOverrideResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/subscription-override`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`
+    },
+    body: JSON.stringify({
+      userID: successPayload.session.userID,
+      clearOverride: true,
+      reason: 'Clear test override'
+    })
+  });
+  assert.equal(clearOverrideResponse.status, 200, 'expected admin subscription override clear to succeed');
+  const clearOverridePayload = await clearOverrideResponse.json();
+  assert.equal(clearOverridePayload.subscription?.status, 'refunded');
+  assert.equal(clearOverridePayload.subscriptionOverride, null);
 
   const badNonceResponse = await postJSON('/v1/auth/apple/exchange', {
     ...sharedBody,

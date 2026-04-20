@@ -13,6 +13,7 @@ enum FoodLogInputSource: String {
     case photo
     case description
     case manual
+    case memorySuggestion
 
     var foodEntryInputMethod: FoodEntry.InputMethod {
         switch self {
@@ -24,16 +25,25 @@ enum FoodLogInputSource: String {
             return .description
         case .manual:
             return .manual
+        case .memorySuggestion:
+            return .memorySuggestion
         }
     }
 
     var behaviorSource: String {
-        rawValue
+        switch self {
+        case .memorySuggestion:
+            return "memory_suggestion"
+        default:
+            return rawValue
+        }
     }
 }
 
 struct FoodLogDraft {
     var sessionId: UUID?
+    var memorySuggestionID: UUID?
+    var shownSuggestionIDs: [UUID]
     var image: UIImage?
     var description: String
     var inputSource: FoodLogInputSource
@@ -47,6 +57,8 @@ struct FoodLogDraft {
         inputSource: FoodLogInputSource
     ) {
         self.sessionId = sessionId
+        self.memorySuggestionID = nil
+        self.shownSuggestionIDs = []
         self.image = image
         self.description = description
         self.inputSource = inputSource

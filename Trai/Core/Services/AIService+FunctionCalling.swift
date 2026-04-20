@@ -148,6 +148,7 @@ extension AIService {
         var suggestedFoods: [SuggestedFoodEntry] = []
         var planUpdate: PlanUpdateSuggestion?
         var suggestedFoodEdit: SuggestedFoodEdit?
+        var suggestedFoodComponentEdit: SuggestedFoodComponentEdit?
         var suggestedWorkoutPlan: WorkoutPlanSuggestionEntry?
         var suggestedWorkout: SuggestedWorkoutEntry?
         var suggestedWorkoutLog: SuggestedWorkoutLog?
@@ -239,6 +240,10 @@ extension AIService {
                     suggestedFoodEdit = edit
                     log("✏️ Edit: \(edit.name) - \(edit.changes.count) changes", type: .info)
 
+                case .suggestedFoodComponentEdit(let edit):
+                    suggestedFoodComponentEdit = edit
+                    log("🧩 Component edit: \(edit.name) - \(edit.operations.count) operations", type: .info)
+
                 case .suggestedWorkoutPlanUpdate(let suggestion):
                     suggestedWorkoutPlan = suggestion
                     if textResponse.isEmpty && !suggestion.message.isEmpty {
@@ -296,6 +301,7 @@ extension AIService {
                 suggestedFoods.append(contentsOf: followUp.suggestedFoods)
                 if let plan = followUp.planUpdate { planUpdate = plan }
                 if let edit = followUp.suggestedFoodEdit { suggestedFoodEdit = edit }
+                if let componentEdit = followUp.suggestedFoodComponentEdit { suggestedFoodComponentEdit = componentEdit }
                 if let workoutPlan = followUp.suggestedWorkoutPlan {
                     suggestedWorkoutPlan = workoutPlan
                 }
@@ -360,6 +366,26 @@ extension AIService {
                     "entry_name": edit.name,
                     "changes": changesDescription,
                     "instruction": "The user will see a card with these proposed changes. Please write a brief, friendly message explaining what you're suggesting to update and why. \(toneInstruction)"
+                ],
+                previousMessages: messages,
+                originalParts: accumulatedParts,
+                executor: executor
+            )
+            textResponse = followUp.text
+            onTextChunk?(textResponse)
+        }
+
+        if let componentEdit = suggestedFoodComponentEdit, textResponse.isEmpty {
+            let operationsDescription = componentEdit.operations.map(\.summaryLine).joined(separator: ", ")
+            let followUp = try await sendFunctionResultForSuggestion(
+                name: "edit_food_components",
+                response: [
+                    "status": "suggestion_ready",
+                    "entry_name": componentEdit.name,
+                    "operations": operationsDescription,
+                    "before_totals": componentEdit.beforeTotals.summary,
+                    "after_totals": componentEdit.afterTotals.summary,
+                    "instruction": "The user will see a card with these proposed meal component changes. Please write a brief, friendly message explaining what you're suggesting to change in the meal and the resulting nutrition update. \(toneInstruction)"
                 ],
                 previousMessages: messages,
                 originalParts: accumulatedParts,
@@ -487,6 +513,7 @@ extension AIService {
             suggestedFoods: suggestedFoods,
             planUpdate: planUpdate,
             suggestedFoodEdit: suggestedFoodEdit,
+            suggestedFoodComponentEdit: suggestedFoodComponentEdit,
             suggestedWorkoutPlan: suggestedWorkoutPlan,
             suggestedWorkout: suggestedWorkout,
             suggestedWorkoutLog: suggestedWorkoutLog,

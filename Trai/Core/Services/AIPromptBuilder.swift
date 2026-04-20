@@ -28,6 +28,7 @@ enum AIPromptBuilder {
         - If the food appears cooked in a recognizable way, infer the most likely cooking method when it materially affects calories or macros. Use visual cues like grill marks, breading, frying texture, roasting, sauteed appearance, sauces, oil sheen, or visible preparation style.
         - You may infer common included components when they are strongly implied by the visible food presentation, but do NOT add speculative extras that are not reasonably supported by the image or description.
         - If one meal contains multiple clear components (for example a plate plus a visible side), include those visible components together.
+        - When a meal has multiple clear components, return a structured components array describing the major items that make up the meal.
         - If the image is a beverage, identify the beverage directly. For plain water or plain sparkling water with no visible additions, return water with 0 calories and 0g macros.
         - Prefer the most specific food name that is actually supported by the image. Do not guess a polished dish name when multiple materially different foods are still plausible.
         - When the primary food is identifiable, give your best expert estimate instead of hesitating. Use normal real-world assumptions about preparation and serving size unless the image contradicts them.
@@ -49,6 +50,7 @@ enum AIPromptBuilder {
         - If quantity is uncertain, estimate the most likely visible serving instead of refusing, unless the food itself is too unclear to identify.
         - If preparation style is visually likely and meaningfully changes calories or macros, incorporate that into the estimate.
         - Macros and calories should reflect the total visible serving the user is most likely trying to log.
+        - Include sugarGrams whenever sugar content is reasonably inferable, especially for foods or drinks where sugar is a primary nutrient such as table sugar, honey, syrup, juice, soda, candy, or sweetened coffee/tea.
         - Use confidence "high" or "medium" for most identifiable meals and drinks. Use confidence "low" only when the primary item itself is genuinely hard to identify.
         """
 
@@ -89,6 +91,11 @@ enum AIPromptBuilder {
                     "description": "Estimated dietary fiber in grams if reasonably inferable",
                     "nullable": true
                 ],
+                "sugarGrams": [
+                    "type": "number",
+                    "description": "Estimated sugar in grams if reasonably inferable",
+                    "nullable": true
+                ],
                 "servingSize": [
                     "type": "string",
                     "description": "Estimated visible serving size such as '1 medium bowl' or '16 oz bottle'",
@@ -108,6 +115,69 @@ enum AIPromptBuilder {
                 "emoji": [
                     "type": "string",
                     "description": "A single relevant emoji for the identified food or drink. Use 🍽️ for unclear items.",
+                    "nullable": true
+                ],
+                "mealKind": [
+                    "type": "string",
+                    "enum": ["food", "meal"],
+                    "description": "Use 'meal' when the visible loggable item includes multiple meaningful components, otherwise 'food'.",
+                    "nullable": true
+                ],
+                "components": [
+                    "type": "array",
+                    "description": "Major visible meal components. Omit or return an empty array for a simple single-item food.",
+                    "items": [
+                        "type": "object",
+                        "properties": [
+                            "id": [
+                                "type": "string",
+                                "description": "Stable identifier for this component within the response"
+                            ],
+                            "displayName": [
+                                "type": "string",
+                                "description": "Visible component name"
+                            ],
+                            "role": [
+                                "type": "string",
+                                "enum": ["protein", "carb", "fat", "vegetable", "fruit", "sauce", "drink", "mixed", "other"],
+                                "nullable": true
+                            ],
+                            "quantity": [
+                                "type": "number",
+                                "nullable": true
+                            ],
+                            "unit": [
+                                "type": "string",
+                                "nullable": true
+                            ],
+                            "calories": [
+                                "type": "integer"
+                            ],
+                            "proteinGrams": [
+                                "type": "number"
+                            ],
+                            "carbsGrams": [
+                                "type": "number"
+                            ],
+                            "fatGrams": [
+                                "type": "number"
+                            ],
+                            "fiberGrams": [
+                                "type": "number",
+                                "nullable": true
+                            ],
+                            "sugarGrams": [
+                                "type": "number",
+                                "nullable": true
+                            ],
+                            "confidence": [
+                                "type": "string",
+                                "enum": ["high", "medium", "low"],
+                                "nullable": true
+                            ]
+                        ],
+                        "required": ["id", "displayName", "calories", "proteinGrams", "carbsGrams", "fatGrams"]
+                    ],
                     "nullable": true
                 ]
             ],

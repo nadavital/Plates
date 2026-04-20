@@ -29,6 +29,7 @@ extension AIService {
         You have access to tools for:
         - Logging food the user has eaten (suggest_food_log)
         - Checking food log and nutrition progress (get_food_log)
+        - Editing specific meal components after something was logged (edit_food_components)
         - Viewing and updating the user's nutrition plan (get_user_plan, update_user_plan)
         - Checking workout history (get_recent_workouts)
         - Reviewing and revising the user's workout plan (revise_workout_plan)
@@ -184,8 +185,9 @@ extension AIService {
         \(pending.loggedAtDateString.map { "- Date: \($0)" } ?? "")
         \(pending.loggedAtTime.map { "- Time: \($0)" } ?? "")
         \(pending.servingSize.map { "- Serving: \($0)" } ?? "")
+        \(!pending.components.isEmpty ? "- Components: \(pending.components.map(\.displayName).joined(separator: ", "))" : "")
 
-        If the user says this is wrong or wants corrections (e.g., "that's actually a wrap", "it's closer to 400 calories", "add the sauce"), provide an UPDATED suggest_food_log with the corrected values. Acknowledge their correction naturally.
+        If the user says this is wrong or wants corrections (e.g., "that's actually a wrap", "it's closer to 400 calories", "add the sauce", "no toast", "half the rice"), provide an UPDATED suggest_food_log with corrected totals and corrected components. Acknowledge their correction naturally.
 
         """
     }
@@ -242,9 +244,14 @@ extension AIService {
         - Call suggest_food_log ONLY when user says they ATE something ("I had an apple", "just ate lunch")
         - If the user specifies a past day or explicit date for a meal, include logged_at_date in YYYY-MM-DD format when calling suggest_food_log.
         - If the user specifies only a time, include logged_at_time in HH:mm 24-hour format.
-        - For corrections to existing meals: ALWAYS call get_food_log first to find the correct entry ID, then call edit_food_entry.
+        - When a food or drink is primarily sugar or contains clearly inferable sugar, include sugar_grams explicitly. Sugar is a subset of carbs, so for plain sugar, honey, syrup, soda, juice, candy, or sweetened drinks, sugar_grams should not be omitted or set to 0 when carbs are present. For something like pure table sugar, sugar_grams should match carbs_grams.
+        - When a meal has multiple meaningful parts, include components in suggest_food_log with per-component macros and stable IDs when possible.
+        - For corrections to existing meals: ALWAYS call get_food_log first to find the correct entry ID, then call edit_food_entry or edit_food_components depending on whether the user is changing the whole meal or just one part of it.
+        - For corrections to PART of an existing meal (for example "remove the toast", "half the rice", "add avocado", "I didn't eat the sauce"), call get_food_log with include_components=true and then call edit_food_components.
+        - Prefer edit_food_components over edit_food_entry when the user is clearly changing one component or part of a meal rather than renaming or replacing the whole entry.
         - Do not rely on the injected food snapshot for edits; it does not include entry IDs.
         - Never ask the user for a food entry ID or UUID.
+        - Never ask the user for a component ID. If you need it, get it from get_food_log(include_components=true).
         - If multiple logged meals could match the user's correction, ask one short natural-language follow-up using meal details like name, time, or date, never internal identifiers.
         - Don't say "I've logged this" - you suggest, user confirms
 
@@ -512,6 +519,7 @@ extension AIService {
                         let hasNonFoodSuggestion =
                             result.planUpdate != nil ||
                             result.suggestedFoodEdit != nil ||
+                            result.suggestedFoodComponentEdit != nil ||
                             result.suggestedWorkoutPlan != nil ||
                             result.suggestedWorkout != nil ||
                             result.suggestedWorkoutLog != nil ||
@@ -557,6 +565,10 @@ extension AIService {
                             result.suggestedFoodEdit = edit
                             log("✏️ Got edit suggestion - stopping chain", type: .info)
 
+                        case .suggestedFoodComponentEdit(let edit):
+                            result.suggestedFoodComponentEdit = edit
+                            log("🧩 Got component edit suggestion - stopping chain", type: .info)
+
                         case .suggestedWorkoutPlanUpdate(let workoutPlan):
                             result.suggestedWorkoutPlan = workoutPlan
                             if result.text.isEmpty {
@@ -598,7 +610,7 @@ extension AIService {
 
             completeAIRequest(requestTicket)
 
-            let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedWorkoutPlan != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
+            let hasSuggestion = !result.suggestedFoods.isEmpty || result.planUpdate != nil || result.suggestedFoodEdit != nil || result.suggestedFoodComponentEdit != nil || result.suggestedWorkoutPlan != nil || result.suggestedWorkout != nil || result.suggestedWorkoutLog != nil || result.suggestedReminder != nil
             if !additionalFunctionResults.isEmpty && !hasSuggestion {
                 let chainedResult = try await sendParallelFunctionResults(
                     functionResults: additionalFunctionResults,
@@ -618,6 +630,9 @@ extension AIService {
                 }
                 if let edit = chainedResult.suggestedFoodEdit {
                     result.suggestedFoodEdit = edit
+                }
+                if let componentEdit = chainedResult.suggestedFoodComponentEdit {
+                    result.suggestedFoodComponentEdit = componentEdit
                 }
                 if let workoutPlan = chainedResult.suggestedWorkoutPlan {
                     result.suggestedWorkoutPlan = workoutPlan

@@ -414,6 +414,8 @@ struct ChatView: View {
             onDismissPlan: dismissPlanSuggestion,
             onAcceptFoodEdit: acceptFoodEditSuggestion,
             onDismissFoodEdit: dismissFoodEditSuggestion,
+            onAcceptFoodComponentEdit: acceptFoodComponentEditSuggestion,
+            onDismissFoodComponentEdit: dismissFoodComponentEditSuggestion,
             onAcceptWorkoutPlan: acceptWorkoutPlanSuggestion,
             onDismissWorkoutPlan: dismissWorkoutPlanSuggestion,
             onAcceptWorkout: acceptWorkoutSuggestion,
@@ -1148,6 +1150,8 @@ private struct ChatContentSection: View {
     let onDismissPlan: (ChatMessage) -> Void
     let onAcceptFoodEdit: (SuggestedFoodEdit, ChatMessage) -> Void
     let onDismissFoodEdit: (ChatMessage) -> Void
+    let onAcceptFoodComponentEdit: (SuggestedFoodComponentEdit, ChatMessage) -> Void
+    let onDismissFoodComponentEdit: (ChatMessage) -> Void
     let onAcceptWorkoutPlan: (WorkoutPlanSuggestionEntry, ChatMessage) -> Void
     let onDismissWorkoutPlan: (ChatMessage) -> Void
     let onAcceptWorkout: (SuggestedWorkoutEntry, ChatMessage) -> Void
@@ -1210,6 +1214,12 @@ private struct ChatContentSection: View {
             },
             onDismissFoodEdit: {
                 onDismissFoodEdit($0)
+            },
+            onAcceptFoodComponentEdit: { edit, message in
+                onAcceptFoodComponentEdit(edit, message)
+            },
+            onDismissFoodComponentEdit: {
+                onDismissFoodComponentEdit($0)
             },
             onAcceptWorkoutPlan: { suggestion, message in
                 onAcceptWorkoutPlan(suggestion, message)

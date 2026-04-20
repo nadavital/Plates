@@ -25,6 +25,8 @@ extension AIFunctionExecutor {
         }
 
         let fiber = args["fiber_grams"] as? Double ?? (args["fiber_grams"] as? Int).map(Double.init)
+        let sugar = args["sugar_grams"] as? Double ?? (args["sugar_grams"] as? Int).map(Double.init)
+        let components = parseSuggestedFoodComponents(args["components"])
 
         let entry = SuggestedFoodEntry(
             name: name,
@@ -33,10 +35,16 @@ extension AIFunctionExecutor {
             carbsGrams: carbs,
             fatGrams: fat,
             fiberGrams: fiber,
+            sugarGrams: sugar,
             servingSize: args["serving_size"] as? String,
             emoji: args["emoji"] as? String,
             loggedAtDateString: args["logged_at_date"] as? String,
-            loggedAtTime: args["logged_at_time"] as? String
+            loggedAtTime: args["logged_at_time"] as? String,
+            components: components,
+            mealKind: args["meal_kind"] as? String,
+            notes: args["notes"] as? String,
+            confidence: args["confidence"] as? String,
+            schemaVersion: 2
         )
 
         return .suggestedFood(entry)
@@ -55,6 +63,24 @@ extension AIFunctionExecutor {
         case .error(let error):
             return .dataResponse(FunctionResult(
                 name: "edit_food_entry",
+                response: ["error": error]
+            ))
+        }
+    }
+
+    func executeEditFoodComponents(_ args: [String: Any]) -> ExecutionResult {
+        let resolution = resolveFoodEntryForEdit(args)
+
+        switch resolution {
+        case .resolved(let entry):
+            return buildFoodComponentEditResult(args, entry: entry)
+
+        case .clarification(let message):
+            return .directMessage(message)
+
+        case .error(let error):
+            return .dataResponse(FunctionResult(
+                name: "edit_food_components",
                 response: ["error": error]
             ))
         }
@@ -221,6 +247,19 @@ extension AIFunctionExecutor {
                 ))
             }
         }
+        if let newSugar = args["sugar_grams"] as? Double ?? (args["sugar_grams"] as? Int).map(Double.init) {
+            let oldSugar = entry.sugarGrams ?? 0
+            if Int(newSugar) != Int(oldSugar) {
+                fieldChanges.append(SuggestedFoodEdit.FieldChange(
+                    field: "Sugar",
+                    fieldKey: "sugarGrams",
+                    oldValue: "\(Int(oldSugar))g",
+                    newValue: "\(Int(newSugar))g",
+                    newNumericValue: newSugar,
+                    newStringValue: nil
+                ))
+            }
+        }
 
         // If there are changes, return a suggestion for user to confirm
         if !fieldChanges.isEmpty {
@@ -245,10 +284,181 @@ extension AIFunctionExecutor {
                     "calories": entry.calories,
                     "protein": entry.proteinGrams,
                     "carbs": entry.carbsGrams,
-                    "fat": entry.fatGrams
+                    "fat": entry.fatGrams,
+                    "sugar": entry.sugarGrams as Any
                 ]
             ]
         ))
+    }
+
+    private func buildFoodComponentEditResult(_ args: [String: Any], entry: FoodEntry) -> ExecutionResult {
+        guard let rawOperations = args["operations"] as? [[String: Any]], !rawOperations.isEmpty else {
+            return .dataResponse(FunctionResult(
+                name: "edit_food_components",
+                response: ["error": "Missing operations"]
+            ))
+        }
+
+        entry.bootstrapLoggedComponentsIfNeeded()
+        var workingComponents = entry.loggedComponents
+        let beforeTotals = nutritionSnapshot(for: workingComponents)
+        var previews: [SuggestedFoodComponentEdit.Operation] = []
+
+        for (index, rawOperation) in rawOperations.enumerated() {
+            let typeRaw = (rawOperation["type"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+
+            guard let typeRaw,
+                  let operationType = SuggestedFoodComponentEdit.Operation.OperationType(rawValue: typeRaw) else {
+                return .dataResponse(FunctionResult(
+                    name: "edit_food_components",
+                    response: ["error": "Invalid operation type at index \(index)"]
+                ))
+            }
+
+            switch operationType {
+            case .remove:
+                switch resolveLoggedComponent(in: workingComponents, operation: rawOperation) {
+                case .clarification(let message):
+                    return .directMessage(message)
+                case .error(let error):
+                    return .dataResponse(FunctionResult(name: "edit_food_components", response: ["error": error]))
+                case .resolved(let matchIndex):
+                    let component = workingComponents[matchIndex]
+                    guard component.status != .removed || component.fractionOfOriginal > 0 else { continue }
+                    workingComponents[matchIndex].status = .removed
+                    workingComponents[matchIndex].fractionOfOriginal = 0
+                    previews.append(SuggestedFoodComponentEdit.Operation(
+                        id: "remove-\(index)-\(component.id)",
+                        type: .remove,
+                        componentId: component.id,
+                        componentName: component.displayName,
+                        fractionOfOriginal: 0,
+                        componentPayload: nil,
+                        summary: "Remove \(component.displayName)"
+                    ))
+                }
+
+            case .restore:
+                switch resolveLoggedComponent(in: workingComponents, operation: rawOperation) {
+                case .clarification(let message):
+                    return .directMessage(message)
+                case .error(let error):
+                    return .dataResponse(FunctionResult(name: "edit_food_components", response: ["error": error]))
+                case .resolved(let matchIndex):
+                    let component = workingComponents[matchIndex]
+                    guard component.status != .active || component.fractionOfOriginal != 1 else { continue }
+                    workingComponents[matchIndex].status = .active
+                    workingComponents[matchIndex].fractionOfOriginal = max(component.fractionOfOriginal, 1)
+                    previews.append(SuggestedFoodComponentEdit.Operation(
+                        id: "restore-\(index)-\(component.id)",
+                        type: .restore,
+                        componentId: component.id,
+                        componentName: component.displayName,
+                        fractionOfOriginal: workingComponents[matchIndex].fractionOfOriginal,
+                        componentPayload: nil,
+                        summary: "Restore \(component.displayName)"
+                    ))
+                }
+
+            case .setFraction:
+                let fraction = rawOperation["fraction_of_original"] as? Double ??
+                    (rawOperation["fraction_of_original"] as? Int).map(Double.init)
+                guard let fraction, fraction >= 0 else {
+                    return .dataResponse(FunctionResult(
+                        name: "edit_food_components",
+                        response: ["error": "set_fraction requires a non-negative fraction_of_original"]
+                    ))
+                }
+
+                switch resolveLoggedComponent(in: workingComponents, operation: rawOperation) {
+                case .clarification(let message):
+                    return .directMessage(message)
+                case .error(let error):
+                    return .dataResponse(FunctionResult(name: "edit_food_components", response: ["error": error]))
+                case .resolved(let matchIndex):
+                    let component = workingComponents[matchIndex]
+                    guard component.fractionOfOriginal != fraction || component.status != (fraction == 0 ? .removed : .active) else {
+                        continue
+                    }
+                    workingComponents[matchIndex].fractionOfOriginal = fraction
+                    workingComponents[matchIndex].status = fraction == 0 ? .removed : .active
+                    previews.append(SuggestedFoodComponentEdit.Operation(
+                        id: "fraction-\(index)-\(component.id)",
+                        type: .setFraction,
+                        componentId: component.id,
+                        componentName: component.displayName,
+                        fractionOfOriginal: fraction,
+                        componentPayload: nil,
+                        summary: "\(component.displayName) at \(Int((fraction * 100).rounded()))% of the original portion"
+                    ))
+                }
+
+            case .add:
+                guard let componentPayload = buildLoggedComponentPayload(from: rawOperation) else {
+                    return .dataResponse(FunctionResult(
+                        name: "edit_food_components",
+                        response: ["error": "add requires display_name, calories, protein_grams, carbs_grams, and fat_grams"]
+                    ))
+                }
+                workingComponents.append(componentPayload)
+                previews.append(SuggestedFoodComponentEdit.Operation(
+                    id: "add-\(index)-\(componentPayload.id)",
+                    type: .add,
+                    componentId: componentPayload.id,
+                    componentName: componentPayload.displayName,
+                    fractionOfOriginal: componentPayload.fractionOfOriginal,
+                    componentPayload: componentPayload,
+                    summary: "Add \(componentPayload.displayName)"
+                ))
+
+            case .update:
+                switch resolveLoggedComponent(in: workingComponents, operation: rawOperation) {
+                case .clarification(let message):
+                    return .directMessage(message)
+                case .error(let error):
+                    return .dataResponse(FunctionResult(name: "edit_food_components", response: ["error": error]))
+                case .resolved(let matchIndex):
+                    let existing = workingComponents[matchIndex]
+                    guard let updated = buildLoggedComponentPayload(from: rawOperation, existing: existing) else {
+                        return .dataResponse(FunctionResult(
+                            name: "edit_food_components",
+                            response: ["error": "update requires a component reference plus fields to change"]
+                        ))
+                    }
+                    guard updated != existing else { continue }
+                    workingComponents[matchIndex] = updated
+                    previews.append(SuggestedFoodComponentEdit.Operation(
+                        id: "update-\(index)-\(updated.id)",
+                        type: .update,
+                        componentId: updated.id,
+                        componentName: updated.displayName,
+                        fractionOfOriginal: updated.fractionOfOriginal,
+                        componentPayload: updated,
+                        summary: "Update \(existing.displayName) to \(updated.displayName)"
+                    ))
+                }
+            }
+        }
+
+        guard workingComponents != entry.loggedComponents else {
+            return .dataResponse(FunctionResult(
+                name: "edit_food_components",
+                response: ["success": true, "message": "No component changes needed"]
+            ))
+        }
+
+        let afterTotals = nutritionSnapshot(for: workingComponents)
+        let suggestion = SuggestedFoodComponentEdit(
+            entryId: entry.id,
+            name: entry.name,
+            emoji: entry.emoji,
+            operations: previews,
+            beforeTotals: beforeTotals,
+            afterTotals: afterTotals
+        )
+        return .suggestedFoodComponentEdit(suggestion)
     }
 
     private enum FoodEntryResolution {
@@ -521,6 +731,7 @@ extension AIFunctionExecutor {
         var calendar = Calendar.current
         calendar.timeZone = TimeZone.current
         let today = Date()
+        let includeComponents = args["include_components"] as? Bool ?? false
 
         // Log the args for debugging
         let argsDescription = args.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
@@ -571,7 +782,7 @@ extension AIFunctionExecutor {
         timeFormatter.dateFormat = "h:mm a"
 
         let formattedEntries = entries.map { entry -> [String: Any] in
-            return [
+            var payload: [String: Any] = [
                 "id": entry.id.uuidString,
                 "name": entry.name,
                 "emoji": entry.displayEmoji,
@@ -579,9 +790,40 @@ extension AIFunctionExecutor {
                 "protein": entry.proteinGrams,
                 "carbs": entry.carbsGrams,
                 "fat": entry.fatGrams,
+                "fiber": entry.fiberGrams as Any,
+                "sugar": entry.sugarGrams as Any,
+                "serving_size": entry.servingSize as Any,
+                "meal_type": entry.mealType,
                 "date": dateFormatter.string(from: entry.loggedAt),
                 "time": timeFormatter.string(from: entry.loggedAt)
             ]
+
+            if includeComponents {
+                entry.bootstrapLoggedComponentsIfNeeded()
+                payload["has_structured_components"] = !entry.loggedComponents.isEmpty
+                payload["component_count"] = entry.loggedComponents.count
+                payload["components"] = entry.loggedComponents.map { component in
+                    [
+                        "id": component.id,
+                        "original_component_id": component.originalComponentID as Any,
+                        "display_name": component.displayName,
+                        "role": component.role.rawValue,
+                        "quantity": component.quantity as Any,
+                        "unit": component.unit as Any,
+                        "calories": Int(component.effectiveCalories.rounded()),
+                        "protein_grams": component.effectiveProteinGrams,
+                        "carbs_grams": component.effectiveCarbsGrams,
+                        "fat_grams": component.effectiveFatGrams,
+                        "fiber_grams": component.effectiveFiberGrams as Any,
+                        "sugar_grams": component.effectiveSugarGrams as Any,
+                        "fraction_of_original": component.fractionOfOriginal,
+                        "status": component.status.rawValue,
+                        "source": component.source.rawValue
+                    ] as [String: Any]
+                }
+            }
+
+            return payload
         }
 
         // Calculate number of days in range
@@ -620,6 +862,142 @@ extension AIFunctionExecutor {
                 "entry_count": entries.count
             ]
         ))
+    }
+
+    private enum LoggedComponentResolution {
+        case resolved(Int)
+        case clarification(String)
+        case error(String)
+    }
+
+    private func resolveLoggedComponent(in components: [LoggedFoodComponent], operation: [String: Any]) -> LoggedComponentResolution {
+        if let componentId = (operation["component_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !componentId.isEmpty {
+            if let index = components.firstIndex(where: { $0.id == componentId }) {
+                return .resolved(index)
+            }
+            return .error("Component not found")
+        }
+
+        guard let componentName = (operation["component_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !componentName.isEmpty else {
+            return .error("Missing component reference")
+        }
+
+        let normalizedTarget = normalizedFoodReference(componentName)
+        let exactMatches = components.enumerated().filter { _, component in
+            normalizedFoodReference(component.displayName) == normalizedTarget ||
+            component.normalizedName == normalizedTarget
+        }
+        if exactMatches.count == 1, let match = exactMatches.first {
+            return .resolved(match.offset)
+        }
+
+        let fuzzyMatches = components.enumerated().filter { _, component in
+            let normalizedName = normalizedFoodReference(component.displayName)
+            return normalizedName.contains(normalizedTarget) || normalizedTarget.contains(normalizedName)
+        }
+        if fuzzyMatches.count == 1, let match = fuzzyMatches.first {
+            return .resolved(match.offset)
+        }
+
+        let matches = exactMatches.isEmpty ? fuzzyMatches : exactMatches
+        guard !matches.isEmpty else {
+            return .clarification("I couldn't find that component in the meal. Tell me the exact part you want to change and I'll update it.")
+        }
+
+        let options = matches.prefix(3).map { $0.element.displayName }.joined(separator: ", ")
+        return .clarification("I found multiple possible meal components: \(options). Which one should I change?")
+    }
+
+    private func nutritionSnapshot(for components: [LoggedFoodComponent]) -> SuggestedFoodComponentEdit.NutritionSnapshot {
+        let activeComponents = components.filter(\.isActive)
+        let calories = Int(activeComponents.reduce(0.0) { $0 + $1.effectiveCalories }.rounded())
+        let protein = activeComponents.reduce(0.0) { $0 + $1.effectiveProteinGrams }
+        let carbs = activeComponents.reduce(0.0) { $0 + $1.effectiveCarbsGrams }
+        let fat = activeComponents.reduce(0.0) { $0 + $1.effectiveFatGrams }
+        let fiber = activeComponents.reduce(0.0) { $0 + ($1.effectiveFiberGrams ?? 0) }
+        let sugar = activeComponents.reduce(0.0) { $0 + ($1.effectiveSugarGrams ?? 0) }
+
+        return SuggestedFoodComponentEdit.NutritionSnapshot(
+            calories: calories,
+            proteinGrams: protein,
+            carbsGrams: carbs,
+            fatGrams: fat,
+            fiberGrams: fiber > 0 ? fiber : nil,
+            sugarGrams: sugar > 0 ? sugar : nil
+        )
+    }
+
+    private func parseSuggestedFoodComponents(_ value: Any?) -> [SuggestedFoodComponent] {
+        guard let rawComponents = value as? [[String: Any]] else { return [] }
+        return rawComponents.compactMap { rawComponent in
+            guard let displayName = rawComponent["display_name"] as? String ?? rawComponent["displayName"] as? String,
+                  let calories = rawComponent["calories"] as? Int,
+                  let protein = rawComponent["protein_grams"] as? Double ?? (rawComponent["protein_grams"] as? Int).map(Double.init),
+                  let carbs = rawComponent["carbs_grams"] as? Double ?? (rawComponent["carbs_grams"] as? Int).map(Double.init),
+                  let fat = rawComponent["fat_grams"] as? Double ?? (rawComponent["fat_grams"] as? Int).map(Double.init) else {
+                return nil
+            }
+
+            return SuggestedFoodComponent(
+                id: rawComponent["id"] as? String ?? UUID().uuidString,
+                displayName: displayName,
+                role: rawComponent["role"] as? String,
+                quantity: rawComponent["quantity"] as? Double ?? (rawComponent["quantity"] as? Int).map(Double.init),
+                unit: rawComponent["unit"] as? String,
+                calories: calories,
+                proteinGrams: protein,
+                carbsGrams: carbs,
+                fatGrams: fat,
+                fiberGrams: rawComponent["fiber_grams"] as? Double ?? (rawComponent["fiber_grams"] as? Int).map(Double.init),
+                sugarGrams: rawComponent["sugar_grams"] as? Double ?? (rawComponent["sugar_grams"] as? Int).map(Double.init),
+                confidence: rawComponent["confidence"] as? String
+            )
+        }
+    }
+
+    private func buildLoggedComponentPayload(from rawOperation: [String: Any], existing: LoggedFoodComponent? = nil) -> LoggedFoodComponent? {
+        let displayName = (rawOperation["display_name"] as? String ?? existing?.displayName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let displayName, !displayName.isEmpty else { return nil }
+
+        let calories = rawOperation["calories"] as? Int ?? existing?.calories
+        let protein = rawOperation["protein_grams"] as? Double ?? (rawOperation["protein_grams"] as? Int).map(Double.init) ?? existing?.proteinGrams
+        let carbs = rawOperation["carbs_grams"] as? Double ?? (rawOperation["carbs_grams"] as? Int).map(Double.init) ?? existing?.carbsGrams
+        let fat = rawOperation["fat_grams"] as? Double ?? (rawOperation["fat_grams"] as? Int).map(Double.init) ?? existing?.fatGrams
+
+        guard let calories, let protein, let carbs, let fat else { return nil }
+
+        let normalizedName = normalizedFoodReference(displayName)
+        let explicitId = (rawOperation["component_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let componentId = explicitId?.isEmpty == false
+            ? explicitId!
+            : existing?.id ?? "\(normalizedName)-\(UUID().uuidString.lowercased())"
+        let fraction = rawOperation["fraction_of_original"] as? Double ??
+            (rawOperation["fraction_of_original"] as? Int).map(Double.init) ??
+            existing?.fractionOfOriginal ?? 1
+
+        return LoggedFoodComponent(
+            id: componentId,
+            originalComponentID: existing?.originalComponentID ?? componentId,
+            displayName: displayName,
+            normalizedName: normalizedName,
+            role: FoodComponentRole(rawValue: (rawOperation["role"] as? String)?.lowercased() ?? "") ?? existing?.role ?? .other,
+            quantity: rawOperation["quantity"] as? Double ?? (rawOperation["quantity"] as? Int).map(Double.init) ?? existing?.quantity,
+            unit: rawOperation["unit"] as? String ?? existing?.unit,
+            calories: calories,
+            proteinGrams: protein,
+            carbsGrams: carbs,
+            fatGrams: fat,
+            fiberGrams: rawOperation["fiber_grams"] as? Double ?? (rawOperation["fiber_grams"] as? Int).map(Double.init) ?? existing?.fiberGrams,
+            sugarGrams: rawOperation["sugar_grams"] as? Double ?? (rawOperation["sugar_grams"] as? Int).map(Double.init) ?? existing?.sugarGrams,
+            preparation: existing?.preparation,
+            confidence: FoodAnalysisConfidence(rawValue: (rawOperation["confidence"] as? String)?.lowercased() ?? "") ?? existing?.confidence,
+            source: existing?.source ?? .user,
+            fractionOfOriginal: max(fraction, 0),
+            status: max(fraction, 0) == 0 ? .removed : (existing?.status ?? .active)
+        )
     }
 
     /// Determines the date range based on function arguments

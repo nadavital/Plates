@@ -17,6 +17,7 @@ enum AIFunctionDeclarations {
         [
             suggestFoodLog,
             editFoodEntry,
+            editFoodComponents,
             getTodaysFoodLog,
             getUserPlan,
             updateUserPlan,
@@ -75,6 +76,10 @@ enum AIFunctionDeclarations {
                         "type": "number",
                         "description": "Dietary fiber in grams"
                     ],
+                    "sugar_grams": [
+                        "type": "number",
+                        "description": "Sugar in grams"
+                    ],
                     "serving_size": [
                         "type": "string",
                         "description": "Serving size description (e.g., '1 large bowl', '16 oz')"
@@ -90,6 +95,48 @@ enum AIFunctionDeclarations {
                     "logged_at_time": [
                         "type": "string",
                         "description": "Time to log the meal in HH:mm 24-hour format, if the user specified a time (e.g., '14:30' for 2:30 PM)"
+                    ],
+                    "meal_kind": [
+                        "type": "string",
+                        "description": "Use 'meal' when the user ate multiple meaningful components together, otherwise 'food'.",
+                        "enum": ["food", "meal"]
+                    ],
+                    "notes": [
+                        "type": "string",
+                        "description": "Brief assumptions or context about the estimate"
+                    ],
+                    "confidence": [
+                        "type": "string",
+                        "description": "Confidence level for the estimate",
+                        "enum": ["high", "medium", "low"]
+                    ],
+                    "components": [
+                        "type": "array",
+                        "description": "Major meal components when the meal has multiple clear parts. Include stable IDs when possible so future edits can refer to them.",
+                        "items": [
+                            "type": "object",
+                            "properties": [
+                                "id": ["type": "string"],
+                                "display_name": ["type": "string"],
+                                "role": [
+                                    "type": "string",
+                                    "enum": ["protein", "carb", "fat", "vegetable", "fruit", "sauce", "drink", "mixed", "other"]
+                                ],
+                                "quantity": ["type": "number"],
+                                "unit": ["type": "string"],
+                                "calories": ["type": "integer"],
+                                "protein_grams": ["type": "number"],
+                                "carbs_grams": ["type": "number"],
+                                "fat_grams": ["type": "number"],
+                                "fiber_grams": ["type": "number"],
+                                "sugar_grams": ["type": "number"],
+                                "confidence": [
+                                    "type": "string",
+                                    "enum": ["high", "medium", "low"]
+                                ]
+                            ],
+                            "required": ["display_name", "calories", "protein_grams", "carbs_grams", "fat_grams"]
+                        ]
                     ]
                 ],
                 "required": ["name", "calories", "protein_grams", "carbs_grams", "fat_grams", "emoji"]
@@ -167,6 +214,10 @@ enum AIFunctionDeclarations {
                         "type": "number",
                         "description": "New fiber in grams (optional)"
                     ],
+                    "sugar_grams": [
+                        "type": "number",
+                        "description": "New sugar in grams (optional)"
+                    ],
                     "notes": [
                         "type": "string",
                         "description": "New notes for this food entry (optional)"
@@ -177,11 +228,89 @@ enum AIFunctionDeclarations {
         ]
     }
 
+    /// Edit components within an existing food entry
+    static var editFoodComponents: [String: Any] {
+        [
+            "name": "edit_food_components",
+            "description": "Edit component-level meal composition for an existing food entry. Use this when the user refers to part of a meal, such as removing toast, restoring sauce, eating half the rice, or adding avocado. Never ask the user for an entry ID or component ID. If you do not already have the entry_id and component details, call get_food_log with include_components=true first.",
+            "parameters": [
+                "type": "object",
+                "properties": [
+                    "entry_id": [
+                        "type": "string",
+                        "description": "The UUID of the food entry to edit"
+                    ],
+                    "target_name": [
+                        "type": "string",
+                        "description": "Name of the already-logged meal you want to edit."
+                    ],
+                    "target_logged_at_date": [
+                        "type": "string",
+                        "description": "Date of the already-logged meal you want to edit in YYYY-MM-DD format."
+                    ],
+                    "target_logged_at_time": [
+                        "type": "string",
+                        "description": "Time of the already-logged meal you want to edit in HH:mm 24-hour format."
+                    ],
+                    "target_meal_type": [
+                        "type": "string",
+                        "description": "Meal type of the already-logged entry you want to edit.",
+                        "enum": ["breakfast", "lunch", "dinner", "snack"]
+                    ],
+                    "operations": [
+                        "type": "array",
+                        "description": "One or more component-level edits to apply in order.",
+                        "items": [
+                            "type": "object",
+                            "properties": [
+                                "type": [
+                                    "type": "string",
+                                    "enum": ["remove", "restore", "set_fraction", "add", "update"]
+                                ],
+                                "component_id": [
+                                    "type": "string",
+                                    "description": "Stable component identifier from get_food_log(include_components=true)."
+                                ],
+                                "component_name": [
+                                    "type": "string",
+                                    "description": "Visible component name when component_id is not available."
+                                ],
+                                "fraction_of_original": [
+                                    "type": "number",
+                                    "description": "Fraction of the original component that the user actually ate, such as 0.5 for half."
+                                ],
+                                "display_name": ["type": "string"],
+                                "role": [
+                                    "type": "string",
+                                    "enum": ["protein", "carb", "fat", "vegetable", "fruit", "sauce", "drink", "mixed", "other"]
+                                ],
+                                "quantity": ["type": "number"],
+                                "unit": ["type": "string"],
+                                "calories": ["type": "integer"],
+                                "protein_grams": ["type": "number"],
+                                "carbs_grams": ["type": "number"],
+                                "fat_grams": ["type": "number"],
+                                "fiber_grams": ["type": "number"],
+                                "sugar_grams": ["type": "number"],
+                                "confidence": [
+                                    "type": "string",
+                                    "enum": ["high", "medium", "low"]
+                                ]
+                            ],
+                            "required": ["type"]
+                        ]
+                    ]
+                ],
+                "required": ["operations"]
+            ]
+        ]
+    }
+
     /// Get food log with optional date range
     static var getTodaysFoodLog: [String: Any] {
         [
             "name": "get_food_log",
-            "description": "Get the user's food log for a specific date or date range, including averages for multi-day queries. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to see their eating patterns and adherence. Also use when the user asks what they've eaten, their progress, remaining calories/macros, nutrition status, or averages. Use this before edit_food_entry when you need to identify which logged meal to update, because it returns entry IDs and exact timestamps. Returns daily_averages automatically for multi-day ranges.",
+            "description": "Get the user's food log for a specific date or date range, including averages for multi-day queries. IMPORTANT: Use this when reviewing/reassessing the nutrition plan to see their eating patterns and adherence. Also use when the user asks what they've eaten, their progress, remaining calories/macros, nutrition status, or averages. Use this before edit_food_entry when you need to identify which logged meal to update, because it returns entry IDs and exact timestamps. Set include_components=true before edit_food_components so you can inspect and reference meal parts. Returns daily_averages automatically for multi-day ranges.",
             "parameters": [
                 "type": "object",
                 "properties": [
@@ -201,6 +330,10 @@ enum AIFunctionDeclarations {
                     "range_days": [
                         "type": "integer",
                         "description": "Number of days to include in the range (default: 1 for single day). Ignored if period is set."
+                    ],
+                    "include_components": [
+                        "type": "boolean",
+                        "description": "When true, include structured meal components and component IDs for each entry. Use this before edit_food_components or when the user asks about parts of a meal."
                     ]
                 ],
                 "required": []
