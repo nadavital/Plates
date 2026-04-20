@@ -13,6 +13,7 @@ enum AppLaunchArguments {
     static let seedLiveWorkoutPerfData = "--seed-live-workout-perf-data"
     static let uiTestLiveWorkoutPreset = "--ui-test-live-workout-preset"
     static let mockFoodAIResponses = "--ui-test-mock-food-ai"
+    static let forceFoodCameraPermissionFallback = "--ui-test-force-no-camera-food-flow"
     static let enableTabPrewarm = "--enable-tab-prewarm"
     static let disableTabPrewarm = "--disable-tab-prewarm"
     static let disableHeavyTabDeferral = "--disable-heavy-tab-deferral"
@@ -59,6 +60,10 @@ enum AppLaunchArguments {
 
     static var shouldUseMockFoodAIResponses: Bool {
         ProcessInfo.processInfo.arguments.contains(mockFoodAIResponses)
+    }
+
+    static var shouldForceFoodCameraPermissionFallback: Bool {
+        ProcessInfo.processInfo.arguments.contains(forceFoodCameraPermissionFallback)
     }
 
     static var shouldEnableTabPrewarm: Bool {

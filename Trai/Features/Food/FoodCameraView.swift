@@ -162,39 +162,58 @@ private struct FoodLogCaptureStepView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var foodDescription = ""
     @State private var isCapturingPhoto = false
-    @State private var showingCameraPermissionAlert = false
     @State private var memorySuggestions: [FoodSuggestion] = []
+    @State private var hasResolvedCameraAvailability = false
 
     var body: some View {
-        FoodCameraViewfinder(
-            cameraService: cameraService,
-            isCapturingPhoto: isCapturingPhoto,
-            description: $foodDescription,
-            suggestions: memorySuggestions,
-            onCapture: capturePhoto,
-            onSelectSuggestion: applyMemorySuggestion,
-            onManualEntry: onManualEntryRequested,
-            onSubmitDescription: submitTextDescription,
-            selectedPhotoItem: $selectedPhotoItem
-        )
+        Group {
+            if shouldShowNoCameraFallback {
+                FoodCameraNoCameraFallbackView(
+                    description: $foodDescription,
+                    suggestions: memorySuggestions,
+                    onSelectSuggestion: applyMemorySuggestion,
+                    onManualEntry: onManualEntryRequested,
+                    onSubmitDescription: submitTextDescription,
+                    onEnableCamera: enableCamera,
+                    selectedPhotoItem: $selectedPhotoItem
+                )
+            } else {
+                FoodCameraViewfinder(
+                    cameraService: cameraService,
+                    isCapturingPhoto: isCapturingPhoto,
+                    description: $foodDescription,
+                    suggestions: memorySuggestions,
+                    onCapture: capturePhoto,
+                    onSelectSuggestion: applyMemorySuggestion,
+                    onManualEntry: onManualEntryRequested,
+                    onSubmitDescription: submitTextDescription,
+                    selectedPhotoItem: $selectedPhotoItem
+                )
+            }
+        }
         .overlay(alignment: .topLeading) {
-            Text("ready")
+            Text(shouldShowNoCameraFallback ? "fallback-ready" : "ready")
                 .font(.system(size: 1))
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
                 .accessibilityElement(children: .ignore)
-                .accessibilityIdentifier("foodCameraCaptureReady")
+                .accessibilityIdentifier(
+                    shouldShowNoCameraFallback
+                        ? "foodCameraNoCameraReady"
+                        : "foodCameraCaptureReady"
+                )
         }
+        .navigationTitle(shouldShowNoCameraFallback ? "Log Food" : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", systemImage: "xmark") {
                     onCancel()
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(shouldShowNoCameraFallback ? Color.primary : .white)
             }
         }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarBackground(shouldShowNoCameraFallback ? .visible : .hidden, for: .navigationBar)
         .onChange(of: selectedPhotoItem) { _, newValue in
             Task { @MainActor in
                 guard let data = try? await newValue?.loadTransferable(type: Data.self),
@@ -219,40 +238,50 @@ private struct FoodLogCaptureStepView: View {
         }
         .task {
             loadSuggestions()
+            guard !AppLaunchArguments.shouldForceFoodCameraPermissionFallback else {
+                hasResolvedCameraAvailability = true
+                return
+            }
             guard !AppLaunchArguments.isUITesting else { return }
             await cameraService.requestPermission()
-            if !cameraService.isAuthorized {
-                showingCameraPermissionAlert = true
-            }
+            hasResolvedCameraAvailability = true
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             guard !AppLaunchArguments.isUITesting else { return }
             Task { @MainActor in
-                guard !cameraService.isAuthorized else { return }
-                await cameraService.requestPermission()
                 if cameraService.isAuthorized {
-                    showingCameraPermissionAlert = false
+                    hasResolvedCameraAvailability = true
+                    return
                 }
+                await cameraService.requestPermission()
+                hasResolvedCameraAvailability = true
             }
-        }
-        .alert("Camera Access Needed", isPresented: $showingCameraPermissionAlert) {
-            Button("Open Settings") {
-                guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
-                openURL(settingsURL)
-            }
-            Button("Cancel", role: .cancel) {
-                onCancel()
-            }
-        } message: {
-            Text("Allow camera access in Settings to log food with a photo.")
         }
         .onDisappear {
             cameraService.stopSession()
         }
     }
 
+    private var shouldShowNoCameraFallback: Bool {
+        AppLaunchArguments.shouldForceFoodCameraPermissionFallback
+            || (hasResolvedCameraAvailability && !cameraService.isAuthorized)
+    }
+
     private var trimmedDescription: String {
         foodDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func enableCamera() {
+        Task { @MainActor in
+            guard !AppLaunchArguments.shouldForceFoodCameraPermissionFallback else { return }
+
+            await cameraService.requestPermission()
+            hasResolvedCameraAvailability = true
+
+            guard !cameraService.isAuthorized,
+                  let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+            openURL(settingsURL)
+        }
     }
 
     private func capturePhoto() {

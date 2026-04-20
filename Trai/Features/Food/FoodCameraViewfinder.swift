@@ -88,7 +88,7 @@ struct FoodCameraViewfinder: View {
     }
 }
 
-private struct FoodCameraSuggestionRail: View {
+struct FoodCameraSuggestionRail: View {
     let suggestions: [FoodSuggestion]
     let onSelectSuggestion: (FoodSuggestion) -> Void
 
@@ -202,9 +202,10 @@ private struct FoodCameraControlBar: View {
     }
 }
 
-private struct FoodCameraAccessoryButtonLabel: View {
+struct FoodCameraAccessoryButtonLabel: View {
     let systemName: String
     let title: String
+    var foregroundStyle: Color = .white
 
     var body: some View {
         VStack(spacing: 4) {
@@ -213,12 +214,12 @@ private struct FoodCameraAccessoryButtonLabel: View {
             Text(title)
                 .font(.caption2)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(foregroundStyle)
         .frame(width: 70, height: 58)
     }
 }
 
-private struct FoodCameraSuggestionChip: View {
+struct FoodCameraSuggestionChip: View {
     let suggestion: FoodSuggestion
     let action: () -> Void
 
