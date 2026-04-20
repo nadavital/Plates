@@ -164,7 +164,8 @@ extension AIService {
             - If the image is not gym equipment, do not force it into a gym machine category. Use a generic visible label, keep suggestedExercises empty unless they are clearly supported by the object shown, and explain the uncertainty in description or tips.
             """
 
-            logImagePayloadSummary(imageData, label: "Exercise photo analysis image")
+            let preparedImageData = AIImagePayloadPreparer.prepareJPEGData(from: imageData) ?? imageData
+            logImagePayloadSummary(preparedImageData, label: "Exercise photo analysis image")
 
             let schema: [String: Any] = [
                 "type": "object",
@@ -209,7 +210,7 @@ extension AIService {
                         role: .user,
                         parts: [
                             .text(prompt),
-                            AIBackendPayloadBuilder.imagePart(imageData)
+                            AIBackendPayloadBuilder.imagePart(preparedImageData)
                         ]
                     )
                 ],

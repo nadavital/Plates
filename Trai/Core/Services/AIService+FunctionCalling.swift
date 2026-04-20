@@ -51,9 +51,10 @@ extension AIService {
 
             // Build user message with optional image
             var canonicalUserParts: [TraiAIPart] = []
-            if let imageData {
-                canonicalUserParts.append(AIBackendPayloadBuilder.imagePart(imageData))
-                log("📸 Image attached to message", type: .info)
+            let preparedImageData = AIImagePayloadPreparer.prepareJPEGData(from: imageData)
+            if let preparedImageData {
+                canonicalUserParts.append(AIBackendPayloadBuilder.imagePart(preparedImageData))
+                logImagePayloadSummary(preparedImageData, label: "Function calling chat image")
             }
             let promptText = message.isEmpty ? "What is this?" : message
             canonicalUserParts.append(.text(promptText))
@@ -77,7 +78,7 @@ extension AIService {
                 tools: canonicalTools,
                 generation: AIBackendPayloadBuilder.canonicalGeneration(
                     reasoningLevel: .medium,
-                    imageResolution: imageData == nil ? nil : .high
+                    imageResolution: preparedImageData == nil ? nil : .high
                 )
             )
 

@@ -393,6 +393,10 @@ final class AIService {
             return .accessDenied(message)
         }
 
+        if statusCode == 413 {
+            return .invalidInput("That image was too large to analyze. Try again with a smaller or more tightly cropped photo.")
+        }
+
         return .apiError(statusCode: statusCode, message: message)
     }
 }

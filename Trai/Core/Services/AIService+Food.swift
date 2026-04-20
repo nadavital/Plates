@@ -31,9 +31,10 @@ extension AIService {
             let prompt = AIPromptBuilder.buildFoodAnalysisPrompt(description: description)
             parts.append(.text(prompt))
 
-            if let imageData {
-                logImagePayloadSummary(imageData, label: "Food analysis image")
-                parts.append(AIBackendPayloadBuilder.imagePart(imageData))
+            let preparedImageData = AIImagePayloadPreparer.prepareJPEGData(from: imageData)
+            if let preparedImageData {
+                logImagePayloadSummary(preparedImageData, label: "Food analysis image")
+                parts.append(AIBackendPayloadBuilder.imagePart(preparedImageData))
             }
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
@@ -46,7 +47,7 @@ extension AIService {
                 ),
                 generation: AIBackendPayloadBuilder.canonicalGeneration(
                     reasoningLevel: .low,
-                    imageResolution: .high
+                    imageResolution: preparedImageData == nil ? nil : .high
                 )
             )
 
@@ -81,9 +82,10 @@ extension AIService {
 
             parts.append(.text(prompt))
 
-            if let imageData {
-                logImagePayloadSummary(imageData, label: "Food chat image")
-                parts.append(AIBackendPayloadBuilder.imagePart(imageData))
+            let preparedImageData = AIImagePayloadPreparer.prepareJPEGData(from: imageData)
+            if let preparedImageData {
+                logImagePayloadSummary(preparedImageData, label: "Food chat image")
+                parts.append(AIBackendPayloadBuilder.imagePart(preparedImageData))
             }
 
             let request = AIBackendPayloadBuilder.canonicalRequest(
@@ -96,7 +98,7 @@ extension AIService {
                 ),
                 generation: AIBackendPayloadBuilder.canonicalGeneration(
                     reasoningLevel: .low,
-                    imageResolution: .high
+                    imageResolution: preparedImageData == nil ? nil : .high
                 )
             )
 
@@ -144,9 +146,10 @@ extension AIService {
 
             parts.append(.text(prompt))
 
-            if let imageData {
-                logImagePayloadSummary(imageData, label: "Food refinement image")
-                parts.append(AIBackendPayloadBuilder.imagePart(imageData))
+            let preparedImageData = AIImagePayloadPreparer.prepareJPEGData(from: imageData)
+            if let preparedImageData {
+                logImagePayloadSummary(preparedImageData, label: "Food refinement image")
+                parts.append(AIBackendPayloadBuilder.imagePart(preparedImageData))
             }
 
             let schema: [String: Any] = [
@@ -174,7 +177,7 @@ extension AIService {
                 ),
                 generation: AIBackendPayloadBuilder.canonicalGeneration(
                     reasoningLevel: .low,
-                    imageResolution: imageData == nil ? nil : .high
+                    imageResolution: preparedImageData == nil ? nil : .high
                 )
             )
 

@@ -666,7 +666,7 @@ extension Error {
         switch self {
         case let aiServiceError as AIServiceError:
             switch aiServiceError {
-            case .accessDenied(let message), .quotaExceeded(let message):
+            case .invalidInput(let message), .accessDenied(let message), .quotaExceeded(let message):
                 return message
             default:
                 return nil
