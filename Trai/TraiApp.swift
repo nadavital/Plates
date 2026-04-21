@@ -226,7 +226,14 @@ struct TraiApp: App {
                 // Update widget data when app goes to background
                 Task { @MainActor in
                     guard !hasActiveLiveWorkoutInProgress() else { return }
-                    WidgetDataProvider.shared.updateWidgetData(modelContext: modelContainer.mainContext)
+                    _ = try? FoodMemoryService().resolvePendingEntries(
+                        limit: 12,
+                        modelContext: modelContainer.mainContext
+                    )
+                    WidgetDataProvider.shared.scheduleRefresh(
+                        modelContainer: modelContainer,
+                        delay: .zero
+                    )
                 }
             } else if newPhase == .active {
                 billingService.refreshLocalState()
@@ -629,7 +636,10 @@ extension TraiApp {
         defaults.removeObject(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
 
         // Refresh widgets with new data
-        WidgetDataProvider.shared.updateWidgetData(modelContext: context)
+        WidgetDataProvider.shared.scheduleRefresh(
+            modelContainer: modelContainer,
+            delay: .milliseconds(150)
+        )
     }
 }
 

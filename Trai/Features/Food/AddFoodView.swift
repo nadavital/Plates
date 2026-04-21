@@ -394,10 +394,8 @@ struct AddFoodView: View {
         entry.setAcceptedSnapshot(acceptedSnapshot)
 
         modelContext.insert(entry)
-        Task { @MainActor in
-            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
-        }
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
         saveMacrosToHealthKit(entry)
         dismiss()
     }
@@ -429,10 +427,8 @@ struct AddFoodView: View {
         entry.setAcceptedSnapshot(acceptedSnapshot)
 
         modelContext.insert(entry)
-        Task { @MainActor in
-            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
-        }
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
         saveMacrosToHealthKit(entry)
         dismiss()
     }

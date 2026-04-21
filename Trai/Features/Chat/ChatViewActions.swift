@@ -84,20 +84,6 @@ extension ChatView {
 
         message.replaceSuggestedMeal(meal)
         modelContext.insert(entry)
-        Task { @MainActor in
-            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
-        }
-        BehaviorTracker(modelContext: modelContext).record(
-            actionKey: BehaviorActionKey.logFood,
-            domain: .nutrition,
-            surface: .chat,
-            outcome: .completed,
-            relatedEntityId: entry.id,
-            metadata: [
-                "source": "chat_suggestion",
-                "name": meal.name
-            ]
-        )
 
         // Sync to Apple Health if enabled
         if profile?.syncFoodToHealthKit == true {
@@ -116,7 +102,19 @@ extension ChatView {
             message.markMealLogged(mealId: meal.id, entryId: entry.id)
         }
         try? modelContext.save()
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        WidgetDataProvider.shared.scheduleRefresh()
+        BehaviorTracker(modelContext: modelContext).recordDeferred(
+            actionKey: BehaviorActionKey.logFood,
+            domain: .nutrition,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: entry.id,
+            metadata: [
+                "source": "chat_suggestion",
+                "name": meal.name
+            ],
+            delay: .milliseconds(900)
+        )
         rebuildSessionMessages(preferLiveQueryData: true)
 
         HapticManager.success()
@@ -588,7 +586,7 @@ extension ChatView {
         Task { @MainActor in
             _ = try? FoodMemoryService().resolveEntry(id: entry.id, modelContext: modelContext)
         }
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        WidgetDataProvider.shared.scheduleRefresh()
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.editFood,
@@ -664,7 +662,7 @@ extension ChatView {
                 _ = try? FoodMemoryService().resolveEntry(id: entry.id, modelContext: modelContext)
             }
         }
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        WidgetDataProvider.shared.scheduleRefresh()
 
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.editFood,

@@ -199,7 +199,8 @@ struct EditFoodEntrySheet: View {
         entry.servingSize = servingSize.isEmpty ? nil : servingSize
         entry.userDescription = notes.isEmpty ? nil : notes
 
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
         HapticManager.success()
         dismiss()
     }

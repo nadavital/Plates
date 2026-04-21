@@ -137,10 +137,8 @@ struct FoodCameraView: View {
             entry.setAcceptedSnapshot(acceptedSnapshot)
         }
         modelContext.insert(entry)
-        Task { @MainActor in
-            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
-        }
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
         recordFoodLogBehavior(entry: entry, source: "manual_entry", modelContext: modelContext)
         saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
         HapticManager.success()
@@ -527,21 +525,18 @@ private struct FoodLogReviewStepView: View {
 
         assignFoodSession(draft.sessionId, to: entry, modelContext: modelContext)
         modelContext.insert(entry)
-        Task { @MainActor in
-            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: modelContext)
-        }
-        WidgetDataProvider.shared.updateWidgetData(modelContext: modelContext)
+        try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
 
         let behaviorSource = isRefined
             ? "refined_\(draft.inputSource.behaviorSource)"
             : draft.inputSource.behaviorSource
         recordFoodLogBehavior(entry: entry, source: behaviorSource, modelContext: modelContext)
         saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
-
-        try? FoodSuggestionService().reconcileShownSuggestions(
+        reconcileShownSuggestionsAfterSave(
             draft.shownSuggestionIDs,
             preferredMemoryID: draft.memorySuggestionID,
-            with: acceptedSnapshot,
+            acceptedSnapshot: acceptedSnapshot,
             isRefined: isRefined,
             modelContext: modelContext
         )
@@ -621,7 +616,7 @@ private func saveFoodMacrosToHealthKit(_ entry: FoodEntry, healthKitService: Hea
 }
 
 private func recordFoodLogBehavior(entry: FoodEntry, source: String, modelContext: ModelContext) {
-    BehaviorTracker(modelContext: modelContext).record(
+    BehaviorTracker(modelContext: modelContext).recordDeferred(
         actionKey: BehaviorActionKey.logFood,
         domain: .nutrition,
         surface: .food,
@@ -630,6 +625,29 @@ private func recordFoodLogBehavior(entry: FoodEntry, source: String, modelContex
         metadata: [
             "source": source,
             "name": entry.name
-        ]
+        ],
+        delay: .milliseconds(900)
     )
+}
+
+private func reconcileShownSuggestionsAfterSave(
+    _ shownMemoryIDs: [UUID],
+    preferredMemoryID: UUID?,
+    acceptedSnapshot: AcceptedFoodSnapshot,
+    isRefined: Bool,
+    modelContext: ModelContext
+) {
+    guard !shownMemoryIDs.isEmpty else { return }
+
+    Task { @MainActor in
+        try? await Task.sleep(for: .seconds(4))
+        guard !Task.isCancelled else { return }
+        try? FoodSuggestionService().reconcileShownSuggestions(
+            shownMemoryIDs,
+            preferredMemoryID: preferredMemoryID,
+            with: acceptedSnapshot,
+            isRefined: isRefined,
+            modelContext: modelContext
+        )
+    }
 }

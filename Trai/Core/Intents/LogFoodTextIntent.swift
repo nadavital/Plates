@@ -94,6 +94,10 @@ struct LogFoodTextIntent: AppIntent {
                 saveImmediately: false
             )
             try context.save()
+            WidgetDataProvider.shared.scheduleRefresh(
+                modelContainer: container,
+                delay: .milliseconds(150)
+            )
 
             // Sync to HealthKit if enabled
             if profile.syncFoodToHealthKit {

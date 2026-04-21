@@ -246,8 +246,10 @@ extension FoodEntry {
 
     var acceptedComponents: [AcceptedFoodComponent] {
         get {
-            guard let acceptedComponentsData else { return [] }
-            return (try? Self.snapshotDecoder.decode([AcceptedFoodComponent].self, from: acceptedComponentsData)) ?? []
+            if let acceptedComponentsData {
+                return (try? Self.snapshotDecoder.decode([AcceptedFoodComponent].self, from: acceptedComponentsData)) ?? []
+            }
+            return acceptedSnapshot?.components ?? []
         }
         set {
             acceptedComponentsData = newValue.isEmpty ? nil : (try? Self.snapshotEncoder.encode(newValue))
@@ -299,8 +301,7 @@ extension FoodEntry {
 
     func setAcceptedSnapshot(_ snapshot: AcceptedFoodSnapshot, matchVersion: Int = 0) {
         acceptedSnapshot = snapshot
-        acceptedComponents = snapshot.components
-        bootstrapLoggedComponentsIfNeeded(from: snapshot)
+        acceptedComponentsData = nil
         foodMemoryNeedsResolution = true
         foodMemoryWasUserEdited = snapshot.wasUserEdited
         foodMemoryMatchVersion = matchVersion
