@@ -331,9 +331,11 @@ struct LiveWorkoutView: View {
                 .padding()
             }
             .scrollDismissesKeyboard(.interactively)
-            .onTapGesture {
-                dismissKeyboard()
-            }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    dismissKeyboard()
+                }
+            )
 
             WorkoutBottomBar(
                 onAddExercise: { showingGeneralActivitySheet = true },
@@ -498,9 +500,11 @@ struct LiveWorkoutView: View {
                 .padding()
             }
             .scrollDismissesKeyboard(.interactively)
-            .onTapGesture {
-                dismissKeyboard()
-            }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    dismissKeyboard()
+                }
+            )
 
             // Bottom bar
             WorkoutBottomBar(
