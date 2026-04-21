@@ -65,11 +65,11 @@ struct ChatContentList: View {
     }
 
     private var selectableMessageIDs: Set<UUID> {
-        let selectable = visibleMessages
-            .filter { !$0.isFromUser && !$0.content.isEmpty }
-            .suffix(3)
-            .map(\.id)
-        return Set(selectable)
+        Set(
+            visibleMessages
+                .filter { !$0.content.isEmpty }
+                .map(\.id)
+        )
     }
 
     var body: some View {

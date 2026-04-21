@@ -58,14 +58,28 @@ struct TraiAssistantParagraphMessage: View {
 /// Shared user reply bubble styling used across chat-like surfaces.
 struct TraiUserTextBubble: View {
     let text: String
+    var enableTextSelection: Bool = false
 
     var body: some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundStyle(.white)
+        bubbleText
             .padding(TraiSpacing.md)
             .background(Color.accentColor)
             .clipShape(.rect(cornerRadius: TraiRadius.medium))
+    }
+
+    @ViewBuilder
+    private var bubbleText: some View {
+        if enableTextSelection {
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.white)
+                .textSelection(.enabled)
+        } else {
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.white)
+                .textSelection(.disabled)
+        }
     }
 }
 

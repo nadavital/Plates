@@ -680,7 +680,10 @@ struct ChatBubble: View {
                     }
 
                     if !message.content.isEmpty {
-                        TraiUserTextBubble(text: message.content)
+                        TraiUserTextBubble(
+                            text: message.content,
+                            enableTextSelection: enableTextSelection
+                        )
                     }
                 }
             } else {
@@ -700,14 +703,10 @@ struct ChatBubble: View {
     @ViewBuilder
     private var aiContentView: some View {
         let base = VStack(alignment: .leading, spacing: 12) {
-            if isStreaming {
-                TraiAssistantTextMessage(text: message.content)
-            } else {
-                TraiAssistantParagraphMessage(
-                    paragraphs: formattedParagraphs,
-                    enableTextSelection: enableTextSelection
-                )
-            }
+            TraiAssistantParagraphMessage(
+                paragraphs: formattedParagraphs,
+                enableTextSelection: enableTextSelection && !isStreaming
+            )
 
             // Show meal suggestion cards for all pending meals
             ForEach(message.pendingMealSuggestions, id: \.meal.id) { _, meal in
@@ -910,7 +909,6 @@ struct ChatBubble: View {
 
     /// Split content into paragraphs and format each one
     private var formattedParagraphs: [AttributedString] {
-        guard !isStreaming else { return [AttributedString(message.content)] }
         if formattedContentCacheKey == message.content {
             return formattedParagraphCache
         }
