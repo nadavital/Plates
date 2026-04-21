@@ -675,6 +675,11 @@ private struct WorkoutDayRow: View {
 }
 
 private struct WorkoutDayEditorSheet: View {
+    private enum Field: Hashable {
+        case dayName
+        case focusAreas
+    }
+
     let title: String
     let confirmTitle: String
     @Binding var dayName: String
@@ -687,6 +692,7 @@ private struct WorkoutDayEditorSheet: View {
     private let upperBodyMuscles: [LiveWorkout.MuscleGroup] = [.chest, .back, .shoulders, .biceps, .triceps, .forearms]
     private let lowerBodyMuscles: [LiveWorkout.MuscleGroup] = [.quads, .hamstrings, .glutes, .calves]
     private let coreMuscles: [LiveWorkout.MuscleGroup] = [.core]
+    @FocusState private var focusedField: Field?
 
     private var parsedFocusAreas: [String] {
         focusAreasText
@@ -762,6 +768,7 @@ private struct WorkoutDayEditorSheet: View {
                             TextField(dayNamePlaceholder, text: $dayName)
                                 .textInputAutocapitalization(.words)
                                 .disableAutocorrection(true)
+                                .focused($focusedField, equals: .dayName)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
@@ -838,6 +845,7 @@ private struct WorkoutDayEditorSheet: View {
                                 .lineLimit(2...4)
                                 .textInputAutocapitalization(.words)
                                 .disableAutocorrection(true)
+                                .focused($focusedField, equals: .focusAreas)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
@@ -871,8 +879,13 @@ private struct WorkoutDayEditorSheet: View {
                     }
                 }
                 .padding()
+                .contentShape(Rectangle())
             }
+            .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
+            .onTapGesture {
+                focusedField = nil
+            }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
