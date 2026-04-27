@@ -13,8 +13,12 @@ struct WorkoutTimerHeader: View {
     let workoutStartedAt: Date
     let isTimerRunning: Bool
     let totalPauseDuration: TimeInterval
+    let pausedElapsedTime: TimeInterval?
     let totalVolume: Double
     let onTogglePause: () -> Void
+    var showsWatchSyncButton: Bool = false
+    var isWatchSyncing: Bool = false
+    var onRetryWatchSync: (() -> Void)?
 
     // Optional Apple Watch data - only shown when available
     var heartRate: Double?
@@ -31,21 +35,48 @@ struct WorkoutTimerHeader: View {
                     .contentTransition(.numericText())
             }
 
-            // Pill-shaped pause/resume button
-            Button(action: onTogglePause) {
-                HStack(spacing: 6) {
-                    Image(systemName: isTimerRunning ? "pause.fill" : "play.fill")
-                    Text(isTimerRunning ? "Pause" : "Resume")
+            HStack(spacing: 10) {
+                // Pill-shaped pause/resume button
+                Button(action: onTogglePause) {
+                    HStack(spacing: 6) {
+                        Image(systemName: isTimerRunning ? "pause.fill" : "play.fill")
+                        Text(isTimerRunning ? "Pause" : "Resume")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .frame(minWidth: 112)
+                    .background(Color.accentColor.opacity(0.15))
+                    .foregroundStyle(Color.accentColor)
+                    .clipShape(.capsule)
                 }
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(Color.accentColor.opacity(0.15))
-                .foregroundStyle(Color.accentColor)
-                .clipShape(.capsule)
+                .buttonStyle(.plain)
+
+                if showsWatchSyncButton, let onRetryWatchSync {
+                    Button(action: onRetryWatchSync) {
+                        HStack(spacing: 6) {
+                            if isWatchSyncing {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "applewatch.side.right")
+                            }
+                            Text(isWatchSyncing ? "Syncing" : "Sync")
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .frame(minWidth: 112)
+                        .background(Color.accentColor.opacity(0.15))
+                        .foregroundStyle(Color.accentColor)
+                        .clipShape(.capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isWatchSyncing)
+                }
             }
-            .buttonStyle(.plain)
 
             // Stats row - volume and optional watch data
             let hasWatchData = heartRate != nil || (calories ?? 0) > 0
@@ -86,10 +117,9 @@ struct WorkoutTimerHeader: View {
 
     private func calculateElapsed(at date: Date) -> TimeInterval {
         guard isTimerRunning else {
-            // When paused, show the time at pause
-            return date.timeIntervalSince(workoutStartedAt) - totalPauseDuration
+            return max(0, pausedElapsedTime ?? (date.timeIntervalSince(workoutStartedAt) - totalPauseDuration))
         }
-        return date.timeIntervalSince(workoutStartedAt) - totalPauseDuration
+        return max(0, date.timeIntervalSince(workoutStartedAt) - totalPauseDuration)
     }
 
     private func formatTime(_ elapsed: TimeInterval) -> String {

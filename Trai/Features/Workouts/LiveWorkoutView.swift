@@ -252,6 +252,7 @@ struct LiveWorkoutView: View {
                         workoutStartedAt: viewModel.workout.startedAt,
                         isTimerRunning: viewModel.isTimerRunning,
                         totalPauseDuration: viewModel.totalPauseDuration,
+                        pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
                         totalVolume: viewModel.totalVolume,
                         onTogglePause: {
                             if viewModel.isTimerRunning {
@@ -260,37 +261,14 @@ struct LiveWorkoutView: View {
                                 viewModel.resumeTimer()
                             }
                         },
+                        showsWatchSyncButton: !viewModel.isWatchConnected,
+                        isWatchSyncing: viewModel.isRetryingWatchSync,
+                        onRetryWatchSync: {
+                            viewModel.retryWatchSync()
+                        },
                         heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )
-
-                    if let watchHint = viewModel.watchConnectionHint {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(watchHint)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            if !viewModel.isWatchConnected {
-                                Button {
-                                    viewModel.retryWatchSync()
-                                } label: {
-                                    if viewModel.isRetryingWatchSync {
-                                        HStack(spacing: 8) {
-                                            ProgressView()
-                                                .controlSize(.small)
-                                            Text("Syncing...")
-                                        }
-                                    } else {
-                                        Label("Try syncing now", systemImage: "arrow.clockwise")
-                                    }
-                                }
-                                .font(.caption)
-                                .buttonStyle(.traiSecondary())
-                                .disabled(viewModel.isRetryingWatchSync)
-                            }
-                        }
-                    }
 
                     GeneralSessionOverviewCard(workout: viewModel.workout)
 
@@ -361,6 +339,7 @@ struct LiveWorkoutView: View {
                         workoutStartedAt: viewModel.workout.startedAt,
                         isTimerRunning: viewModel.isTimerRunning,
                         totalPauseDuration: viewModel.totalPauseDuration,
+                        pausedElapsedTime: viewModel.pausedElapsedTimeSnapshot,
                         totalVolume: viewModel.totalVolume,
                         onTogglePause: {
                             if viewModel.isTimerRunning {
@@ -369,37 +348,14 @@ struct LiveWorkoutView: View {
                                 viewModel.resumeTimer()
                             }
                         },
+                        showsWatchSyncButton: !viewModel.isWatchConnected,
+                        isWatchSyncing: viewModel.isRetryingWatchSync,
+                        onRetryWatchSync: {
+                            viewModel.retryWatchSync()
+                        },
                         heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )
-
-                    if let watchHint = viewModel.watchConnectionHint {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(watchHint)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            if !viewModel.isWatchConnected {
-                                Button {
-                                    viewModel.retryWatchSync()
-                                } label: {
-                                    if viewModel.isRetryingWatchSync {
-                                        HStack(spacing: 8) {
-                                            ProgressView()
-                                                .controlSize(.small)
-                                            Text("Syncing...")
-                                        }
-                                    } else {
-                                        Label("Try syncing now", systemImage: "arrow.clockwise")
-                                    }
-                                }
-                                .font(.caption)
-                                .buttonStyle(.traiSecondary())
-                                .disabled(viewModel.isRetryingWatchSync)
-                            }
-                        }
-                    }
 
                     // Target muscles selector (editable for custom workouts)
                     if viewModel.workout.type.supportsMuscleTargets {
@@ -452,8 +408,16 @@ struct LiveWorkoutView: View {
                                 usesMetricWeight: usesMetricExerciseWeight,
                                 onAddSet: { viewModel.addSet(to: entry) },
                                 onRemoveSet: { setIndex in viewModel.removeSet(at: setIndex, from: entry) },
-                                onUpdateSet: { setIndex, reps, weightKg, weightLbs, notes in
-                                    viewModel.updateSet(at: setIndex, in: entry, reps: reps, weightKg: weightKg, weightLbs: weightLbs, notes: notes)
+                                onUpdateSet: { setIndex, reps, weightKg, weightLbs, notes, preferredWeightUnit in
+                                    viewModel.updateSet(
+                                        at: setIndex,
+                                        in: entry,
+                                        reps: reps,
+                                        weightKg: weightKg,
+                                        weightLbs: weightLbs,
+                                        notes: notes,
+                                        preferredWeightUnit: preferredWeightUnit
+                                    )
                                 },
                                 onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
                                 onDeleteExercise: { viewModel.removeExercise(at: index) },

@@ -40,6 +40,7 @@ final class LiveWorkoutViewModel {
     // Timer state - use date calculation for accuracy
     private(set) var pausedDuration: TimeInterval = 0
     private var pauseStartTime: Date?
+    private(set) var pausedElapsedTimeSnapshot: TimeInterval?
 
     /// Total pause duration including any active pause (for UI display)
     var totalPauseDuration: TimeInterval {
@@ -883,6 +884,7 @@ final class LiveWorkoutViewModel {
     }
 
     func pauseTimer() {
+        pausedElapsedTimeSnapshot = elapsedTime
         isTimerRunning = false
         pauseStartTime = Date()  // Record when pause started
         updateLiveActivity()
@@ -894,6 +896,7 @@ final class LiveWorkoutViewModel {
             pausedDuration += Date().timeIntervalSince(pauseStart)
             pauseStartTime = nil
         }
+        pausedElapsedTimeSnapshot = nil
         isTimerRunning = true
         updateLiveActivity()
     }
@@ -907,6 +910,7 @@ final class LiveWorkoutViewModel {
             pausedDuration += Date().timeIntervalSince(pauseStart)
             pauseStartTime = nil
         }
+        pausedElapsedTimeSnapshot = nil
         isTimerRunning = false
         persistenceCoordinator?.flushNow(trigger: .stopWorkout)
         persistenceCoordinator?.cancelPending()
@@ -1146,7 +1150,15 @@ final class LiveWorkoutViewModel {
         saveDebounced(updateLiveActivity: true)
     }
 
-    func updateSet(at index: Int, in entry: LiveWorkoutEntry, reps: Int? = nil, weightKg: Double? = nil, weightLbs: Double? = nil, notes: String? = nil) {
+    func updateSet(
+        at index: Int,
+        in entry: LiveWorkoutEntry,
+        reps: Int? = nil,
+        weightKg: Double? = nil,
+        weightLbs: Double? = nil,
+        notes: String? = nil,
+        preferredWeightUnit: WeightUnit? = nil
+    ) {
         let sets = entry.sets
         guard index < sets.count else { return }
 
@@ -1166,6 +1178,10 @@ final class LiveWorkoutViewModel {
         }
         if let notes, notes != set.notes {
             set.notes = notes
+            didChange = true
+        }
+        if preferredWeightUnit != set.preferredWeightUnit {
+            set.preferredWeightUnit = preferredWeightUnit
             didChange = true
         }
         guard didChange else { return }

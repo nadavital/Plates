@@ -16,7 +16,7 @@ struct ExerciseCard: View {
     let usesMetricWeight: Bool
     let onAddSet: () -> Void
     let onRemoveSet: (Int) -> Void
-    let onUpdateSet: (Int, Int?, Double?, Double?, String?) -> Void  // (index, reps, kg, lbs, notes)
+    let onUpdateSet: (Int, Int?, Double?, Double?, String?, WeightUnit?) -> Void  // (index, reps, kg, lbs, notes, preferred unit override)
     let onToggleWarmup: (Int) -> Void
     var onDeleteExercise: (() -> Void)? = nil
     var onChangeExercise: (() -> Void)? = nil
@@ -145,11 +145,11 @@ struct ExerciseCard: View {
                     // Header row
                     HStack {
                         Text("SET")
-                            .frame(width: 40, alignment: .leading)
+                            .frame(width: ExerciseSetLayout.setColumnWidth, alignment: .leading)
                         Text("WEIGHT")
-                            .frame(width: 80)
+                            .frame(width: ExerciseSetLayout.weightColumnWidth)
                         Text("REPS")
-                            .frame(width: 60)
+                            .frame(width: ExerciseSetLayout.repsColumnWidth)
                         Spacer()
                     }
                     .font(.caption2)
@@ -162,9 +162,12 @@ struct ExerciseCard: View {
                             set: set,
                             usesMetricWeight: usesMetricWeight,
                             previousSetWeight: index > 0 ? sets[index - 1].weightKg : nil,
-                            onUpdateReps: { reps in onUpdateSet(index, reps, nil, nil, nil) },
-                            onUpdateWeight: { kg, lbs in onUpdateSet(index, nil, kg, lbs, nil) },
-                            onUpdateNotes: { notes in onUpdateSet(index, nil, nil, nil, notes) },
+                            onUpdateReps: { reps in onUpdateSet(index, reps, nil, nil, nil, set.preferredWeightUnit) },
+                            onUpdateWeight: { kg, lbs in onUpdateSet(index, nil, kg, lbs, nil, set.preferredWeightUnit) },
+                            onUpdateNotes: { notes in onUpdateSet(index, nil, nil, nil, notes, set.preferredWeightUnit) },
+                            onUpdateWeightUnit: { preferredUnit in
+                                onUpdateSet(index, nil, nil, nil, nil, preferredUnit)
+                            },
                             onToggleWarmup: { onToggleWarmup(index) },
                             onDelete: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -204,6 +207,16 @@ struct ExerciseCard: View {
     }
 }
 
+private enum ExerciseSetLayout {
+    static let setColumnWidth: CGFloat = 40
+    static let weightFieldWidth: CGFloat = 70
+    static let weightUnitWidth: CGFloat = 36
+    static let weightColumnWidth: CGFloat = weightFieldWidth + 8 + weightUnitWidth
+    static let repsFieldWidth: CGFloat = 50
+    static let repsLabelWidth: CGFloat = 36
+    static let repsColumnWidth: CGFloat = repsFieldWidth + 8 + repsLabelWidth
+}
+
 // MARK: - Set Row
 
 struct SetRow: View {
@@ -214,6 +227,7 @@ struct SetRow: View {
     let onUpdateReps: (Int) -> Void
     let onUpdateWeight: (Double, Double) -> Void  // (kg, lbs)
     let onUpdateNotes: (String) -> Void
+    let onUpdateWeightUnit: (WeightUnit?) -> Void
     let onToggleWarmup: () -> Void
     let onDelete: () -> Void
 
@@ -224,6 +238,7 @@ struct SetRow: View {
     @State private var isUpdatingFromUnitChange = false
     @State private var showWeightJumpConfirmation = false
     @State private var pendingWeight: CleanWeight?
+    @State private var currentDisplayUnit: WeightUnit = .kg
     @FocusState private var isWeightFocused: Bool
     @FocusState private var isRepsFocused: Bool
     @FocusState private var isNotesFocused: Bool
@@ -240,8 +255,14 @@ struct SetRow: View {
     private let percentageThreshold: Double = 0.5  // 50% increase
     private let absoluteThresholdKg: Double = 25.0  // 25kg / ~55lbs absolute jump
 
-    private var weightUnit: String {
-        usesMetricWeight ? "kg" : "lbs"
+    private var defaultDisplayUnit: WeightUnit {
+        WeightUnit(usesMetric: usesMetricWeight)
+    }
+
+    private var effectiveDisplayUnit: WeightUnit {
+        get {
+            set.preferredWeightUnit ?? defaultDisplayUnit
+        }
     }
 
     var body: some View {
@@ -258,72 +279,79 @@ struct SetRow: View {
                         .clipShape(.circle)
                 }
                 .buttonStyle(.plain)
+                .frame(width: ExerciseSetLayout.setColumnWidth, alignment: .leading)
 
                 // Weight input
-                TextField("0", text: $weightText)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 70)
-                    .padding(.vertical, 8)
-                    .background(Color(.tertiarySystemFill))
-                    .clipShape(.rect(cornerRadius: 8))
-                    .focused($isWeightFocused)
-                    .onChange(of: weightText) { _, newValue in
-                        // Skip save if this change is from unit conversion (not user input)
-                        guard !isUpdatingFromUnitChange else { return }
-                        // Cancel any pending debounce
-                        weightDebounceTask?.cancel()
-                        // Start new debounced update
-                        weightDebounceTask = Task { @MainActor in
-                            try? await Task.sleep(for: debounceDelay)
-                            guard !Task.isCancelled else { return }
-                            commitWeight(newValue)
-                        }
-                    }
-                    .onChange(of: isWeightFocused) { _, focused in
-                        // Commit immediately when focus leaves
-                        if !focused {
+                HStack(spacing: 8) {
+                    TextField("0", text: $weightText)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.center)
+                        .frame(width: ExerciseSetLayout.weightFieldWidth)
+                        .padding(.vertical, 8)
+                        .background(Color(.tertiarySystemFill))
+                        .clipShape(.rect(cornerRadius: 8))
+                        .focused($isWeightFocused)
+                        .onChange(of: weightText) { _, newValue in
+                            guard !isUpdatingFromUnitChange else { return }
                             weightDebounceTask?.cancel()
-                            commitWeight(weightText)
+                            weightDebounceTask = Task { @MainActor in
+                                try? await Task.sleep(for: debounceDelay)
+                                guard !Task.isCancelled else { return }
+                                commitWeight(newValue)
+                            }
                         }
-                    }
+                        .onChange(of: isWeightFocused) { _, focused in
+                            if !focused {
+                                weightDebounceTask?.cancel()
+                                commitWeight(weightText)
+                            }
+                        }
 
-                Text(weightUnit)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Button {
+                        toggleDisplayUnit()
+                    } label: {
+                        Text(currentDisplayUnit.symbol)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: ExerciseSetLayout.weightUnitWidth)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(width: ExerciseSetLayout.weightColumnWidth)
 
                 Spacer()
 
                 // Reps input
-                TextField("0", text: $repsText)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .frame(width: 50)
-                    .padding(.vertical, 8)
-                    .background(Color(.tertiarySystemFill))
-                    .clipShape(.rect(cornerRadius: 8))
-                    .focused($isRepsFocused)
-                    .onChange(of: repsText) { _, newValue in
-                        // Cancel any pending debounce
-                        repsDebounceTask?.cancel()
-                        // Start new debounced update
-                        repsDebounceTask = Task { @MainActor in
-                            try? await Task.sleep(for: debounceDelay)
-                            guard !Task.isCancelled else { return }
-                            commitReps(newValue)
-                        }
-                    }
-                    .onChange(of: isRepsFocused) { _, focused in
-                        // Commit immediately when focus leaves
-                        if !focused {
+                HStack(spacing: 8) {
+                    TextField("0", text: $repsText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .frame(width: ExerciseSetLayout.repsFieldWidth)
+                        .padding(.vertical, 8)
+                        .background(Color(.tertiarySystemFill))
+                        .clipShape(.rect(cornerRadius: 8))
+                        .focused($isRepsFocused)
+                        .onChange(of: repsText) { _, newValue in
                             repsDebounceTask?.cancel()
-                            commitReps(repsText)
+                            repsDebounceTask = Task { @MainActor in
+                                try? await Task.sleep(for: debounceDelay)
+                                guard !Task.isCancelled else { return }
+                                commitReps(newValue)
+                            }
                         }
-                    }
+                        .onChange(of: isRepsFocused) { _, focused in
+                            if !focused {
+                                repsDebounceTask?.cancel()
+                                commitReps(repsText)
+                            }
+                        }
 
-                Text("reps")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text("reps")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: ExerciseSetLayout.repsLabelWidth, alignment: .leading)
+                }
+                .frame(width: ExerciseSetLayout.repsColumnWidth)
 
                 // Notes toggle button
                 Button {
@@ -384,23 +412,20 @@ struct SetRow: View {
             }
         }
         .onAppear {
-            // Use stored clean values directly - no conversion needed
-            let displayWeight = set.displayWeight(usesMetric: usesMetricWeight)
+            currentDisplayUnit = effectiveDisplayUnit
+            let displayWeight = displayWeightValue(for: effectiveDisplayUnit)
             weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
             repsText = set.reps > 0 ? "\(set.reps)" : ""
             notesText = set.notes
             showNotesField = !set.notes.isEmpty
         }
-        .onChange(of: usesMetricWeight) { _, newUsesMetric in
-            // When unit preference changes, re-display using stored clean value
-            let displayWeight = set.displayWeight(usesMetric: newUsesMetric)
-            if displayWeight > 0 {
-                isUpdatingFromUnitChange = true
-                weightText = formatWeight(displayWeight)
-                // Reset flag after the update propagates
-                Task { @MainActor in
-                    isUpdatingFromUnitChange = false
-                }
+        .onChange(of: effectiveDisplayUnit) { _, newUnit in
+            currentDisplayUnit = newUnit
+            let displayWeight = displayWeightValue(for: newUnit)
+            isUpdatingFromUnitChange = true
+            weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
+            Task { @MainActor in
+                isUpdatingFromUnitChange = false
             }
         }
         .confirmationDialog(
@@ -408,30 +433,28 @@ struct SetRow: View {
             isPresented: $showWeightJumpConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Use \(pendingWeight?.formatted(unit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true) ?? "")") {
+            Button("Use \(pendingWeight?.formatted(unit: currentDisplayUnit, showUnit: true) ?? "")") {
                 if let weight = pendingWeight {
                     onUpdateWeight(weight.kg, weight.lbs)
                 }
                 pendingWeight = nil
             }
             Button("Cancel", role: .cancel) {
-                // Revert text field to original value
-                let displayWeight = set.displayWeight(usesMetric: usesMetricWeight)
+                let displayWeight = displayWeightValue(for: currentDisplayUnit)
                 weightText = displayWeight > 0 ? formatWeight(displayWeight) : ""
                 pendingWeight = nil
             }
         } message: {
             if let weight = pendingWeight {
-                let previousDisplay = previousSetWeight.map { WeightUtility.format($0, displayUnit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true) } ?? WeightUtility.format(set.weightKg, displayUnit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true)
-                Text("This is a significant increase from \(previousDisplay) to \(weight.formatted(unit: WeightUnit(usesMetric: usesMetricWeight), showUnit: true)). Is this correct?")
+                let previousDisplay = previousSetWeight.map { WeightUtility.format($0, displayUnit: currentDisplayUnit, showUnit: true) } ?? WeightUtility.format(set.weightKg, displayUnit: currentDisplayUnit, showUnit: true)
+                Text("This is a significant increase from \(previousDisplay) to \(weight.formatted(unit: currentDisplayUnit, showUnit: true)). Is this correct?")
             }
         }
     }
 
     /// Commit weight value to parent (called after debounce or on focus loss)
     private func commitWeight(_ value: String) {
-        let unit = WeightUnit(usesMetric: usesMetricWeight)
-        guard let cleanWeight = WeightUtility.parseToCleanWeight(value, inputUnit: unit) else { return }
+        guard let cleanWeight = WeightUtility.parseToCleanWeight(value, inputUnit: currentDisplayUnit) else { return }
         
         // Check for large weight jump
         if isLargeWeightJump(newWeightKg: cleanWeight.kg) {
@@ -482,6 +505,16 @@ struct SetRow: View {
         }
         return String(format: "%.1f", weight)
     }
+
+    private func displayWeightValue(for unit: WeightUnit) -> Double {
+        unit == .kg ? set.weightKg : set.weightLbs
+    }
+
+    private func toggleDisplayUnit() {
+        let toggled: WeightUnit = currentDisplayUnit == .kg ? .lbs : .kg
+        let override = toggled == defaultDisplayUnit ? nil : toggled
+        onUpdateWeightUnit(override)
+    }
 }
 
 // MARK: - Preview
@@ -500,7 +533,7 @@ struct SetRow: View {
         usesMetricWeight: true,
         onAddSet: {},
         onRemoveSet: { _ in },
-        onUpdateSet: { _, _, _, _, _ in },
+        onUpdateSet: { _, _, _, _, _, _ in },
         onToggleWarmup: { _ in }
     )
     .padding()

@@ -9,8 +9,11 @@ import SwiftData
 struct PlanAdjustmentSheet: View {
     @Bindable var profile: UserProfile
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTabSelection) private var appTabSelection
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
+    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
 
     @State private var goalType: UserProfile.GoalType
     @State private var calories: Int
@@ -19,7 +22,6 @@ struct PlanAdjustmentSheet: View {
     @State private var fat: Int
     @State private var trainingDayCalories: Int?
     @State private var restDayCalories: Int?
-    @State private var showAICoach = false
 
     private var availableGoals: [UserProfile.GoalType] {
         [.loseWeight, .loseFat, .buildMuscle, .recomposition, .maintenance, .performance]
@@ -73,22 +75,6 @@ struct PlanAdjustmentSheet: View {
                     .labelStyle(.iconOnly)
                 }
             }
-            .sheet(isPresented: $showAICoach) {
-                NavigationStack {
-                    ChatView()
-                        .navigationTitle("Trai")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done", systemImage: "checkmark") {
-                                    showAICoach = false
-                                }
-                                .labelStyle(.iconOnly)
-                            }
-                        }
-                }
-                .traiSheetBranding()
-            }
         }
         .traiSheetBranding()
     }
@@ -100,7 +86,7 @@ struct PlanAdjustmentSheet: View {
             if monetizationService?.canAccessAIFeatures == false {
                 proUpsellCoordinator?.present(source: .nutritionPlan)
             } else {
-                showAICoach = true
+                openTraiCoach()
             }
         } label: {
             HStack(spacing: 16) {
@@ -141,6 +127,45 @@ struct PlanAdjustmentSheet: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func openTraiCoach() {
+        pendingChatPrompt = aiCoachPrompt
+        pendingChatLaunchLabel = "Reviewing your nutrition plan..."
+        dismiss()
+        DispatchQueue.main.async {
+            appTabSelection.wrappedValue = .trai
+        }
+        HapticManager.selectionChanged()
+    }
+
+    private var aiCoachPrompt: String {
+        var lines: [String] = [
+            "Can you help me adjust my nutrition plan and suggest any changes that would make sense?",
+            "Current goal: \(goalType.displayName).",
+            "Current daily targets: \(calories) calories, \(protein)g protein, \(carbs)g carbs, \(fat)g fat."
+        ]
+
+        if let trainingDayCalories {
+            lines.append("Training day calories: \(trainingDayCalories).")
+        }
+
+        if let restDayCalories {
+            lines.append("Rest day calories: \(restDayCalories).")
+        }
+
+        if goalType != profile.goal
+            || calories != profile.dailyCalorieGoal
+            || protein != profile.dailyProteinGoal
+            || carbs != profile.dailyCarbsGoal
+            || fat != profile.dailyFatGoal
+            || trainingDayCalories != profile.trainingDayCalories
+            || restDayCalories != profile.restDayCalories {
+            lines.append("These values reflect the edits I'm considering in the plan adjustment sheet, not necessarily what I've already saved.")
+        }
+
+        lines.append("Please review whether this looks appropriate for my progress and suggest specific updates if needed.")
+        return lines.joined(separator: " ")
     }
 
     // MARK: - Goal Section
