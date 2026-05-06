@@ -598,16 +598,17 @@ private func combineDay(_ day: Date, withTimeFrom timeSource: Date) -> Date {
 
 private func saveFoodMacrosToHealthKit(_ entry: FoodEntry, healthKitService: HealthKitService?) {
     guard let healthKitService else { return }
+    let snapshot = FoodMacroSaveSnapshot(entry: entry)
     Task {
         do {
             try await healthKitService.saveFoodMacros(
-                calories: entry.calories,
-                proteinGrams: entry.proteinGrams,
-                carbsGrams: entry.carbsGrams,
-                fatGrams: entry.fatGrams,
-                fiberGrams: entry.fiberGrams,
-                sugarGrams: entry.sugarGrams,
-                date: entry.loggedAt
+                calories: snapshot.calories,
+                proteinGrams: snapshot.proteinGrams,
+                carbsGrams: snapshot.carbsGrams,
+                fatGrams: snapshot.fatGrams,
+                fiberGrams: snapshot.fiberGrams,
+                sugarGrams: snapshot.sugarGrams,
+                date: snapshot.loggedAt
             )
         } catch {
             print("Failed to save macros to HealthKit: \(error)")
@@ -615,8 +616,28 @@ private func saveFoodMacrosToHealthKit(_ entry: FoodEntry, healthKitService: Hea
     }
 }
 
+private struct FoodMacroSaveSnapshot: Sendable {
+    let calories: Int
+    let proteinGrams: Double
+    let carbsGrams: Double
+    let fatGrams: Double
+    let fiberGrams: Double?
+    let sugarGrams: Double?
+    let loggedAt: Date
+
+    init(entry: FoodEntry) {
+        calories = entry.calories
+        proteinGrams = entry.proteinGrams
+        carbsGrams = entry.carbsGrams
+        fatGrams = entry.fatGrams
+        fiberGrams = entry.fiberGrams
+        sugarGrams = entry.sugarGrams
+        loggedAt = entry.loggedAt
+    }
+}
+
 private func recordFoodLogBehavior(entry: FoodEntry, source: String, modelContext: ModelContext) {
-    BehaviorTracker(modelContext: modelContext).recordDeferred(
+    BehaviorTracker(modelContext: modelContext).record(
         actionKey: BehaviorActionKey.logFood,
         domain: .nutrition,
         surface: .food,
@@ -625,8 +646,7 @@ private func recordFoodLogBehavior(entry: FoodEntry, source: String, modelContex
         metadata: [
             "source": source,
             "name": entry.name
-        ],
-        delay: .milliseconds(900)
+        ]
     )
 }
 
@@ -642,6 +662,8 @@ private func reconcileShownSuggestionsAfterSave(
     Task { @MainActor in
         try? await Task.sleep(for: .seconds(4))
         guard !Task.isCancelled else { return }
+        guard let modelContainer = TraiApp.sharedModelContainer else { return }
+        let modelContext = ModelContext(modelContainer)
         try? FoodSuggestionService().reconcileShownSuggestions(
             shownMemoryIDs,
             preferredMemoryID: preferredMemoryID,

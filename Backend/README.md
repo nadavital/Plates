@@ -37,13 +37,14 @@ Use `.env.example` as the starting point for local and Cloud Run environment con
   - `gemini` or `openai`
   - default: `openai`
 - `TRAI_DATABASE_DRIVER`
-  - `sqlite` or `postgres`
-  - defaults to `postgres` when `TRAI_DATABASE_URL` / `DATABASE_URL` is present, otherwise `sqlite`
-- `TRAI_DATABASE_URL`
-  - required when `TRAI_DATABASE_DRIVER=postgres`
-- `TRAI_DATABASE_SSL_MODE`
-  - `disable` or `require`
-  - default: `disable`
+  - `sqlite` or `firestore`
+  - defaults to `sqlite` for local development
+  - use `firestore` for Cloud Run staging and production
+- `FIRESTORE_PROJECT_ID`
+  - optional explicit Google Cloud project for Firestore
+- `FIRESTORE_DATABASE_ID`
+  - optional Firestore database ID
+  - defaults to `(default)`
 - `GEMINI_API_KEY`
   - required for AI proxy endpoints
 - `GEMINI_MODEL`
@@ -99,15 +100,11 @@ gcloud run deploy trai-backend-staging \
   --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest,TRAI_ADMIN_API_KEY=TRAI_ADMIN_API_KEY:latest
 ```
 
-For the durable staging shape, attach Postgres and set:
+For the durable low-cost staging shape, use Firestore:
 
 ```bash
-TRAI_DATABASE_DRIVER=postgres
-TRAI_DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME
-TRAI_DATABASE_SSL_MODE=disable
+TRAI_DATABASE_DRIVER=firestore
 ```
-
-If you use Cloud SQL with Cloud Run and a Unix socket host path such as `/cloudsql/...`, keep `TRAI_DATABASE_SSL_MODE=disable`. The backend auto-selects Postgres whenever `TRAI_DATABASE_URL` / `DATABASE_URL` is present.
 
 Recommended next step after the first successful staging deploy:
 
@@ -120,12 +117,13 @@ Recommended next step after the first successful staging deploy:
 For TestFlight and the App Store, the recommended shape is:
 
 - one shared production backend
-- one shared production Postgres database
+- one shared production Firestore database
 - TestFlight and App Store builds both pointed at production
 
 That keeps account state, subscriptions, and quota consistent when a TestFlight tester later installs the App Store build.
+TestFlight StoreKit transactions and server notifications use Apple's Sandbox environment even when the app talks to this production backend, so the backend accepts signed Sandbox and Production App Store payloads after validating the bundle ID, product ID, certificate chain, signature, and transaction ownership.
 
-Create a production Cloud SQL Postgres instance first, then deploy the production service:
+Enable Firestore native mode in the Google Cloud project, then deploy the production service without Cloud SQL:
 
 ```bash
 cd /Users/navital/Desktop/Trai/Backend
@@ -135,8 +133,9 @@ SERVICE_NAME=trai-backend-production \
 IMAGE_NAME=trai-backend \
 IMAGE_TAG=production \
 TRAI_ENVIRONMENT=production \
-CLOUD_SQL_INSTANCE=YOUR_PROJECT:us-central1:trai-production-postgres \
-TRAI_DATABASE_URL='postgresql://USER:PASSWORD@/DBNAME?host=/cloudsql/YOUR_PROJECT:us-central1:trai-production-postgres' \
+TRAI_DATABASE_DRIVER=firestore \
+MIN_INSTANCES=0 \
+MAX_INSTANCES=3 \
 ./scripts/deploy_cloud_run.sh
 ```
 
@@ -173,8 +172,7 @@ IMAGE_TAG=openai-staging \
 TRAI_ENVIRONMENT=staging \
 TRAI_AI_PROVIDER=openai \
 OPENAI_MODEL=gpt-5.4-mini \
-CLOUD_SQL_INSTANCE=YOUR_PROJECT:us-central1:trai-staging-postgres \
-DATABASE_URL_SECRET_NAME=TRAI_DATABASE_URL_STAGING \
+TRAI_DATABASE_DRIVER=firestore \
 ./scripts/deploy_cloud_run.sh
 ```
 
@@ -183,7 +181,6 @@ Do the same for production by changing:
 - `SERVICE_NAME=trai-backend-production`
 - `IMAGE_TAG=openai-production`
 - `TRAI_ENVIRONMENT=production`
-- `DATABASE_URL_SECRET_NAME=TRAI_DATABASE_URL_PRODUCTION`
 
 The active provider can be confirmed from `/health`, which now reports:
 
@@ -193,20 +190,21 @@ The active provider can be confirmed from `/health`, which now reports:
 
 ## Scaling Path
 
-The backend now supports both SQLite and Postgres:
+The backend now supports SQLite and Firestore:
 
 - SQLite keeps local development simple and fast.
-- Postgres is the intended Cloud Run / staging / production persistence layer.
+- Firestore is the intended cost-efficient Cloud Run / staging / production persistence layer.
 
 Recommended order:
 
 1. Keep SQLite for simulator and single-machine local work.
-2. Use Postgres for Cloud Run staging and production so sessions, subscriptions, and quota survive instance restarts.
-3. Keep the iOS client on backend-only AI paths so future providers can be added behind the server without changing the app.
+2. Use Firestore for Cloud Run staging and production so sessions, subscriptions, admin overrides, quota, and usage telemetry survive instance restarts without a fixed Cloud SQL instance bill.
+3. Keep normal free-user app usage local-first. Only hit the backend for sign-in, purchase/restore, App Store notifications, admin overrides, and AI requests.
+4. Keep the iOS client on backend-only AI paths so future providers can be added behind the server without changing the app.
 
 ## Notes
 
-- The backend now depends on `pg` for the Postgres runtime adapter.
+- The deployed backend uses Firestore for persistence; local development can use SQLite.
 - Apple identity tokens are now verified against Apple JWKS before a backend session is issued.
 - `ALLOW_DEV_APPLE_BYPASS` must never be enabled in production.
 - When `ALLOW_DEV_APPLE_BYPASS=true`, non-JWT placeholder tokens can still be used for local-only development.

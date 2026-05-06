@@ -17,10 +17,10 @@ export function createConfig(env = process.env) {
         ? 'localDevelopment'
         : 'staging';
 
-  const databaseURL = env.TRAI_DATABASE_URL ?? env.DATABASE_URL ?? '';
+  const requestedDatabaseDriver = String(env.TRAI_DATABASE_DRIVER ?? 'sqlite').trim();
   const databaseDriver =
-    String(env.TRAI_DATABASE_DRIVER ?? (databaseURL ? 'postgres' : 'sqlite')).trim() === 'postgres'
-      ? 'postgres'
+    requestedDatabaseDriver === 'firestore'
+      ? 'firestore'
       : 'sqlite';
 
   const geminiModel = env.GEMINI_MODEL ?? 'gemini-3-flash-preview';
@@ -35,8 +35,8 @@ export function createConfig(env = process.env) {
     aiProvider: String(env.TRAI_AI_PROVIDER ?? env.AI_PROVIDER ?? 'openai').trim() === 'gemini' ? 'gemini' : 'openai',
     databaseDriver,
     databasePath: env.TRAI_DB_PATH ?? defaultDatabasePath,
-    databaseURL,
-    databaseSSLMode: env.TRAI_DATABASE_SSL_MODE ?? env.PGSSLMODE ?? 'disable',
+    firestoreProjectID: env.FIRESTORE_PROJECT_ID ?? env.GOOGLE_CLOUD_PROJECT ?? env.GCLOUD_PROJECT ?? '',
+    firestoreDatabaseID: env.FIRESTORE_DATABASE_ID ?? '(default)',
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiModel,
     openAIApiKey: env.OPENAI_API_KEY ?? '',
@@ -94,10 +94,6 @@ export function createConfig(env = process.env) {
 export function validateConfig(config) {
   if (config.environment === 'production' && config.allowDevAppleBypass) {
     throw new Error('ALLOW_DEV_APPLE_BYPASS must never be enabled in production.');
-  }
-
-  if (config.databaseDriver === 'postgres' && !config.databaseURL) {
-    throw new Error('TRAI_DATABASE_URL (or DATABASE_URL) must be configured when using postgres.');
   }
 
   if (config.aiProvider === 'openai' && !config.openAIApiKey) {

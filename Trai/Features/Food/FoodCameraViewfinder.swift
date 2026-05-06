@@ -62,7 +62,10 @@ struct FoodCameraViewfinder: View {
                 if !suggestions.isEmpty {
                     FoodCameraSuggestionRail(
                         suggestions: suggestions,
-                        onSelectSuggestion: onSelectSuggestion
+                        onSelectSuggestion: onSelectSuggestion,
+                        onDismissKeyboard: {
+                            isDescriptionFocused = false
+                        }
                     )
                     .padding(.bottom, 12)
                 }
@@ -91,6 +94,7 @@ struct FoodCameraViewfinder: View {
 struct FoodCameraSuggestionRail: View {
     let suggestions: [FoodSuggestion]
     let onSelectSuggestion: (FoodSuggestion) -> Void
+    let onDismissKeyboard: () -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -103,8 +107,21 @@ struct FoodCameraSuggestionRail: View {
                     }
                 }
                 .padding(.horizontal, 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        onDismissKeyboard()
+                    }
+                )
             }
         }
+        .contentShape(.rect)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                onDismissKeyboard()
+            }
+        )
         .scrollClipDisabled()
         .padding(.horizontal)
     }
@@ -116,43 +133,62 @@ private struct FoodCameraDescriptionBar: View {
     let canSubmitDescription: Bool
     let onSubmitDescription: () -> Void
 
+    @State private var inputBarHeight: CGFloat = 52
+
+    private var inputCornerRadius: CGFloat {
+        min(inputBarHeight / 2, 26)
+    }
+
     var body: some View {
         GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                TextField("Describe your food...", text: $description)
+            HStack(alignment: .center, spacing: 10) {
+                TextField("Describe your food...", text: $description, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .lineLimit(1...4)
                     .focused($isDescriptionFocused)
                     .accessibilityIdentifier("foodCameraDescriptionField")
                     .onSubmit {
                         if canSubmitDescription {
-                            onSubmitDescription()
+                            saveDescription()
                         }
                     }
-                    .glassEffect(.regular.interactive(), in: .capsule)
 
-                if isDescriptionFocused {
-                    if canSubmitDescription {
-                        Button {
-                            isDescriptionFocused = false
-                            onSubmitDescription()
-                        } label: {
-                            Image(systemName: "arrow.up")
-                                .font(.headline.weight(.semibold))
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .accessibilityIdentifier("foodCameraDescriptionSubmitButton")
-                    } else {
-                        Button("Done") {
-                            isDescriptionFocused = false
-                        }
-                        .buttonStyle(.glass)
-                    }
+                Button {
+                    saveDescription()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
                 }
+                .glassEffect(.regular.tint(canSubmitDescription ? .accent : .gray).interactive(), in: .circle)
+                .opacity(canSubmitDescription ? 1 : 0.5)
+                .disabled(!canSubmitDescription)
+                .accessibilityLabel("Save description")
+                .accessibilityIdentifier("foodCameraDescriptionSubmitButton")
             }
+            .padding(.leading, 16)
+            .padding(.trailing, 8)
+            .padding(.vertical, 8)
+            .glassEffect(
+                .regular
+                    .tint(Color.white.opacity(0.08))
+                    .interactive(),
+                in: .rect(cornerRadius: inputCornerRadius)
+            )
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { _, newHeight in
+                inputBarHeight = newHeight
+            }
+            .animation(.snappy(duration: 0.18), value: inputCornerRadius)
         }
+    }
+
+    private func saveDescription() {
+        guard canSubmitDescription else { return }
+        isDescriptionFocused = false
+        onSubmitDescription()
     }
 }
 

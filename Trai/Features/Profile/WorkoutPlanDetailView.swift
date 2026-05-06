@@ -34,9 +34,9 @@ struct WorkoutPlanDetailView: View {
             VStack(spacing: 16) {
                 overviewCard
                 templatesSection
-                progressionCard
                 guidelinesCard
                 warningsCard
+                progressionCard
             }
             .padding()
         }
@@ -142,64 +142,42 @@ struct WorkoutPlanDetailView: View {
 
     // MARK: - Progression Card
 
+    @ViewBuilder
     private var progressionCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.title3)
-                    .foregroundStyle(.green)
-
-                Text(hasStructuredStrengthSessions ? "Progression Strategy" : "Progression Approach")
-                    .font(.headline)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Type:")
+        if hasStructuredStrengthSessions {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.green)
+
+                    Text("Auto Progression")
+                        .font(.subheadline.weight(.semibold))
+
+                    Spacer()
 
                     Text(plan.progressionStrategy.type.displayName)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
 
-                Text(plan.progressionStrategy.description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 16) {
+                    if let repsTrigger = plan.progressionStrategy.repsTrigger {
+                        Label("\(repsTrigger) rep target", systemImage: "number")
+                    }
 
-                if hasStructuredStrengthSessions {
-                    HStack(spacing: 16) {
-                        if let repsTrigger = plan.progressionStrategy.repsTrigger {
-                            HStack(spacing: 4) {
-                                Text("Rep target:")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(repsTrigger)")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                            }
-                        }
-
-                        if plan.progressionStrategy.weightIncrementKg > 0 {
-                            HStack(spacing: 4) {
-                                Text("Weight increment:")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(weightIncrementDisplay)
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                            }
-                        }
+                    if plan.progressionStrategy.weightIncrementKg > 0 {
+                        Label(weightIncrementDisplay, systemImage: "plus")
                     }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(Color(.tertiarySystemBackground))
+            .clipShape(.rect(cornerRadius: 12))
         }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
     }
 
     private var planSubtitle: String {

@@ -3,11 +3,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "pg": "^8.13.1"
+    "@google-cloud/firestore": "^8.5.0"
   },
   "scripts": {
     "dev": "node --watch src/server.mjs",
     "start": "node src/server.mjs",
+    "verify:firestore-adapter": "node scripts/check_firestore_adapter.mjs",
     "verify:apple": "node scripts/check_apple_verification.mjs"
   }
 }

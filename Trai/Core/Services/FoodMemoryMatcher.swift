@@ -81,6 +81,10 @@ struct FoodMemoryMatcher {
         }
 
         guard let snapshot = snapshot(for: entry) else { return false }
+        if hasExactComponentCompatibility(memory: memory, snapshot: snapshot),
+           nutritionLooksCompatible(snapshot: snapshot, memory: memory) {
+            return true
+        }
         return matches(memory: memory, snapshot: snapshot)
     }
 
@@ -448,6 +452,24 @@ struct FoodMemoryMatcher {
             abs(snapshot.totalProteinGrams - nutrition.medianProteinGrams) <= proteinTolerance &&
             abs(snapshot.totalCarbsGrams - nutrition.medianCarbsGrams) <= carbsTolerance &&
             abs(snapshot.totalFatGrams - nutrition.medianFatGrams) <= fatTolerance
+    }
+
+    private func hasExactComponentCompatibility(memory: FoodMemory, snapshot: AcceptedFoodSnapshot) -> Bool {
+        let memoryComponents = Set(
+            memory.components
+                .map { normalizationService.normalizeComponentName($0.normalizedName) }
+                .filter { !$0.isEmpty }
+        )
+        let snapshotComponents = Set(
+            snapshot.components
+                .map { normalizationService.normalizeComponentName($0.displayName) }
+                .filter { !$0.isEmpty }
+        )
+        guard !memoryComponents.isEmpty, memoryComponents == snapshotComponents else { return false }
+
+        let memoryRoles = Set(memory.components.map(\.role))
+        let snapshotRoles = Set(snapshot.components.map(\.role))
+        return memoryRoles == snapshotRoles || memoryRoles.intersection(snapshotRoles).isEmpty == false
     }
 
     private func snapshot(for entry: FoodEntry) -> AcceptedFoodSnapshot? {

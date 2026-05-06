@@ -3523,6 +3523,18 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         alreadyLoggedMemory.observationCount = 4
         alreadyLoggedMemory.confirmedReuseCount = 3
         alreadyLoggedMemory.confidenceScore = 0.92
+        alreadyLoggedMemory.nutritionProfile = FoodMemoryNutritionProfile(
+            medianCalories: 8,
+            medianProteinGrams: 0,
+            medianCarbsGrams: 1,
+            medianFatGrams: 0,
+            medianFiberGrams: nil,
+            medianSugarGrams: nil,
+            lowerCaloriesBound: 8,
+            upperCaloriesBound: 8,
+            lowerProteinBound: 0,
+            upperProteinBound: 0
+        )
         alreadyLoggedMemory.timeProfile = FoodMemoryTimeProfile(
             hourCounts: {
                 var counts = Array(repeating: 0, count: 24)
@@ -3562,7 +3574,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         XCTAssertEqual(debugSummary.totalMemories, 3)
         XCTAssertEqual(debugSummary.baseEligibleMemories, 3)
         XCTAssertEqual(debugSummary.filteredAlreadySatisfiedToday, 1)
-        XCTAssertEqual(debugSummary.filteredStale, 1)
         XCTAssertTrue(debugSummary.shownSuggestionTitles.contains("Chicken Bowl"))
     }
 

@@ -40,7 +40,7 @@ const child = spawn(process.execPath, ['src/server.mjs'], {
     ...process.env,
     PORT: String(port),
     HOST: '127.0.0.1',
-    TRAI_ENVIRONMENT: 'staging',
+    TRAI_ENVIRONMENT: 'production',
     TRAI_DB_PATH: databasePath,
     APPLE_JWKS_PATH: jwksPath,
     APPLE_EXPECTED_AUDIENCES: 'Nadav.Trai',
@@ -67,6 +67,7 @@ try {
   assert.equal(healthResponse.status, 200, 'expected health check to succeed');
 
   const healthPayload = await healthResponse.json();
+  assert.equal(healthPayload.environment, 'production', 'expected verification server to model TestFlight production backend');
   assert.equal(healthPayload.aiProvider, 'openai', 'expected OpenAI to remain the default provider');
   assert.equal(healthPayload.hasProviderKey, true, 'expected default provider key to be configured');
 

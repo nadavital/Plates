@@ -11,7 +11,6 @@ COPY package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY schema.sql ./
-COPY schema.postgres.sql ./
 COPY src ./src
 COPY scripts ./scripts
 
