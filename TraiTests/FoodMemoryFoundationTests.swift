@@ -157,4 +157,11 @@ final class FoodMemoryFoundationTests: XCTestCase {
         XCTAssertEqual(serving.quantity ?? 0, 0.5, accuracy: 0.001)
         XCTAssertEqual(serving.unit, "cup")
     }
+
+    func testNormalizationServiceCanonicalizesCoffeeDrinkMilkComponents() {
+        let normalizationService = FoodNormalizationService()
+
+        XCTAssertEqual(normalizationService.normalizeComponentName("Iced Latte Milk"), "iced latte")
+        XCTAssertEqual(normalizationService.normalizeComponentName("Milk"), "milk")
+    }
 }

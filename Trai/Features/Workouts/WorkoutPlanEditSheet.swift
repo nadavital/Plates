@@ -36,22 +36,12 @@ struct WorkoutPlanEditSheet: View {
         editedPlan.templates.sorted(by: { $0.order < $1.order })
     }
 
-    private var weightIncrementDisplay: String {
-        let kg = editedPlan.progressionStrategy.weightIncrementKg
-        if userProfile?.usesMetricExerciseWeight ?? true {
-            return String(format: "%.1f kg", kg)
-        } else {
-            return String(format: "%.1f lbs", kg * 2.20462)
-        }
-    }
-
     var body: some View {
         NavigationStack {
             List {
                 summarySection
                 preferencesSection
                 workoutDaysSection
-                progressionSection
                 guidelinesSection
                 warningsSection
                 quickActionsSection
@@ -229,25 +219,6 @@ struct WorkoutPlanEditSheet: View {
                     Text("Add Workout Day")
                 }
             }
-        }
-    }
-
-    private var progressionSection: some View {
-        Section("Progression Strategy") {
-            LabeledContent("Type", value: editedPlan.progressionStrategy.type.displayName)
-
-            if let repsTrigger = editedPlan.progressionStrategy.repsTrigger {
-                LabeledContent("Rep target", value: "\(repsTrigger)")
-            }
-
-            if editedPlan.progressionStrategy.weightIncrementKg > 0 {
-                LabeledContent("Weight increment", value: weightIncrementDisplay)
-            }
-
-            Text(editedPlan.progressionStrategy.description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
         }
     }
 
@@ -594,7 +565,7 @@ struct WorkoutPlanEditSheet: View {
             exercises: exercises ?? template.exercises,
             estimatedDurationMinutes: estimatedDurationMinutes ?? template.estimatedDurationMinutes,
             order: order ?? template.order,
-            notes: template.notes
+            notes: nil
         )
     }
 
@@ -680,6 +651,13 @@ private struct WorkoutDayEditorSheet: View {
         case focusAreas
     }
 
+    private struct StrengthSplitPreset: Identifiable {
+        let title: String
+        let muscles: [LiveWorkout.MuscleGroup]
+
+        var id: String { title }
+    }
+
     let title: String
     let confirmTitle: String
     @Binding var dayName: String
@@ -692,6 +670,13 @@ private struct WorkoutDayEditorSheet: View {
     private let upperBodyMuscles: [LiveWorkout.MuscleGroup] = [.chest, .back, .shoulders, .biceps, .triceps, .forearms]
     private let lowerBodyMuscles: [LiveWorkout.MuscleGroup] = [.quads, .hamstrings, .glutes, .calves]
     private let coreMuscles: [LiveWorkout.MuscleGroup] = [.core]
+    private let strengthSplitPresets: [StrengthSplitPreset] = [
+        StrengthSplitPreset(title: "Push", muscles: LiveWorkout.MuscleGroup.pushMuscles),
+        StrengthSplitPreset(title: "Pull", muscles: LiveWorkout.MuscleGroup.pullMuscles),
+        StrengthSplitPreset(title: "Legs", muscles: LiveWorkout.MuscleGroup.legMuscles),
+        StrengthSplitPreset(title: "Upper", muscles: [.chest, .back, .shoulders, .biceps, .triceps, .forearms]),
+        StrengthSplitPreset(title: "Full Body", muscles: [.fullBody])
+    ]
     @FocusState private var focusedField: Field?
 
     private var parsedFocusAreas: [String] {
@@ -809,65 +794,72 @@ private struct WorkoutDayEditorSheet: View {
                     .background(Color(.secondarySystemBackground))
                     .clipShape(.rect(cornerRadius: 12))
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Focus Areas")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    if !sessionType.supportsMuscleTargets {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Focus Areas")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
 
-                        Text(sessionType.supportsMuscleTargets
-                             ? "Add a freeform focus like Push, Pull, Skills, or Performance."
-                             : "Describe the style of session, skill, or energy system you want this day to cover.")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            Text("Describe the style of session, skill, or energy system you want this day to cover.")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
 
-                        FlowLayout(spacing: 8) {
-                            ForEach(sessionType.suggestedFocusPresets, id: \.self) { preset in
-                                DayPresetChip(
-                                    title: preset,
-                                    isSelected: parsedFocusAreas.contains(normalizeFocusArea(preset) ?? "")
-                                ) {
-                                    if sessionType.supportsMuscleTargets {
-                                        applyStrengthPreset(named: preset)
-                                    } else {
+                            FlowLayout(spacing: 8) {
+                                ForEach(sessionType.suggestedFocusPresets, id: \.self) { preset in
+                                    DayPresetChip(
+                                        title: preset,
+                                        isSelected: parsedFocusAreas.contains(normalizeFocusArea(preset) ?? "")
+                                    ) {
                                         toggleFocusPreset(preset)
                                     }
                                 }
                             }
-                        }
 
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "tag")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 2)
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "tag")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 2)
 
-                            TextField("e.g., Flow, Bouldering, Zone 2, Conditioning", text: $focusAreasText, axis: .vertical)
-                                .lineLimit(2...4)
-                                .textInputAutocapitalization(.words)
-                                .disableAutocorrection(true)
-                                .focused($focusedField, equals: .focusAreas)
+                                TextField("e.g., Flow, Bouldering, Zone 2, Conditioning", text: $focusAreasText, axis: .vertical)
+                                    .lineLimit(2...4)
+                                    .textInputAutocapitalization(.words)
+                                    .disableAutocorrection(true)
+                                    .focused($focusedField, equals: .focusAreas)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color(.tertiarySystemFill))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.red.opacity(0.18), lineWidth: 1)
+                            }
+                            .clipShape(.rect(cornerRadius: 10))
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(Color(.tertiarySystemFill))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.red.opacity(0.18), lineWidth: 1)
-                        }
-                        .clipShape(.rect(cornerRadius: 10))
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(.rect(cornerRadius: 12))
                     }
-                    .padding(12)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(.rect(cornerRadius: 12))
 
                     if sessionType.supportsMuscleTargets {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Target Muscles")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                            Text("Grouped by region for faster setup.")
+                            Text("Choose a split preset or adjust individual muscle groups.")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
+
+                            FlowLayout(spacing: 8) {
+                                ForEach(strengthSplitPresets) { preset in
+                                    DayPresetChip(
+                                        title: preset.title,
+                                        isSelected: Set(preset.muscles) == selectedMuscles
+                                    ) {
+                                        applyPreset(preset.muscles)
+                                    }
+                                }
+                            }
 
                             muscleTileGroup(title: "Upper Body", muscles: upperBodyMuscles)
                             muscleTileGroup(title: "Lower Body", muscles: lowerBodyMuscles)
@@ -913,26 +905,6 @@ private struct WorkoutDayEditorSheet: View {
 
     private func applyPreset(_ muscles: [LiveWorkout.MuscleGroup]) {
         selectedMuscles = Set(muscles)
-    }
-
-    private func applyStrengthPreset(named preset: String) {
-        let normalizedPreset = preset.lowercased()
-        switch normalizedPreset {
-        case "push":
-            applyPreset(LiveWorkout.MuscleGroup.pushMuscles)
-        case "pull":
-            applyPreset(LiveWorkout.MuscleGroup.pullMuscles)
-        case "legs":
-            applyPreset(LiveWorkout.MuscleGroup.legMuscles)
-        case "upper":
-            applyPreset([.chest, .back, .shoulders, .biceps, .triceps, .forearms])
-        case "full body":
-            applyPreset([.fullBody])
-        default:
-            break
-        }
-
-        focusAreasText = preset
     }
 
     private func toggleFocusPreset(_ preset: String) {

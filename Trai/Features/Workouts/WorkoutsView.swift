@@ -65,10 +65,10 @@ struct WorkoutsView: View {
     @State private var showingLiveWorkoutDetail: LiveWorkout?
     @State private var showingWorkoutGoalDetail: WorkoutGoal?
     @State private var showingWorkoutGoalAISetup = false
-    @State private var showingAllWorkouts = false
     @State private var showingWorkoutSheet = false
     @State private var showingCustomWorkoutSetup = false
     @State private var showingPersonalRecords = false
+    @State private var showingCustomExercises = false
     @State private var pendingWorkout: LiveWorkout?
     @State private var pendingTemplate: WorkoutPlan.WorkoutTemplate?
     @State private var pendingCustomWorkoutStart: PendingCustomWorkoutStart?
@@ -301,7 +301,7 @@ struct WorkoutsView: View {
 
                     WorkoutsQuickActionsRow(
                         onPersonalRecords: { showingPersonalRecords = true },
-                        onHistory: { showingAllWorkouts = true },
+                        onCustomExercises: { showingCustomExercises = true },
                         onRecovery: { showingMuscleRecoveryDetail = true }
                     )
 
@@ -317,6 +317,16 @@ struct WorkoutsView: View {
                         staleCheckInGoal: staleWorkoutGoalNeedingCheckIn,
                         onGoalTap: { showingWorkoutGoalDetail = $0 },
                         onToggleCompletion: toggleWorkoutGoalCompletion
+                    )
+
+                    WorkoutHistorySection(
+                        workoutsByDate: workoutsByDate,
+                        liveWorkoutsByDate: liveWorkoutsByDate,
+                        activeGoals: activeWorkoutGoals,
+                        onWorkoutTap: { showingWorkoutDetail = $0 },
+                        onLiveWorkoutTap: { showingLiveWorkoutDetail = $0 },
+                        onDelete: deleteWorkout,
+                        onDeleteLiveWorkout: deleteLiveWorkout
                     )
                 }
                 .padding()
@@ -388,24 +398,15 @@ struct WorkoutsView: View {
                 PersonalRecordsView()
                     .traiSheetBranding()
             }
+            .sheet(isPresented: $showingCustomExercises) {
+                NavigationStack {
+                    CustomExercisesView()
+                }
+                .traiSheetBranding()
+            }
             .sheet(isPresented: $showingMuscleRecoveryDetail) {
                 MuscleRecoveryDetailSheet(recoveryInfo: recoveryInfo)
                     .traiSheetBranding()
-            }
-            .sheet(isPresented: $showingAllWorkouts) {
-                AllWorkoutsSheet(
-                    workoutsByDate: workoutsByDate,
-                    liveWorkoutsByDate: liveWorkoutsByDate,
-                    activeGoals: activeWorkoutGoals,
-                    onWorkoutTap: { workout in
-                        showingWorkoutDetail = workout
-                    },
-                    onLiveWorkoutTap: { workout in
-                        showingLiveWorkoutDetail = workout
-                    },
-                    onDelete: deleteWorkout,
-                    onDeleteLiveWorkout: deleteLiveWorkout
-                )
             }
             .sheet(item: $showingWorkoutDetail) { workout in
                 WorkoutDetailSheet(workout: workout)

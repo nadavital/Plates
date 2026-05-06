@@ -74,6 +74,14 @@ struct PlanUpdateSuggestionCard: View {
         hasFiberChange || hasSugarChange || !hiddenMacroChangeLabels.isEmpty || suggestion.goal != nil
     }
 
+    private var rationaleText: String? {
+        guard let rationale = suggestion.rationale?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rationale.isEmpty else {
+            return nil
+        }
+        return rationale
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             // Header
@@ -101,6 +109,23 @@ struct PlanUpdateSuggestionCard: View {
                         .background(Color(.quaternarySystemFill))
                         .clipShape(.circle)
                 }
+            }
+
+            if let rationaleText {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "quote.bubble.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 20, height: 20)
+
+                    Text(rationaleText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .background(Color.accentColor.opacity(0.08))
+                .clipShape(.rect(cornerRadius: 12))
             }
 
             // Changes grid

@@ -398,10 +398,13 @@ private struct DeveloperFoodMemorySection: View {
     @State private var isRunningBackfill = false
     @State private var shadowSummary: FoodMemoryShadowSummary?
     @State private var suggestionDebugSummary: FoodSuggestionDebugSummary?
+    @State private var replayReport: FoodRecommendationReplayReport?
     @State private var lastMaintenanceResult: FoodMemoryMaintenanceResult?
     @State private var showsRecentEntries = true
     @State private var showsRecentMemories = false
     @State private var showsSuggestionDebug = true
+    @State private var showsReplayEvaluation = false
+    @State private var isRunningReplayEvaluation = false
 
     private var trackedEntries: [FoodEntry] {
         foodEntries.filter {
@@ -459,6 +462,7 @@ private struct DeveloperFoodMemorySection: View {
                     LabeledContent("Filtered Final Eligibility", value: "\(suggestionDebugSummary.filteredFinalEligibility)")
                     LabeledContent("Filtered Low Final Score", value: "\(suggestionDebugSummary.filteredLowFinalScore)")
                     LabeledContent("Shown Suggestions", value: "\(suggestionDebugSummary.finalEligibleCount)")
+                    LabeledContent("Engine Today Suppressions", value: "\(suggestionDebugSummary.suppressedAlreadyTodayCount)")
 
                     if suggestionDebugSummary.shownSuggestionTitles.isEmpty {
                         Text("No suggestions currently survive the full pipeline.")
@@ -478,6 +482,17 @@ private struct DeveloperFoodMemorySection: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let replayReport {
+                DisclosureGroup("Food Recommendation Replay Evaluation", isExpanded: $showsReplayEvaluation) {
+                    LabeledContent("Hit@3", value: confidenceText(replayReport.metrics.hitAt3))
+                    LabeledContent("MRR", value: String(format: "%.2f", replayReport.metrics.meanReciprocalRank))
+                    LabeledContent("No Suggestions", value: confidenceText(replayReport.metrics.noSuggestionRate))
+                    Text(replayReport.currentSnapshots.prefix(3).map(\.summaryText).joined(separator: "\n"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Button {
                 runMaintenanceNow()
             } label: {
@@ -491,6 +506,13 @@ private struct DeveloperFoodMemorySection: View {
                 Text(isRunningResolver ? "Resolving..." : "Run Resolver Now")
             }
             .disabled(isRunningResolver || isRunningBackfill)
+
+            Button {
+                runReplayEvaluation()
+            } label: {
+                Text(isRunningReplayEvaluation ? "Running Replay Evaluation..." : "Run Food Recommendation Replay Evaluation")
+            }
+            .disabled(isRunningReplayEvaluation || isRunningResolver || isRunningBackfill)
 
             DisclosureGroup("Recent Entry Decisions", isExpanded: $showsRecentEntries) {
                 if recentTrackedEntries.isEmpty {
@@ -619,6 +641,18 @@ private struct DeveloperFoodMemorySection: View {
                 resolvedEntries: totalResolved
             )
             refreshShadowSummary()
+        }
+    }
+
+    private func runReplayEvaluation() {
+        isRunningReplayEvaluation = true
+        Task { @MainActor in
+            defer { isRunningReplayEvaluation = false }
+            replayReport = try? await FoodRecommendationReplayService().run(
+                maximumCases: 50,
+                modelContext: modelContext
+            )
+            showsReplayEvaluation = replayReport != nil
         }
     }
 

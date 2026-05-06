@@ -76,6 +76,33 @@ struct FoodNormalizationService {
         normalizedTokens(from: name).joined(separator: " ")
     }
 
+    func normalizeComponentName(_ name: String) -> String {
+        let componentDescriptors: Set<String> = [
+            "grilled", "roasted", "baked", "fried", "crispy", "fresh", "homemade", "house",
+            "seasoned", "shredded", "sliced", "chopped", "diced", "mixed", "white", "brown",
+            "breast", "thigh", "lean", "low", "fat", "whole", "plain", "large", "small",
+            "medium", "bowl", "plate", "serving", "side"
+        ]
+        let tokens = normalizedTokens(from: name).filter { !componentDescriptors.contains($0) }
+        let drinkTokens: Set<String> = ["coffee", "latte", "cappuccino"]
+        if tokens.contains("milk"), !drinkTokens.isDisjoint(with: tokens) {
+            let withoutMilk = tokens.filter { $0 != "milk" }
+            if !withoutMilk.isEmpty {
+                return withoutMilk.joined(separator: " ")
+            }
+        }
+        return tokens.isEmpty ? normalizeFoodName(name) : tokens.joined(separator: " ")
+    }
+
+    func canonicalComponentSignature(for components: [AcceptedFoodComponent]) -> [String] {
+        Array(Set(components.map {
+            let canonicalName = normalizeComponentName($0.displayName)
+            return canonicalName.isEmpty ? $0.normalizedName : canonicalName
+        }))
+            .filter { !$0.isEmpty }
+            .sorted()
+    }
+
     func aliasCandidates(for name: String) -> [String] {
         let tokens = normalizedTokens(from: name)
         guard !tokens.isEmpty else { return [] }

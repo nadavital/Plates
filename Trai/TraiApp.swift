@@ -39,6 +39,9 @@ struct TraiApp: App {
     @State private var startupCoordinator = AppStartupCoordinator()
     @State private var deferredHealthKitSyncTask: Task<Void, Never>?
     @State private var reminderScheduleRefreshTask: Task<Void, Never>?
+    #if DEBUG
+    @State private var hasRunLaunchReplayEvaluation = false
+    #endif
     @Environment(\.scenePhase) private var scenePhase
     private let startupTaskDeferral: Duration = .seconds(2)
     private let startupMigrationDeferral: Duration = .seconds(90)
@@ -202,12 +205,15 @@ struct TraiApp: App {
                         scheduleStartupMigrationIfNeeded()
                         scheduleReminderScheduleRefreshIfNeeded()
                         scheduleReminderBackgroundRefresh()
-                        Task { @MainActor in
-                            try? FoodMemoryService().runMaintenance(
-                                backfillLimit: 24,
-                                resolveLimit: 12,
-                                modelContext: modelContainer.mainContext
-                            )
+                        runLaunchReplayEvaluationIfRequested()
+                        if !AppLaunchArguments.shouldRunFoodRecommendationReplayEvaluation {
+                            Task { @MainActor in
+                                try? FoodMemoryService().runMaintenance(
+                                    backfillLimit: 24,
+                                    resolveLimit: 12,
+                                    modelContext: modelContainer.mainContext
+                                )
+                            }
                         }
                     }
                     .onOpenURL { url in
@@ -267,6 +273,43 @@ struct TraiApp: App {
             showRemindersFromNotification = true
         }
     }
+
+    #if DEBUG
+    @MainActor
+    private func runLaunchReplayEvaluationIfRequested() {
+        guard AppLaunchArguments.shouldRunFoodRecommendationReplayEvaluation else { return }
+        guard !hasRunLaunchReplayEvaluation else { return }
+        hasRunLaunchReplayEvaluation = true
+        NSLog("Food recommendation replay evaluation launch run started")
+        writeLaunchReplayEvaluationReport(
+            "Food recommendation replay evaluation\nrunning=\(Date().formatted(date: .abbreviated, time: .standard))"
+        )
+        let maximumCases = AppLaunchArguments.foodRecommendationReplayMaximumCases ?? 20
+        Task { @MainActor in
+            do {
+                try? await Task.sleep(for: .seconds(1))
+                let report = try await FoodRecommendationReplayService().run(
+                    maximumCases: maximumCases,
+                    modelContext: modelContainer.mainContext
+                )
+                writeLaunchReplayEvaluationReport(report.summaryText)
+                NSLog("Food recommendation replay evaluation launch run completed cases=%d", report.metrics.evaluatedCases)
+            } catch {
+                let message = "Food recommendation replay evaluation launch run failed: \(error)"
+                writeLaunchReplayEvaluationReport(message)
+                NSLog("%@", message)
+            }
+        }
+    }
+
+    private func writeLaunchReplayEvaluationReport(_ text: String) {
+        guard let cachesDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let reportURL = cachesDirectory.appendingPathComponent("FoodRecommendationReplayEvaluation.txt")
+        try? text.write(to: reportURL, atomically: true, encoding: .utf8)
+    }
+    #else
+    private func runLaunchReplayEvaluationIfRequested() {}
+    #endif
 
     @MainActor
     private func scheduleReminderScheduleRefreshIfNeeded(force: Bool = false) {

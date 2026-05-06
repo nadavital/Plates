@@ -81,4 +81,5 @@ Current status:
 ## Notes
 
 - If we want TestFlight users to keep their account state when the App Store version goes live, TestFlight and App Store must talk to the same production backend and database.
+- TestFlight StoreKit payloads are signed but report Apple's Sandbox environment; the production backend must accept those payloads after normal signature, bundle, product, and ownership validation.
 - Staging is still useful for local iteration, but it should not be the long-term backend for distributed beta users.
