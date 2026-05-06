@@ -34,12 +34,11 @@
 		F200000F2A00000100F20001 /* WorkoutTemplateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */; };
 		F3A100012E00000100A10001 /* FoodRecommendationTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */; };
 		F3A100032E00000100A10001 /* FoodRecommendationEvaluatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */; };
-		F3A100052E00000100A10001 /* FoodRecommendationHabitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100042E00000100A10001 /* FoodRecommendationHabitTests.swift */; };
-		F3A100072E00000100A10001 /* FoodRecommendationCandidateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100062E00000100A10001 /* FoodRecommendationCandidateTests.swift */; };
-		F3A100092E00000100A10001 /* FoodRecommendationRankerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100082E00000100A10001 /* FoodRecommendationRankerTests.swift */; };
 		F3A1000B2E00000100A10001 /* FoodSuggestionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */; };
 		F3A1000D2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000C2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift */; };
 		F3A1000F2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */; };
+		F3A100112E00000100A10001 /* FoodPatternIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100102E00000100A10001 /* FoodPatternIdentityTests.swift */; };
+		F3A100132E00000100A10001 /* FoodPatternRecommendationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,12 +109,11 @@
 		F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutTemplateServiceTests.swift; sourceTree = "<group>"; };
 		F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationTestSupport.swift; sourceTree = "<group>"; };
 		F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationEvaluatorTests.swift; sourceTree = "<group>"; };
-		F3A100042E00000100A10001 /* FoodRecommendationHabitTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationHabitTests.swift; sourceTree = "<group>"; };
-		F3A100062E00000100A10001 /* FoodRecommendationCandidateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationCandidateTests.swift; sourceTree = "<group>"; };
-		F3A100082E00000100A10001 /* FoodRecommendationRankerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationRankerTests.swift; sourceTree = "<group>"; };
 		F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodSuggestionIntegrationTests.swift; sourceTree = "<group>"; };
 		F3A1000C2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationDeviceDebugTests.swift; sourceTree = "<group>"; };
 		F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationLegacyCleanupTests.swift; sourceTree = "<group>"; };
+		F3A100102E00000100A10001 /* FoodPatternIdentityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodPatternIdentityTests.swift; sourceTree = "<group>"; };
+		F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodPatternRecommendationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -239,12 +237,11 @@
 				B1F0A0063D00000100B1F001 /* FoodMemoryServiceTests.swift */,
 				F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */,
 				F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */,
-				F3A100042E00000100A10001 /* FoodRecommendationHabitTests.swift */,
-				F3A100062E00000100A10001 /* FoodRecommendationCandidateTests.swift */,
-				F3A100082E00000100A10001 /* FoodRecommendationRankerTests.swift */,
 				F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */,
 				F3A1000C2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift */,
 				F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */,
+				F3A100102E00000100A10001 /* FoodPatternIdentityTests.swift */,
+				F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */,
 				7C1000083C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift */,
 				7C1000063C00000100C10001 /* WorkoutPlanGenerationRequestTests.swift */,
 				A30000042B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift */,
@@ -464,12 +461,11 @@
 				A30000052B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift in Sources */,
 				F3A100012E00000100A10001 /* FoodRecommendationTestSupport.swift in Sources */,
 				F3A100032E00000100A10001 /* FoodRecommendationEvaluatorTests.swift in Sources */,
-				F3A100052E00000100A10001 /* FoodRecommendationHabitTests.swift in Sources */,
-				F3A100072E00000100A10001 /* FoodRecommendationCandidateTests.swift in Sources */,
-				F3A100092E00000100A10001 /* FoodRecommendationRankerTests.swift in Sources */,
 				F3A1000B2E00000100A10001 /* FoodSuggestionIntegrationTests.swift in Sources */,
 				F3A1000D2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift in Sources */,
 				F3A1000F2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift in Sources */,
+				F3A100112E00000100A10001 /* FoodPatternIdentityTests.swift in Sources */,
+				F3A100132E00000100A10001 /* FoodPatternRecommendationTests.swift in Sources */,
 				090355E73CD8CE91D184469F /* TraiCoachContextAssemblerTests.swift in Sources */,
 				F200000B2A00000100F20001 /* TraiCoachPatternServiceTests.swift in Sources */,
 				F200000F2A00000100F20001 /* WorkoutTemplateServiceTests.swift in Sources */,
@@ -514,7 +510,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = TraiWidgets/TraiWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiWidgets/Info.plist;
@@ -546,7 +542,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = TraiWidgets/TraiWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiWidgets/Info.plist;
@@ -699,7 +695,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Trai/Trai.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -738,7 +734,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Trai/Trai.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = C4MRP56MF5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;

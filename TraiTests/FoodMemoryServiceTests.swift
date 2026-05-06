@@ -903,7 +903,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testCameraSuggestionsPreferMatchingMealTimeAndConfirmedMemories() throws {
-        throw XCTSkip("Build15 recommendations are observation/habit-driven; memory-only suggestion retrieval is obsolete.")
         let container = try ModelContainer(
             for: FoodMemory.self,
             configurations: ModelConfiguration(
@@ -1108,7 +1107,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testCameraSuggestionsUsePersistedMemoryEmoji() throws {
-        throw XCTSkip("Build15 recommendations materialize suggestions from accepted-log habits, not standalone memory rows.")
         let container = try ModelContainer(
             for: FoodMemory.self,
             configurations: ModelConfiguration(
@@ -1152,7 +1150,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServiceDeduplicatesStructurallyEquivalentMemories() throws {
-        throw XCTSkip("Build15 deduplicates suggestion habits from observations; memory-row suggestion dedupe is obsolete.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -1796,7 +1793,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServiceSkipsStaleConfirmedMemoryDuringRetrieval() throws {
-        throw XCTSkip("Build15 no longer retrieves proactive suggestions directly from confirmed memory rows.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -1906,7 +1902,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServiceKeepsAcceptedLongTermHabitInRetrievalPool() throws {
-        throw XCTSkip("Build15 keeps long-term habits through accepted observations instead of memory-only retrieval.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -2187,7 +2182,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServicePromotesRepeatedBundlesWhenMultipleAnchorsArePresent() throws {
-        throw XCTSkip("Build15 bundle promotion is covered by observation/session recommendation tests.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -2843,7 +2837,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServiceSuppressesExtrasWhenSessionUsuallyEndsHere() throws {
-        throw XCTSkip("Build15 session-completion suppression is covered by observation/session recommendation tests.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -3109,7 +3102,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServiceRanksUsingTargetDateContext() throws {
-        throw XCTSkip("Build15 target-date ranking is covered by observation/habit recommendation tests.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -3218,7 +3210,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServiceKeepsModeratelyLunchAlignedConfirmedMealVisible() throws {
-        throw XCTSkip("Build15 lunch-aligned visibility is covered through accepted-log habit suggestions.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -3315,7 +3306,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionServiceCanShowStrongHabitAcrossMealBuckets() throws {
-        throw XCTSkip("Build15 cross-bucket strong-habit behavior is covered by FoodSuggestionIntegrationTests.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -3409,7 +3399,6 @@ final class FoodMemoryModelStorageTests: XCTestCase {
     }
 
     func testFoodSuggestionDebugSummaryReportsStageBreakdown() throws {
-        throw XCTSkip("Build15 debug summaries report observation/habit stages; memory-only stage breakdown is obsolete.")
         let schema = Schema([
             FoodEntry.self,
             FoodMemory.self
@@ -3567,6 +3556,37 @@ final class FoodMemoryModelStorageTests: XCTestCase {
 
         [visibleLunchMemory, staleMemory, alreadyLoggedMemory].forEach(context.insert)
 
+        let chickenComponents = [
+            component("chicken", role: .protein, calories: 220, protein: 35, carbs: 0, fat: 6),
+            component("rice", role: .carb, calories: 205, protein: 4, carbs: 45, fat: 0)
+        ]
+        let chickenEntryOne = makeEntry(
+            name: "Chicken Bowl",
+            loggedAt: now.addingTimeInterval(-60 * 60 * 24 * 3),
+            components: chickenComponents
+        )
+        chickenEntryOne.foodMemoryIdString = visibleLunchMemory.id.uuidString
+        let chickenEntryTwo = makeEntry(
+            name: "Chicken Bowl",
+            loggedAt: now.addingTimeInterval(-60 * 60 * 24 * 2),
+            components: chickenComponents
+        )
+        chickenEntryTwo.foodMemoryIdString = visibleLunchMemory.id.uuidString
+        context.insert(chickenEntryOne)
+        context.insert(chickenEntryTwo)
+
+        let previousCoffee = makeEntry(
+            name: "Daily Coffee",
+            loggedAt: now.addingTimeInterval(-60 * 60 * 24),
+            calories: 8,
+            protein: 0,
+            carbs: 1,
+            fat: 0,
+            components: [component("coffee", role: .drink, calories: 8, protein: 0, carbs: 1, fat: 0)]
+        )
+        previousCoffee.foodMemoryIdString = alreadyLoggedMemory.id.uuidString
+        context.insert(previousCoffee)
+
         let todayCoffee = makeEntry(
             name: "Daily Coffee",
             loggedAt: now.addingTimeInterval(-60 * 30),
@@ -3583,8 +3603,8 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         let debugSummary = try service.debugCameraSuggestions(limit: 3, now: now, modelContext: context)
 
         XCTAssertEqual(debugSummary.totalMemories, 3)
-        XCTAssertEqual(debugSummary.baseEligibleMemories, 3)
-        XCTAssertEqual(debugSummary.filteredAlreadySatisfiedToday, 1)
+        XCTAssertEqual(debugSummary.patternCount, 2)
+        XCTAssertGreaterThan(debugSummary.suppressedAlreadyTodayCount, 0)
         XCTAssertTrue(debugSummary.shownSuggestionTitles.contains("Chicken Bowl"))
     }
 

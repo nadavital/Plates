@@ -444,25 +444,18 @@ private struct DeveloperFoodMemorySection: View {
 
             if let suggestionDebugSummary {
                 DisclosureGroup(
-                    "Current \(bucketLabel(for: suggestionDebugSummary.bucket)) Suggestion Pipeline",
+                    "Current Pattern Suggestion Pipeline",
                     isExpanded: $showsSuggestionDebug
                 ) {
                     LabeledContent("Total Memories", value: "\(suggestionDebugSummary.totalMemories)")
-                    LabeledContent("Base Eligible", value: "\(suggestionDebugSummary.baseEligibleMemories)")
-                    LabeledContent("Structured Memories", value: "\(suggestionDebugSummary.structuredMemories)")
-                    LabeledContent("Bucket-Aligned Memories", value: "\(suggestionDebugSummary.bucketAlignedMemories)")
-                    LabeledContent("Filtered Today Match", value: "\(suggestionDebugSummary.filteredAlreadySatisfiedToday)")
-                    LabeledContent("Filtered Negative Feedback", value: "\(suggestionDebugSummary.filteredNegativeFeedback)")
-                    LabeledContent("Filtered Stale", value: "\(suggestionDebugSummary.filteredStale)")
-                    LabeledContent("Filtered Retrieval Timing", value: "\(suggestionDebugSummary.filteredRetrievalTiming)")
-                    LabeledContent("Filtered Retrieval History", value: "\(suggestionDebugSummary.filteredRetrievalHistory)")
-                    LabeledContent("Filtered Session Completion", value: "\(suggestionDebugSummary.filteredLikelyCompletedSession)")
-                    LabeledContent("Filtered Low Retrieval Score", value: "\(suggestionDebugSummary.filteredLowRetrievalScore)")
+                    LabeledContent("Observations", value: "\(suggestionDebugSummary.totalObservations)")
+                    LabeledContent("Patterns", value: "\(suggestionDebugSummary.patternCount)")
                     LabeledContent("Retrieved Candidates", value: "\(suggestionDebugSummary.retrievedCandidateCount)")
-                    LabeledContent("Filtered Final Eligibility", value: "\(suggestionDebugSummary.filteredFinalEligibility)")
-                    LabeledContent("Filtered Low Final Score", value: "\(suggestionDebugSummary.filteredLowFinalScore)")
+                    LabeledContent("Suppressed One-Offs", value: "\(suggestionDebugSummary.suppressedOneOffCount)")
+                    LabeledContent("Suppressed Today Match", value: "\(suggestionDebugSummary.suppressedAlreadyTodayCount)")
+                    LabeledContent("Suppressed Feedback", value: "\(suggestionDebugSummary.suppressedNegativeFeedbackCount)")
+                    LabeledContent("Suppressed Low Confidence", value: "\(suggestionDebugSummary.suppressedLowConfidenceCount)")
                     LabeledContent("Shown Suggestions", value: "\(suggestionDebugSummary.finalEligibleCount)")
-                    LabeledContent("Engine Today Suppressions", value: "\(suggestionDebugSummary.suppressedAlreadyTodayCount)")
 
                     if suggestionDebugSummary.shownSuggestionTitles.isEmpty {
                         Text("No suggestions currently survive the full pipeline.")
@@ -596,21 +589,6 @@ private struct DeveloperFoodMemorySection: View {
 
     private func confidenceText(_ value: Double) -> String {
         "\(Int((value * 100).rounded()))%"
-    }
-
-    private func bucketLabel(for bucket: MealTimeBucket) -> String {
-        switch bucket {
-        case .breakfast:
-            return "Breakfast"
-        case .lunch:
-            return "Lunch"
-        case .dinner:
-            return "Dinner"
-        case .lateNight:
-            return "Late Night"
-        case .snack:
-            return "Snack"
-        }
     }
 
     private func runMaintenanceNow() {

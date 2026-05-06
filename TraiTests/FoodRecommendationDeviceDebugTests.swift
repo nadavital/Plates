@@ -26,7 +26,7 @@ final class FoodRecommendationDeviceDebugTests: XCTestCase {
             config: FoodRecommendationReplayConfig(minimumTrainingObservations: 2, maximumCases: 5)
         )
         let observations = FoodObservationBuilder().observations(from: entries)
-        let habits = FoodHabitBuilder().habits(from: observations)
+        let patterns = FoodPatternBuilder().patterns(from: observations)
         let dinner = FoodRecommendationEngine().recommendationsSync(
             for: FoodRecommendationRequest(
                 now: FoodRecommendationTestSupport.day(3, hour: 19),
@@ -41,7 +41,7 @@ final class FoodRecommendationDeviceDebugTests: XCTestCase {
         print(
             """
             Food recommendation replay:
-            observations=\(observations.count) habits=\(habits.count) cases=\(metrics.evaluatedCases)
+            observations=\(observations.count) patterns=\(patterns.count) cases=\(metrics.evaluatedCases)
             newHitAt3=\(metrics.hitAt3) newMRR=\(metrics.meanReciprocalRank)
             oneOffFalsePositiveRate=\(metrics.oneOffFalsePositiveRate) beverageDominationRate=\(metrics.beverageDominationRate) completeMealCoverageRate=\(metrics.completeMealCoverageRate)
             dinner_19 shown=\(dinner.suggestions.map(\.title).joined(separator: " | "))

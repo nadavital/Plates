@@ -50,8 +50,6 @@ struct FoodRecommendationCurrentSnapshot: Sendable, Equatable {
 }
 
 struct FoodRecommendationReplayService {
-    private let maximumTrainingEntriesPerReplayCase = 180
-
     @MainActor
     func run(
         maximumCases: Int = 50,
@@ -73,17 +71,14 @@ struct FoodRecommendationReplayService {
             entries: entries,
             memories: [],
             provider: { trainingEntries, _, now, limit, sessionID, _ in
-                let state = try trainingState(
-                    from: recentTrainingEntries(from: trainingEntries, before: now)
-                )
                 return FoodRecommendationEngine().recommendationsSync(
                     for: FoodRecommendationRequest(
                         now: now,
                         targetDate: now,
                         sessionID: sessionID,
                         limit: limit,
-                        entries: state.entries,
-                        memories: state.memories
+                        entries: trainingEntries,
+                        memories: []
                     )
                 ).suggestions
             },
@@ -99,14 +94,6 @@ struct FoodRecommendationReplayService {
         )
         print(report.summaryText)
         return report
-    }
-
-    private func recentTrainingEntries(from entries: [FoodEntry], before targetDate: Date) -> [FoodEntry] {
-        Array(
-            entries
-                .filter { $0.loggedAt < targetDate }
-                .suffix(maximumTrainingEntriesPerReplayCase)
-        )
     }
 
     @MainActor
@@ -145,52 +132,6 @@ struct FoodRecommendationReplayService {
             hours.compactMap { calendar.date(bySettingHour: $0, minute: 0, second: 0, of: dayStart) }
         }
     }
-}
-
-@MainActor
-private func trainingState(from entries: [FoodEntry]) throws -> (context: ModelContext, entries: [FoodEntry], memories: [FoodMemory]) {
-    let schema = Schema([FoodEntry.self, FoodMemory.self])
-    let container = try ModelContainer(
-        for: schema,
-        configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-    )
-    let context = ModelContext(container)
-    let clonedEntries = entries.compactMap(clonedAcceptedEntry)
-    for entry in clonedEntries {
-        context.insert(entry)
-    }
-    try context.save()
-    _ = try FoodMemoryService().runMaintenance(
-        backfillLimit: 0,
-        resolveLimit: max(clonedEntries.count, 1),
-        modelContext: context
-    )
-    let memories = try context.fetch(FetchDescriptor<FoodMemory>())
-    return (context, clonedEntries, memories)
-}
-
-private func clonedAcceptedEntry(from entry: FoodEntry) -> FoodEntry? {
-    guard let snapshot = entry.acceptedSnapshot else { return nil }
-    let clone = FoodEntry(
-        name: entry.name,
-        mealType: entry.mealType,
-        calories: entry.calories,
-        proteinGrams: entry.proteinGrams,
-        carbsGrams: entry.carbsGrams,
-        fatGrams: entry.fatGrams
-    )
-    clone.fiberGrams = entry.fiberGrams
-    clone.sugarGrams = entry.sugarGrams
-    clone.servingSize = entry.servingSize
-    clone.input = entry.input
-    clone.userDescription = entry.userDescription
-    clone.aiAnalysis = entry.aiAnalysis
-    clone.emoji = entry.emoji
-    clone.loggedAt = entry.loggedAt
-    clone.sessionId = entry.sessionId
-    clone.sessionOrder = entry.sessionOrder
-    clone.setAcceptedSnapshot(snapshot)
-    return clone
 }
 
 private extension FoodRecommendationReplayFailedCase {

@@ -57,8 +57,14 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
 
     func testCameraSuggestionsPreserveExistingOutcomeRecording() throws {
         let context = try modelContext()
-        context.insert(entry("Chicken Rice Bowl", day: 0))
-        context.insert(entry("Chicken Rice Bowl", day: 1))
+        let first = entry("Chicken Rice Bowl", day: 0)
+        let second = entry("Chicken Rice Bowl", day: 1)
+        let persistedMemory = memory(title: "Chicken Rice Bowl", entries: [first, second])
+        first.foodMemoryIdString = persistedMemory.id.uuidString
+        second.foodMemoryIdString = persistedMemory.id.uuidString
+        context.insert(first)
+        context.insert(second)
+        context.insert(persistedMemory)
         try context.save()
         let suggestion = try XCTUnwrap(
             FoodSuggestionService().cameraSuggestions(
@@ -80,8 +86,14 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
 
     func testObservationBuiltSuggestionRecordsShownOnPersistedMemory() throws {
         let context = try modelContext()
-        context.insert(entry("Chicken Rice Bowl", day: 0))
-        context.insert(entry("Chicken Rice Bowl", day: 1))
+        let first = entry("Chicken Rice Bowl", day: 0)
+        let second = entry("Chicken Rice Bowl", day: 1)
+        let persistedMemory = memory(title: "Chicken Rice Bowl", entries: [first, second])
+        first.foodMemoryIdString = persistedMemory.id.uuidString
+        second.foodMemoryIdString = persistedMemory.id.uuidString
+        context.insert(first)
+        context.insert(second)
+        context.insert(persistedMemory)
         try context.save()
 
         let suggestion = try XCTUnwrap(
@@ -102,8 +114,14 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
     func testObservationBuiltSuggestionReconcileRecordsAcceptance() throws {
         let context = try modelContext()
         let accepted = entry("Chicken Rice Bowl", day: 2)
-        context.insert(entry("Chicken Rice Bowl", day: 0))
-        context.insert(entry("Chicken Rice Bowl", day: 1))
+        let first = entry("Chicken Rice Bowl", day: 0)
+        let second = entry("Chicken Rice Bowl", day: 1)
+        let persistedMemory = memory(title: "Chicken Rice Bowl", entries: [first, second])
+        first.foodMemoryIdString = persistedMemory.id.uuidString
+        second.foodMemoryIdString = persistedMemory.id.uuidString
+        context.insert(first)
+        context.insert(second)
+        context.insert(persistedMemory)
         try context.save()
         let suggestion = try XCTUnwrap(
             FoodSuggestionService().cameraSuggestions(
@@ -128,8 +146,14 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
 
     func testObservationBuiltSuggestionFeedbackSuppressesLaterRanking() throws {
         let context = try modelContext()
-        context.insert(entry("Chicken Rice Bowl", day: 0))
-        context.insert(entry("Chicken Rice Bowl", day: 1))
+        let first = entry("Chicken Rice Bowl", day: 0)
+        let second = entry("Chicken Rice Bowl", day: 1)
+        let persistedMemory = memory(title: "Chicken Rice Bowl", entries: [first, second])
+        first.foodMemoryIdString = persistedMemory.id.uuidString
+        second.foodMemoryIdString = persistedMemory.id.uuidString
+        context.insert(first)
+        context.insert(second)
+        context.insert(persistedMemory)
         try context.save()
         let suggestion = try XCTUnwrap(
             FoodSuggestionService().cameraSuggestions(
@@ -149,6 +173,24 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         )
 
         XCTAssertFalse(laterSuggestions.contains { $0.memoryID == suggestion.memoryID })
+    }
+
+    func testPatternSuggestionsDoNotMaterializeFoodMemoryRowsOnShow() throws {
+        let context = try modelContext()
+        context.insert(entry("Chicken Rice Bowl", day: 0))
+        context.insert(entry("Chicken Rice Bowl", day: 1))
+        try context.save()
+
+        let suggestions = try FoodSuggestionService().cameraSuggestions(
+            limit: 1,
+            now: FoodRecommendationTestSupport.day(2),
+            targetDate: FoodRecommendationTestSupport.day(2),
+            modelContext: context
+        )
+        let memories = try context.fetch(FetchDescriptor<FoodMemory>())
+
+        XCTAssertFalse(suggestions.isEmpty)
+        XCTAssertTrue(memories.isEmpty)
     }
 
     func testFutureSameDayDinnerDoesNotSuppressNoonRecommendation() throws {
@@ -227,7 +269,7 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
             modelContext: context
         )
 
-        XCTAssertGreaterThan(summary.filteredAlreadySatisfiedToday + summary.suppressedAlreadyTodayCount, 0)
+        XCTAssertGreaterThan(summary.suppressedAlreadyTodayCount, 0)
         XCTAssertFalse(summary.shownSuggestionTitles.contains("Chicken Rice Bowl"))
     }
 
@@ -245,7 +287,7 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.totalObservations, 2)
-        XCTAssertEqual(summary.habitCount, 1)
+        XCTAssertEqual(summary.patternCount, 1)
         XCTAssertFalse(summary.candidateCountBySource.isEmpty)
         XCTAssertEqual(summary.suppressedOneOffCount, 0)
         XCTAssertEqual(summary.shownSuggestionTitles.first, "Chicken Rice Bowl")
@@ -280,5 +322,56 @@ final class FoodSuggestionIntegrationTests: XCTestCase {
             FoodRecommendationTestSupport.component("pastrami", role: .protein, calories: 420, protein: 30, carbs: 0, fat: 30),
             FoodRecommendationTestSupport.component("rye bread", role: .carb, calories: 220, protein: 6, carbs: 40, fat: 3)
         ]
+    }
+
+    private func memory(title: String, entries: [FoodEntry]) -> FoodMemory {
+        let memory = FoodMemory()
+        memory.status = .confirmed
+        memory.displayName = title
+        memory.primaryNormalizedName = FoodNormalizationService().normalizeFoodName(title)
+        memory.aliases = [
+            FoodMemoryAlias(
+                normalizedName: memory.primaryNormalizedName,
+                displayName: title,
+                observationCount: entries.count,
+                wasUserEdited: false
+            )
+        ]
+        memory.components = [
+            FoodMemoryComponentSummary(
+                normalizedName: "chicken",
+                role: .protein,
+                observationCount: entries.count,
+                typicalCalories: 240,
+                typicalProteinGrams: 38,
+                typicalCarbsGrams: 0,
+                typicalFatGrams: 5
+            ),
+            FoodMemoryComponentSummary(
+                normalizedName: "rice",
+                role: .carb,
+                observationCount: entries.count,
+                typicalCalories: 205,
+                typicalProteinGrams: 4,
+                typicalCarbsGrams: 45,
+                typicalFatGrams: 0
+            )
+        ]
+        memory.nutritionProfile = FoodMemoryNutritionProfile(
+            medianCalories: 620,
+            medianProteinGrams: 42,
+            medianCarbsGrams: 58,
+            medianFatGrams: 16,
+            medianFiberGrams: 5,
+            medianSugarGrams: 4,
+            lowerCaloriesBound: 620,
+            upperCaloriesBound: 620,
+            lowerProteinBound: 42,
+            upperProteinBound: 42
+        )
+        memory.representativeEntryIds = entries.map { $0.id.uuidString }
+        memory.observationCount = entries.count
+        memory.lastObservedAt = entries.map(\.loggedAt).max() ?? .now
+        return memory
     }
 }

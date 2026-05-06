@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 struct FoodRecommendationRequest: @unchecked Sendable {
@@ -47,20 +46,10 @@ struct FoodRecommendationContext: @unchecked Sendable {
     }
 }
 
-struct FoodRecommendationCandidate: Sendable, Equatable {
-    let habit: FoodHabit
-    let source: FoodRecommendationCandidateSource
-    let features: FoodRecommendationFeatures
-    let suggestedEntry: SuggestedFoodEntry
-}
-
-enum FoodRecommendationCandidateSource: String, Sendable {
-    case repeatStaple
-    case timeContext
-    case sessionCompletion
-    case semanticVariant
-    case recentRepeated
-    case recentCompleteMeal
+enum FoodRecommendationSource: String, Sendable {
+    case likelyNow
+    case continueSession
+    case recentAgain
 }
 
 struct FoodRecommendationResult: Sendable, Equatable {
@@ -70,86 +59,54 @@ struct FoodRecommendationResult: Sendable, Equatable {
 
 struct FoodRecommendationDebugReport: Sendable, Equatable {
     let observationCount: Int
-    let habitCount: Int
-    let candidateCountBySource: [FoodRecommendationCandidateSource: Int]
+    let patternCount: Int
+    let candidateCountBySource: [FoodRecommendationSource: Int]
     let suppressedOneOffCount: Int
     let suppressedAlreadyTodayCount: Int
     let suppressedNegativeFeedbackCount: Int
-    let suppressedLowUsefulnessCount: Int
+    let suppressedLowConfidenceCount: Int
     let finalShownTitles: [String]
 }
 
 struct FoodRecommendationEngine {
-    private let observationBuilder = FoodObservationBuilder()
-    private let habitBuilder = FoodHabitBuilder()
-    private let ranker = FoodRecommendationRanker()
+    private let patternEngine = FoodPatternRecommendationEngine()
 
     func recommendations(for request: FoodRecommendationRequest) async throws -> FoodRecommendationResult {
         recommendationsSync(for: request)
     }
 
     func recommendationsSync(for request: FoodRecommendationRequest) -> FoodRecommendationResult {
-        guard request.limit > 0 else {
-            return FoodRecommendationResult(
-                suggestions: [],
-                debugReport: FoodRecommendationDebugReport(
-                    observationCount: 0,
-                    habitCount: 0,
-                    candidateCountBySource: [:],
-                    suppressedOneOffCount: 0,
-                    suppressedAlreadyTodayCount: 0,
-                    suppressedNegativeFeedbackCount: 0,
-                    suppressedLowUsefulnessCount: 0,
-                    finalShownTitles: []
-                )
-            )
-        }
-
-        let observations = observationBuilder
-            .observations(from: request.entries)
-            .filter { $0.loggedAt < request.targetDate }
-        let habits = habitBuilder.habits(from: observations, memories: request.memories)
-        let context = FoodRecommendationContext(
-            now: request.now,
-            targetDate: request.targetDate,
-            sessionID: request.sessionID,
-            limit: request.limit,
-            observations: observations,
-            memories: request.memories
-        )
-        let candidates = FoodRecommendationCandidateGeneratorSet().candidates(habits: habits, context: context)
-        let ranked = ranker.rank(candidates, context: context)
-        let suggestions = ranked.prefix(request.limit).map { candidate in
+        let patternResult = patternEngine.recommendationsSync(for: request)
+        let suggestions = patternResult.suggestions.map { suggestion in
             FoodSuggestion(
-                memoryID: suggestionID(for: candidate.habit),
-                title: candidate.suggestedEntry.name,
-                subtitle: subtitle(for: candidate),
-                detail: "\(Int(candidate.suggestedEntry.proteinGrams.rounded()))g protein • \(candidate.suggestedEntry.calories) cal",
-                emoji: candidate.suggestedEntry.emoji ?? "🍽️",
-                relevanceScore: ranker.score(candidate.features),
-                suggestedEntry: candidate.suggestedEntry
+                memoryID: suggestionID(for: suggestion.pattern),
+                title: suggestion.suggestedEntry.name,
+                subtitle: subtitle(for: suggestion),
+                detail: "\(Int(suggestion.suggestedEntry.proteinGrams.rounded()))g protein • \(suggestion.suggestedEntry.calories) cal",
+                emoji: suggestion.suggestedEntry.emoji ?? "🍽️",
+                relevanceScore: suggestion.score,
+                suggestedEntry: suggestion.suggestedEntry
             )
         }
-        let rankerDiagnostics = ranker.diagnostics(for: candidates, context: context)
 
         return FoodRecommendationResult(
             suggestions: suggestions,
             debugReport: FoodRecommendationDebugReport(
-                observationCount: observations.count,
-                habitCount: habits.count,
-                candidateCountBySource: Dictionary(grouping: candidates, by: \.source).mapValues(\.count),
-                suppressedOneOffCount: rankerDiagnostics.suppressedOneOffCount,
-                suppressedAlreadyTodayCount: rankerDiagnostics.suppressedAlreadyTodayCount,
-                suppressedNegativeFeedbackCount: rankerDiagnostics.suppressedNegativeFeedbackCount,
-                suppressedLowUsefulnessCount: rankerDiagnostics.suppressedLowUsefulnessCount,
+                observationCount: patternResult.debugReport.observationCount,
+                patternCount: patternResult.debugReport.patternCount,
+                candidateCountBySource: recommendationCandidateCounts(from: patternResult.debugReport.candidateCountBySource),
+                suppressedOneOffCount: patternResult.debugReport.suppressedOneOffCount,
+                suppressedAlreadyTodayCount: patternResult.debugReport.suppressedAlreadyTodayCount,
+                suppressedNegativeFeedbackCount: patternResult.debugReport.suppressedNegativeFeedbackCount,
+                suppressedLowConfidenceCount: patternResult.debugReport.suppressedLowConfidenceCount,
                 finalShownTitles: suggestions.map(\.title)
             )
         )
     }
 
-    private func suggestionID(for habit: FoodHabit) -> UUID {
-        let linkedIDs = habit.observations.compactMap(\.linkedMemoryID)
-        guard !linkedIDs.isEmpty else { return habit.stableUUID }
+    private func suggestionID(for pattern: FoodPattern) -> UUID {
+        let linkedIDs = pattern.observations.compactMap(\.linkedMemoryID)
+        guard !linkedIDs.isEmpty else { return pattern.stableUUID }
         return Dictionary(grouping: linkedIDs, by: { $0 })
             .max {
                 if $0.value.count != $1.value.count {
@@ -157,37 +114,27 @@ struct FoodRecommendationEngine {
                 }
                 return $0.key.uuidString < $1.key.uuidString
             }?
-            .key ?? habit.stableUUID
+            .key ?? pattern.stableUUID
     }
 
-    private func subtitle(for candidate: FoodRecommendationCandidate) -> String {
-        switch candidate.source {
-        case .repeatStaple:
-            return "Usual staple"
-        case .timeContext:
+    private func subtitle(for suggestion: FoodPatternSuggestion) -> String {
+        switch suggestion.source {
+        case .likelyNow:
             return "Common around this time"
-        case .sessionCompletion:
+        case .continueSession:
             return "Often logged together"
-        case .semanticVariant:
-            return "Similar to past logs"
-        case .recentRepeated:
+        case .recentAgain:
             return "Recent repeat"
-        case .recentCompleteMeal:
-            return "Recently logged"
         }
     }
-}
 
-extension FoodHabit {
-    var stableUUID: UUID {
-        let digest = SHA256.hash(data: Data(id.utf8))
-        let bytes = Array(digest.prefix(16))
-        return UUID(uuid: (
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5],
-            bytes[6], bytes[7],
-            bytes[8], bytes[9],
-            bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
-        ))
+    private func recommendationCandidateCounts(
+        from counts: [FoodPatternSuggestionSource: Int]
+    ) -> [FoodRecommendationSource: Int] {
+        var output: [FoodRecommendationSource: Int] = [:]
+        output[.likelyNow] = counts[.likelyNow]
+        output[.continueSession] = counts[.continueSession]
+        output[.recentAgain] = counts[.recentAgain]
+        return output.filter { $0.value > 0 }
     }
 }
