@@ -34,7 +34,10 @@ struct FoodCameraNoCameraFallbackView: View {
 
                         FoodCameraSuggestionRail(
                             suggestions: suggestions,
-                            onSelectSuggestion: onSelectSuggestion
+                            onSelectSuggestion: onSelectSuggestion,
+                            onDismissKeyboard: {
+                                isDescriptionFocused = false
+                            }
                         )
                         .padding(.horizontal, -TraiSpacing.md)
                     }

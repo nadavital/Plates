@@ -20,6 +20,8 @@ enum AppLaunchArguments {
     static let enableLatencyProbe = "--enable-latency-probe"
     static let useInMemoryStore = "--use-in-memory-store"
     static let usePersistentStore = "--use-persistent-store"
+    static let runFoodRecommendationReplayEvaluation = "--run-food-recommendation-replay-evaluation"
+    static let foodRecommendationReplayCases = "--food-recommendation-replay-cases"
     static let onboardingCompletedCacheKey = "hasCompletedOnboardingCached"
     private static let processStartupUptime = ProcessInfo.processInfo.systemUptime
     private static let startupSuppressedAnimationWindowSeconds: TimeInterval = 4
@@ -85,6 +87,28 @@ enum AppLaunchArguments {
     static var shouldEnableLatencyProbe: Bool {
         ProcessInfo.processInfo.arguments.contains(enableLatencyProbe)
     }
+
+    #if DEBUG
+    static var shouldRunFoodRecommendationReplayEvaluation: Bool {
+        ProcessInfo.processInfo.arguments.contains(runFoodRecommendationReplayEvaluation)
+    }
+
+    static var foodRecommendationReplayMaximumCases: Int? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: foodRecommendationReplayCases) else { return nil }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return nil }
+        return Int(arguments[valueIndex]).map { max($0, 1) }
+    }
+    #else
+    static var shouldRunFoodRecommendationReplayEvaluation: Bool {
+        false
+    }
+
+    static var foodRecommendationReplayMaximumCases: Int? {
+        nil
+    }
+    #endif
 
     static var shouldSuppressStartupAnimations: Bool {
         if isUITesting {

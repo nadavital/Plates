@@ -300,13 +300,13 @@ private struct StartWorkoutEmptyState: View {
 
 struct WorkoutsQuickActionsRow: View {
     let onPersonalRecords: () -> Void
-    let onHistory: () -> Void
+    let onCustomExercises: () -> Void
     let onRecovery: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            WorkoutsQuickActionChip("Records", systemImage: "trophy.fill", color: .yellow, action: onPersonalRecords)
-            WorkoutsQuickActionChip("History", systemImage: "clock.fill", color: .blue, action: onHistory)
+            WorkoutsQuickActionChip("PR", systemImage: "trophy.fill", color: .yellow, action: onPersonalRecords)
+            WorkoutsQuickActionChip("Exercises", systemImage: "figure.strengthtraining.traditional", color: .blue, action: onCustomExercises)
             WorkoutsQuickActionChip("Recovery", systemImage: "waveform.path.ecg", color: .green, action: onRecovery)
         }
     }

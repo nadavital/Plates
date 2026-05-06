@@ -225,6 +225,93 @@ final class FoodMemoryMatcherTests: XCTestCase {
         XCTAssertTrue(matcher.matches(entry: entry, memory: memory))
     }
 
+    func testExactComponentEntryMatchRejectsIncompatibleMacros() {
+        let memory = makeMemory(
+            displayName: "Chicken Rice Bowl",
+            normalizedName: "chicken rice bowl",
+            calories: 520,
+            protein: 42,
+            carbs: 55,
+            fat: 12,
+            components: [
+                componentSummary("chicken", role: .protein, calories: 240, protein: 38, carbs: 0, fat: 5, observationCount: 3),
+                componentSummary("rice", role: .carb, calories: 205, protein: 4, carbs: 45, fat: 0, observationCount: 3)
+            ]
+        )
+        let entry = FoodRecommendationTestSupport.entry(
+            name: "Family Size Chicken Rice Bowl",
+            loggedAt: Date(timeIntervalSince1970: 1_714_000_000),
+            calories: 1280,
+            protein: 92,
+            carbs: 150,
+            fat: 36,
+            components: [
+                component("chicken", role: .protein, calories: 600, protein: 80, carbs: 0, fat: 20),
+                component("rice", role: .carb, calories: 600, protein: 12, carbs: 140, fat: 3)
+            ]
+        )
+
+        XCTAssertFalse(matcher.matches(entry: entry, memory: memory))
+    }
+
+    func testExactComponentEntryMatchAllowsCompatibleMacros() {
+        let memory = makeMemory(
+            displayName: "Chicken Rice Bowl",
+            normalizedName: "chicken rice bowl",
+            calories: 620,
+            protein: 42,
+            carbs: 58,
+            fat: 16,
+            components: [
+                componentSummary("chicken", role: .protein, calories: 240, protein: 38, carbs: 0, fat: 5, observationCount: 3),
+                componentSummary("rice", role: .carb, calories: 205, protein: 4, carbs: 45, fat: 0, observationCount: 3)
+            ]
+        )
+        let entry = FoodRecommendationTestSupport.entry(
+            name: "Chicken Rice Bowl",
+            loggedAt: Date(timeIntervalSince1970: 1_714_000_000),
+            calories: 640,
+            protein: 44,
+            carbs: 60,
+            fat: 17,
+            components: [
+                component("chicken", role: .protein, calories: 250, protein: 40, carbs: 0, fat: 6),
+                component("rice", role: .carb, calories: 210, protein: 4, carbs: 46, fat: 1)
+            ]
+        )
+
+        XCTAssertTrue(matcher.matches(entry: entry, memory: memory))
+    }
+
+    func testExactComponentEntryMatchUsesCanonicalComponentAliases() {
+        let memory = makeMemory(
+            displayName: "Chicken Rice Bowl",
+            normalizedName: "chicken rice bowl",
+            calories: 620,
+            protein: 42,
+            carbs: 58,
+            fat: 16,
+            components: [
+                componentSummary("grilled chicken breast", role: .protein, calories: 240, protein: 38, carbs: 0, fat: 5, observationCount: 3),
+                componentSummary("white rice", role: .carb, calories: 205, protein: 4, carbs: 45, fat: 0, observationCount: 3)
+            ]
+        )
+        let entry = FoodRecommendationTestSupport.entry(
+            name: "Chicken And Rice",
+            loggedAt: Date(timeIntervalSince1970: 1_714_000_000),
+            calories: 625,
+            protein: 43,
+            carbs: 58,
+            fat: 16,
+            components: [
+                component("roasted chicken breast", role: .protein, calories: 240, protein: 39, carbs: 0, fat: 5),
+                component("brown rice", role: .carb, calories: 210, protein: 4, carbs: 45, fat: 1)
+            ]
+        )
+
+        XCTAssertTrue(matcher.matches(entry: entry, memory: memory))
+    }
+
     private func makeMemory(
         displayName: String,
         normalizedName: String,

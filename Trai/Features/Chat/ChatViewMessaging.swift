@@ -180,13 +180,20 @@ extension ChatView {
         currentActivity = launchLabel ?? "Reviewing with Trai..."
 
         let previousMessages = Array(currentSessionMessages.suffix(10))
+        let userMessage = ChatMessage(
+            content: trimmedText,
+            isFromUser: true,
+            sessionId: currentSessionId
+        )
         let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
         let baseContext = buildFitnessContext()
         aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
 
         if isTemporarySession {
+            temporaryMessages.append(userMessage)
             temporaryMessages.append(aiMessage)
         } else {
+            modelContext.insert(userMessage)
             modelContext.insert(aiMessage)
         }
         rebuildSessionMessages(preferLiveQueryData: true)

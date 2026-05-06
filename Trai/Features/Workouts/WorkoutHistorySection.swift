@@ -10,6 +10,29 @@ import SwiftUI
 // MARK: - Workout History Section
 
 struct WorkoutHistorySection: View {
+    private enum PreviewItem: Identifiable {
+        case live(LiveWorkout)
+        case session(WorkoutSession)
+
+        var id: String {
+            switch self {
+            case .live(let workout):
+                return "live-\(workout.id.uuidString)"
+            case .session(let workout):
+                return "session-\(workout.id.uuidString)"
+            }
+        }
+
+        var date: Date {
+            switch self {
+            case .live(let workout):
+                return workout.completedAt ?? workout.startedAt
+            case .session(let workout):
+                return workout.loggedAt
+            }
+        }
+    }
+
     let workoutsByDate: [(date: Date, workouts: [WorkoutSession])]
     let liveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])]
     let activeGoals: [WorkoutGoal]
@@ -20,9 +43,18 @@ struct WorkoutHistorySection: View {
 
     @State private var showAllWorkouts = false
 
-    /// Recent merged dates used for compact rendering.
-    private var previewDates: [Date] {
-        mergedDates(limit: 2)
+    private var previewItems: [PreviewItem] {
+        let liveItems = liveWorkoutsByDate
+            .flatMap(\.workouts)
+            .map(PreviewItem.live)
+        let sessionItems = workoutsByDate
+            .flatMap(\.workouts)
+            .map(PreviewItem.session)
+
+        return (liveItems + sessionItems)
+            .sorted { $0.date > $1.date }
+            .prefix(5)
+            .map { $0 }
     }
 
     /// Total workout count for "See All" button
@@ -32,50 +64,6 @@ struct WorkoutHistorySection: View {
         return sessionCount + liveCount
     }
 
-    private func sessions(for date: Date) -> [WorkoutSession] {
-        workoutsByDate.first { $0.date == date }?.workouts ?? []
-    }
-
-    private func liveWorkouts(for date: Date) -> [LiveWorkout] {
-        liveWorkoutsByDate.first { $0.date == date }?.workouts ?? []
-    }
-
-    private func mergedDates(limit: Int) -> [Date] {
-        guard limit > 0 else { return [] }
-
-        var dates: [Date] = []
-        var workoutIndex = 0
-        var liveIndex = 0
-
-        while dates.count < limit
-                && (workoutIndex < workoutsByDate.count || liveIndex < liveWorkoutsByDate.count) {
-            let nextWorkoutDate = workoutIndex < workoutsByDate.count
-                ? workoutsByDate[workoutIndex].date
-                : .distantPast
-            let nextLiveDate = liveIndex < liveWorkoutsByDate.count
-                ? liveWorkoutsByDate[liveIndex].date
-                : .distantPast
-
-            let candidate: Date
-            if nextWorkoutDate >= nextLiveDate {
-                candidate = nextWorkoutDate
-                workoutIndex += 1
-                if nextLiveDate == candidate {
-                    liveIndex += 1
-                }
-            } else {
-                candidate = nextLiveDate
-                liveIndex += 1
-            }
-
-            if dates.last != candidate {
-                dates.append(candidate)
-            }
-        }
-
-        return dates
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header with See All button
@@ -83,7 +71,7 @@ struct WorkoutHistorySection: View {
                 Label("Recent Workouts", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                     .font(.headline)
                 Spacer()
-                if totalWorkoutCount > 3 {
+                if totalWorkoutCount > 5 {
                     Button {
                         showAllWorkouts = true
                     } label: {
@@ -94,20 +82,23 @@ struct WorkoutHistorySection: View {
                 }
             }
 
-            if previewDates.isEmpty {
+            if previewItems.isEmpty {
                 EmptyWorkoutHistory()
             } else {
-                // Show only most recent 2 dates (compact view)
                 VStack(spacing: 8) {
-                    ForEach(previewDates, id: \.self) { date in
-                        CompactWorkoutDateGroup(
-                            date: date,
-                            sessions: sessions(for: date),
-                            liveWorkouts: liveWorkouts(for: date),
-                            activeGoals: activeGoals,
-                            onSessionTap: onWorkoutTap,
-                            onLiveWorkoutTap: onLiveWorkoutTap
-                        )
+                    ForEach(previewItems) { item in
+                        switch item {
+                        case .live(let workout):
+                            CompactLiveWorkoutRow(
+                                workout: workout,
+                                onTap: { onLiveWorkoutTap(workout) }
+                            )
+                        case .session(let workout):
+                            CompactWorkoutSessionRow(
+                                workout: workout,
+                                onTap: { onWorkoutTap(workout) }
+                            )
+                        }
                     }
                 }
             }
@@ -127,46 +118,10 @@ struct WorkoutHistorySection: View {
     }
 }
 
-// MARK: - Compact Workout Date Group (for preview)
-
-private struct CompactWorkoutDateGroup: View {
-    let date: Date
-    let sessions: [WorkoutSession]
-    let liveWorkouts: [LiveWorkout]
-    let activeGoals: [WorkoutGoal]
-    let onSessionTap: (WorkoutSession) -> Void
-    let onLiveWorkoutTap: (LiveWorkout) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-
-            VStack(spacing: 8) {
-                // Show first 2 workouts from this date
-                ForEach(liveWorkouts.prefix(2)) { workout in
-                    CompactLiveWorkoutRow(
-                        workout: workout,
-                        activeGoals: activeGoals,
-                        onTap: { onLiveWorkoutTap(workout) }
-                    )
-                }
-
-                ForEach(sessions.prefix(max(0, 2 - liveWorkouts.count))) { workout in
-                    CompactWorkoutSessionRow(workout: workout, onTap: { onSessionTap(workout) })
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Compact Live Workout Row
 
 private struct CompactLiveWorkoutRow: View {
     let workout: LiveWorkout
-    let activeGoals: [WorkoutGoal]
     let onTap: () -> Void
 
     private var entryCount: Int { workout.entries?.count ?? 0 }
@@ -176,13 +131,6 @@ private struct CompactLiveWorkoutRow: View {
         workout.entries?.filter { ($0.isCardio || $0.isGeneralActivity) && $0.completedAt != nil }.count ?? 0
     }
     private var durationMinutes: Int { Int(workout.duration / 60) }
-    private var matchedGoalCount: Int { activeGoals.filter { $0.matches(workout: workout) }.count }
-
-    private var focusSummary: String? {
-        let summary = workout.displayFocusSummary.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !summary.isEmpty, summary.caseInsensitiveCompare(workout.name) != .orderedSame else { return nil }
-        return summary
-    }
 
     private var summarySegments: [String] {
         var segments: [String] = []
@@ -226,18 +174,6 @@ private struct CompactLiveWorkoutRow: View {
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
-                    if let focusSummary {
-                        Text(focusSummary)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    WorkoutHistoryInsightBadges(
-                        matchedGoalCount: matchedGoalCount,
-                        hasSignalNote: workout.hasHistorySignalNote
-                    )
-
                     HStack(spacing: 6) {
                         ForEach(Array(summarySegments.enumerated()), id: \.offset) { index, segment in
                             if index > 0 {
@@ -276,7 +212,12 @@ private struct CompactWorkoutSessionRow: View {
         var segments: [String] = []
 
         if workout.isStrengthTraining {
-            segments.append("\(workout.sets)×\(workout.reps)")
+            if workout.sets > 0 {
+                segments.append("\(workout.sets) \(workout.sets == 1 ? "set" : "sets")")
+            }
+            if workout.reps > 0 {
+                segments.append("\(workout.reps) reps")
+            }
         } else {
             segments.append(workout.displayTypeName)
 
@@ -310,11 +251,6 @@ private struct CompactWorkoutSessionRow: View {
                         .font(.subheadline)
                         .lineLimit(1)
                         .foregroundStyle(.primary)
-
-                    WorkoutHistoryInsightBadges(
-                        matchedGoalCount: 0,
-                        hasSignalNote: workout.hasSignalNote
-                    )
 
                     HStack(spacing: 6) {
                         ForEach(Array(detailSegments.enumerated()), id: \.offset) { index, segment in
