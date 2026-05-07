@@ -6,6 +6,10 @@
     <array>
         <string>Nadav.Trai.reminder-refresh</string>
     </array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Trai uses the microphone to turn spoken notes into chat text.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Trai uses speech recognition to transcribe your voice into chat messages.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
