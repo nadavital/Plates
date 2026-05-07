@@ -229,13 +229,10 @@ struct TraiApp: App {
                 deferredHealthKitSyncTask?.cancel()
                 reminderScheduleRefreshTask?.cancel()
                 NotificationCenter.default.post(name: .liveWorkoutForceFlush, object: nil)
-                // Update widget data when app goes to background
+                // Keep background transition work minimal. Food-memory resolution is
+                // non-critical and already runs on launch/foreground maintenance.
                 Task { @MainActor in
                     guard !hasActiveLiveWorkoutInProgress() else { return }
-                    _ = try? FoodMemoryService().resolvePendingEntries(
-                        limit: 12,
-                        modelContext: modelContainer.mainContext
-                    )
                     WidgetDataProvider.shared.scheduleRefresh(
                         modelContainer: modelContainer,
                         delay: .zero

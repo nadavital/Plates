@@ -87,11 +87,13 @@ extension ChatView {
 
         // Sync to Apple Health if enabled
         if profile?.syncFoodToHealthKit == true {
+            let healthKitCalories = meal.calories
+            let healthKitMealName = meal.name
             Task {
                 do {
                     guard let healthKitService else { return }
-                    try await healthKitService.saveDietaryEnergyAuthorized(Double(meal.calories), date: logDate)
-                    print("HealthKit: Saved \(meal.calories) calories for \(meal.name)")
+                    try await healthKitService.saveDietaryEnergyAuthorized(Double(healthKitCalories), date: logDate)
+                    print("HealthKit: Saved \(healthKitCalories) calories for \(healthKitMealName)")
                 } catch {
                     print("HealthKit: Failed to save dietary energy - \(error.localizedDescription)")
                 }
@@ -101,9 +103,7 @@ extension ChatView {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.markMealLogged(mealId: meal.id, entryId: entry.id)
         }
-        try? modelContext.save()
-        WidgetDataProvider.shared.scheduleRefresh()
-        BehaviorTracker(modelContext: modelContext).recordDeferred(
+        BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.logFood,
             domain: .nutrition,
             surface: .chat,
@@ -113,8 +113,10 @@ extension ChatView {
                 "source": "chat_suggestion",
                 "name": meal.name
             ],
-            delay: .milliseconds(900)
+            saveImmediately: false
         )
+        try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
         rebuildSessionMessages(preferLiveQueryData: true)
 
         HapticManager.success()
