@@ -134,6 +134,7 @@ extension ChatView {
         guard hasText || hasImage else { return }
 
         updateLastActivity()
+        retirePendingPlanSuggestionsInCurrentSession()
 
         let previousMessages = Array(currentSessionMessages.suffix(10))
         let imageData = selectedImage?.jpegData(compressionQuality: 0.8)
@@ -172,28 +173,29 @@ extension ChatView {
         }
     }
 
-    func sendAppInitiatedPrompt(_ text: String, launchLabel: String? = nil) {
+    func sendAppInitiatedPrompt(
+        _ text: String,
+        launchLabel: String? = nil,
+        markNutritionPlanReviewedIfNoUpdate: Bool = false
+    ) {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
         updateLastActivity()
+        retirePendingPlanSuggestionsInCurrentSession()
         currentActivity = launchLabel ?? "Reviewing with Trai..."
 
         let previousMessages = Array(currentSessionMessages.suffix(10))
-        let userMessage = ChatMessage(
-            content: trimmedText,
-            isFromUser: true,
-            sessionId: currentSessionId
-        )
         let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
         let baseContext = buildFitnessContext()
         aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
+        if markNutritionPlanReviewedIfNoUpdate {
+            nutritionPlanReviewMessageIds.insert(aiMessage.id)
+        }
 
         if isTemporarySession {
-            temporaryMessages.append(userMessage)
             temporaryMessages.append(aiMessage)
         } else {
-            modelContext.insert(userMessage)
             modelContext.insert(aiMessage)
         }
         rebuildSessionMessages(preferLiveQueryData: true)
@@ -295,6 +297,7 @@ extension ChatView {
                 aiMessage.content = ""
                 aiMessage.errorMessage = error.aiUserFacingMessage ?? error.localizedDescription
             }
+            nutritionPlanReviewMessageIds.remove(aiMessage.id)
         }
 
         isLoading = false
@@ -326,6 +329,7 @@ extension ChatView {
             }
             HapticManager.lightTap()
         }
+        completeNutritionPlanReviewIfNeeded(for: aiMessage, proposedPlanUpdate: result.planUpdate != nil)
 
         if let editData = result.suggestedFoodEdit {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {

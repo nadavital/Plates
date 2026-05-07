@@ -102,6 +102,7 @@ struct ChatView: View {
     @State var planAssessmentService = PlanAssessmentService()
     @State var pendingPlanRecommendation: PlanRecommendation?
     @State var planRecommendationMessage: String?
+    @State var nutritionPlanReviewMessageIds: Set<UUID> = []
 
     // Reminder editing
     @State var pendingReminderEdit: SuggestedReminder?

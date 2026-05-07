@@ -145,6 +145,22 @@ extension ChatView {
 // MARK: - Plan Suggestion Actions
 
 extension ChatView {
+    @discardableResult
+    func retirePendingPlanSuggestionsInCurrentSession() -> Bool {
+        var retiredAnySuggestion = false
+
+        for message in currentSessionMessages where message.hasPendingPlanSuggestion {
+            message.suggestedPlanDismissed = true
+            retiredAnySuggestion = true
+        }
+
+        guard retiredAnySuggestion else { return false }
+
+        try? modelContext.save()
+        rebuildSessionMessages(preferLiveQueryData: true)
+        return true
+    }
+
     func acceptPlanSuggestion(_ plan: PlanUpdateSuggestionEntry, for message: ChatMessage) {
         guard let profile else { return }
 
@@ -824,7 +840,33 @@ extension ChatView {
         }
 
         // This was launched from an app CTA, not typed into chat.
-        sendAppInitiatedPrompt(prompt, launchLabel: "Reviewing your plan...")
+        sendAppInitiatedPrompt(
+            prompt,
+            launchLabel: "Reviewing your plan...",
+            markNutritionPlanReviewedIfNoUpdate: true
+        )
+    }
+
+    /// Mark an app-initiated nutrition review complete when Trai reviewed it without proposing changes.
+    func completeNutritionPlanReviewIfNeeded(for message: ChatMessage, proposedPlanUpdate: Bool) {
+        guard nutritionPlanReviewMessageIds.remove(message.id) != nil else { return }
+        guard !proposedPlanUpdate, let profile else { return }
+
+        let currentWeight = weightEntries.first?.weightKg
+        planAssessmentService.markPlanReviewed(profile: profile, currentWeightKg: currentWeight)
+
+        BehaviorTracker(modelContext: modelContext).record(
+            actionKey: BehaviorActionKey.reviewNutritionPlan,
+            domain: .planning,
+            surface: .chat,
+            outcome: .completed,
+            relatedEntityId: message.id,
+            metadata: [
+                "result": "reviewed_no_update"
+            ],
+            saveImmediately: false
+        )
+        try? modelContext.save()
     }
 
     /// Handle when user taps "Later" or dismiss on recommendation card
@@ -849,12 +891,17 @@ extension ChatView {
         let trimmedPrompt = pendingChatPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedPrompt.isEmpty {
             let trimmedLaunchLabel = pendingChatLaunchLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            let shouldMarkNutritionReview = isNutritionPlanReviewPrompt(
+                prompt: trimmedPrompt,
+                launchLabel: trimmedLaunchLabel
+            )
             pendingChatPrompt = ""
             pendingChatLaunchLabel = ""
             startNewSession(silent: true)
             sendAppInitiatedPrompt(
                 trimmedPrompt,
-                launchLabel: trimmedLaunchLabel.isEmpty ? "Reviewing with Trai..." : trimmedLaunchLabel
+                launchLabel: trimmedLaunchLabel.isEmpty ? "Reviewing with Trai..." : trimmedLaunchLabel,
+                markNutritionPlanReviewedIfNoUpdate: shouldMarkNutritionReview
             )
             return
         }
@@ -864,7 +911,8 @@ extension ChatView {
             startNewSession(silent: true)
             sendAppInitiatedPrompt(
                 "Can you review my nutrition plan and check if any updates are needed based on my progress?",
-                launchLabel: "Reviewing your nutrition plan..."
+                launchLabel: "Reviewing your nutrition plan...",
+                markNutritionPlanReviewedIfNoUpdate: true
             )
             return
         }
@@ -876,6 +924,13 @@ extension ChatView {
             "Can you review my workout split and suggest any updates based on my recovery and recent workouts?",
             launchLabel: "Reviewing your workout plan..."
         )
+    }
+
+    private func isNutritionPlanReviewPrompt(prompt: String, launchLabel: String) -> Bool {
+        let text = "\(prompt) \(launchLabel)".lowercased()
+        return text.contains("nutrition plan")
+            || text.contains("calories")
+            || text.contains("macros")
     }
 
 }
