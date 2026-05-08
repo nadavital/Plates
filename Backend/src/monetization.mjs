@@ -465,9 +465,9 @@ export function createMonetizationHelpers({
     };
   }
 
-  async function buildGlobalUsageAnalytics(days = 30) {
-    const windowDays = normalizeAnalyticsWindowDays(days);
-    const trailingWindowStart = buildTrailingWindowStart(windowDays);
+  async function buildGlobalUsageAnalytics(options = 30) {
+    const analyticsOptions = normalizeGlobalUsageOptions(options);
+    const { windowDays, windowStart, windowEnd, topUserLimit, includeIdentity } = analyticsOptions;
 
     const usageTotals = await db.prepare(`
       SELECT
@@ -475,55 +475,44 @@ export function createMonetizationHelpers({
         COALESCE(SUM(unit_cost), 0) AS units_used,
         COUNT(DISTINCT user_id) AS active_user_count
       FROM usage_ledger
-      WHERE created_at >= ?
-    `).get(trailingWindowStart);
+      WHERE created_at >= ? AND created_at < ?
+    `).get(windowStart, windowEnd);
 
     const outcomeRows = await db.prepare(`
       SELECT outcome, COUNT(*) AS count
       FROM ai_requests
-      WHERE created_at >= ?
+      WHERE created_at >= ? AND created_at < ?
       GROUP BY outcome
-    `).all(trailingWindowStart);
+    `).all(windowStart, windowEnd);
 
     const featureRows = await db.prepare(`
       SELECT feature, COUNT(*) AS request_count, COALESCE(SUM(unit_cost), 0) AS units_used
       FROM usage_ledger
-      WHERE created_at >= ?
+      WHERE created_at >= ? AND created_at < ?
       GROUP BY feature
       ORDER BY units_used DESC, request_count DESC
-    `).all(trailingWindowStart);
+    `).all(windowStart, windowEnd);
 
-    const planRows = await db.prepare(`
-      SELECT
-        COALESCE(subscriptions.plan, 'free') AS plan,
-        COUNT(*) AS request_count,
-        COALESCE(SUM(usage_ledger.unit_cost), 0) AS units_used,
-        COUNT(DISTINCT usage_ledger.user_id) AS active_user_count
-      FROM usage_ledger
-      LEFT JOIN subscriptions ON subscriptions.user_id = usage_ledger.user_id
-      WHERE usage_ledger.created_at >= ?
-      GROUP BY COALESCE(subscriptions.plan, 'free')
-      ORDER BY units_used DESC, request_count DESC
-    `).all(trailingWindowStart);
-
-    const topUserRows = await db.prepare(`
+    const userRows = await db.prepare(`
       SELECT
         usage_ledger.user_id,
         COALESCE(subscriptions.plan, 'free') AS plan,
+        COALESCE(subscriptions.source, 'system') AS subscription_source,
         COALESCE(subscriptions.status, 'unknown') AS subscription_status,
         COUNT(*) AS request_count,
         COALESCE(SUM(usage_ledger.unit_cost), 0) AS units_used,
         MAX(usage_ledger.created_at) AS last_used_at
       FROM usage_ledger
       LEFT JOIN subscriptions ON subscriptions.user_id = usage_ledger.user_id
-      WHERE usage_ledger.created_at >= ?
+      WHERE usage_ledger.created_at >= ? AND usage_ledger.created_at < ?
       GROUP BY
         usage_ledger.user_id,
         COALESCE(subscriptions.plan, 'free'),
+        COALESCE(subscriptions.source, 'system'),
         COALESCE(subscriptions.status, 'unknown')
       ORDER BY units_used DESC, request_count DESC, last_used_at DESC
-      LIMIT 25
-    `).all(trailingWindowStart);
+      LIMIT 5000
+    `).all(windowStart, windowEnd);
 
     const trailingAIRequests = await db.prepare(`
       SELECT
@@ -542,16 +531,25 @@ export function createMonetizationHelpers({
         cached_input_tokens,
         reasoning_tokens
       FROM ai_requests
-      WHERE created_at >= ?
+      WHERE created_at >= ? AND created_at < ?
       ORDER BY created_at DESC
-    `).all(trailingWindowStart);
+    `).all(windowStart, windowEnd);
 
     const telemetry = summarizeTelemetryAnalytics(trailingAIRequests);
     const activeUserCount = usageTotals?.active_user_count ?? 0;
+    const enrichedUserRows = await enrichUsageUserRows(userRows, {
+      now: windowEnd,
+      includeIdentity
+    });
+    const topUserRows = enrichedUserRows.slice(0, topUserLimit);
+    const effectivePlanRows = summarizeUsersByEffectivePlan(enrichedUserRows);
 
     return {
       windowDays,
-      windowStart: trailingWindowStart,
+      windowStart,
+      windowEnd,
+      isAllTime: analyticsOptions.isAllTime,
+      topUserLimit,
       activeUserCount,
       requestCount: usageTotals?.request_count ?? 0,
       unitsUsed: usageTotals?.units_used ?? 0,
@@ -566,18 +564,20 @@ export function createMonetizationHelpers({
         ? roundCurrency((usageTotals?.units_used ?? 0) * UNIT_ECONOMICS.estimatedUSDPerUnit / activeUserCount)
         : null,
       outcomes: Object.fromEntries(outcomeRows.map((row) => [row.outcome, row.count])),
-      byPlan: planRows.map((row) => ({
+      byPlan: effectivePlanRows.map((row) => ({
         plan: row.plan,
-        activeUserCount: row.active_user_count,
-        requestCount: row.request_count,
-        unitsUsed: row.units_used,
-        averageRequestsPerActiveUser: row.active_user_count > 0
-          ? roundSmallAmount(row.request_count / row.active_user_count)
+        status: row.status,
+        source: row.source,
+        activeUserCount: row.activeUserCount,
+        requestCount: row.requestCount,
+        unitsUsed: row.unitsUsed,
+        averageRequestsPerActiveUser: row.activeUserCount > 0
+          ? roundSmallAmount(row.requestCount / row.activeUserCount)
           : null,
-        averageUnitsPerActiveUser: row.active_user_count > 0
-          ? roundSmallAmount(row.units_used / row.active_user_count)
+        averageUnitsPerActiveUser: row.activeUserCount > 0
+          ? roundSmallAmount(row.unitsUsed / row.activeUserCount)
           : null,
-        estimatedAICostUSD: estimateUSDCostForUnits(row.units_used)
+        estimatedAICostUSD: estimateUSDCostForUnits(row.unitsUsed)
       })),
       topFeatures: featureRows.map((row) => ({
         feature: row.feature,
@@ -589,6 +589,12 @@ export function createMonetizationHelpers({
         userID: row.user_id,
         plan: row.plan,
         subscriptionStatus: row.subscription_status,
+        subscriptionSource: row.subscription_source,
+        rawPlan: row.raw_plan,
+        rawSubscriptionStatus: row.raw_subscription_status,
+        rawSubscriptionSource: row.raw_subscription_source,
+        email: row.email,
+        displayName: row.display_name,
         requestCount: row.request_count,
         unitsUsed: row.units_used,
         estimatedAICostUSD: estimateUSDCostForUnits(row.units_used),
@@ -601,6 +607,93 @@ export function createMonetizationHelpers({
           : null
       }
     };
+  }
+
+  async function enrichUsageUserRows(rows, { now, includeIdentity = false }) {
+    const enrichedRows = [];
+
+    for (const row of rows) {
+      const subscription = await subscriptionForUser(row.user_id);
+      const subscriptionOverride = await getActiveSubscriptionOverride(row.user_id, now);
+      const baseSubscription = subscription ?? fallbackSubscriptionForAnalytics(row.user_id);
+      const effectiveSubscription = resolveEffectiveSubscription(baseSubscription, subscriptionOverride);
+      const identity = includeIdentity ? await firstIdentityForUser(row.user_id) : null;
+
+      enrichedRows.push({
+        ...row,
+        raw_plan: row.plan,
+        raw_subscription_status: row.subscription_status,
+        raw_subscription_source: row.subscription_source ?? baseSubscription.source ?? 'system',
+        plan: effectiveSubscription?.plan ?? row.plan ?? 'free',
+        subscription_status: effectiveSubscription?.status ?? row.subscription_status ?? 'unknown',
+        subscription_source: effectiveSubscription?.source ?? row.subscription_source ?? 'system',
+        email: identity?.email ?? undefined,
+        display_name: identity?.display_name ?? undefined
+      });
+    }
+
+    return enrichedRows;
+  }
+
+  async function subscriptionForUser(userID) {
+    return await db.prepare(`
+      SELECT *
+      FROM subscriptions
+      WHERE user_id = ?
+    `).get(userID);
+  }
+
+  function fallbackSubscriptionForAnalytics(userID) {
+    return {
+      user_id: userID,
+      plan: 'free',
+      status: 'unknown',
+      source: 'system',
+      source_transaction_id: null,
+      renews_at: null,
+      expires_at: null
+    };
+  }
+
+  async function firstIdentityForUser(userID) {
+    return await db.prepare(`
+      SELECT email, display_name
+      FROM auth_identities
+      WHERE user_id = ?
+      ORDER BY created_at ASC
+      LIMIT 1
+    `).get(userID);
+  }
+
+  function summarizeUsersByEffectivePlan(rows) {
+    const buckets = new Map();
+
+    for (const row of rows) {
+      const plan = row.plan ?? 'free';
+      const status = row.subscription_status ?? 'unknown';
+      const source = row.subscription_source ?? 'system';
+      const key = JSON.stringify([plan, status, source]);
+      const existing = buckets.get(key) ?? {
+        plan,
+        status,
+        source,
+        activeUserCount: 0,
+        requestCount: 0,
+        unitsUsed: 0
+      };
+
+      existing.activeUserCount += 1;
+      existing.requestCount += row.request_count ?? 0;
+      existing.unitsUsed += row.units_used ?? 0;
+      buckets.set(key, existing);
+    }
+
+    return Array.from(buckets.values())
+      .sort((left, right) =>
+        (right.unitsUsed - left.unitsUsed)
+        || (right.requestCount - left.requestCount)
+        || left.plan.localeCompare(right.plan)
+      );
   }
 
   function summarizeTelemetryAnalytics(aiRequests) {
@@ -887,12 +980,59 @@ export function createMonetizationHelpers({
     return new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
   }
 
+  function normalizeGlobalUsageOptions(options) {
+    const rawOptions = typeof options === 'object' && options !== null
+      ? options
+      : { days: options };
+    const now = new Date();
+    const requestedEnd = parseAnalyticsDate(rawOptions.end);
+    const windowEnd = (requestedEnd ?? now).toISOString();
+    const isAllTime = rawOptions.period === 'all' || rawOptions.allTime === true;
+    const requestedStart = parseAnalyticsDate(rawOptions.start);
+    const windowDays = isAllTime
+      ? null
+      : normalizeAnalyticsWindowDays(rawOptions.days);
+    const windowStart = (
+      requestedStart
+      ?? (isAllTime
+        ? new Date(0)
+        : new Date(Date.parse(windowEnd) - (windowDays * 24 * 60 * 60 * 1000)))
+    ).toISOString();
+    const topUserLimit = normalizeTopUserLimit(rawOptions.topUserLimit);
+
+    return {
+      windowDays,
+      windowStart,
+      windowEnd,
+      isAllTime,
+      topUserLimit,
+      includeIdentity: rawOptions.includeIdentity === true
+    };
+  }
+
+  function parseAnalyticsDate(value) {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.valueOf()) ? null : parsed;
+  }
+
   function normalizeAnalyticsWindowDays(days) {
     if (!Number.isFinite(days)) {
       return 30;
     }
 
     return Math.min(Math.max(Math.round(days), 1), 90);
+  }
+
+  function normalizeTopUserLimit(limit) {
+    if (!Number.isFinite(limit)) {
+      return 25;
+    }
+
+    return Math.min(Math.max(Math.round(limit), 1), 100);
   }
 
   function normalizeAdminReason(reason) {

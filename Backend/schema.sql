@@ -125,6 +125,24 @@ CREATE TABLE IF NOT EXISTS subscription_overrides (
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS pending_subscription_grants (
+  id TEXT PRIMARY KEY,
+  normalized_email TEXT NOT NULL UNIQUE,
+  plan TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source TEXT NOT NULL,
+  renews_at TEXT,
+  expires_at TEXT,
+  reason TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  applied_user_id TEXT,
+  applied_at TEXT,
+  revoked_at TEXT,
+  FOREIGN KEY(applied_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS storekit_transactions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

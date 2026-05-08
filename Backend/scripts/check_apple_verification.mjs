@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { X509Certificate } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -355,6 +356,46 @@ try {
   assert.equal(overriddenBillingStatusPayload.entitlementSnapshot?.status, 'active');
   assert.equal(overriddenBillingStatusPayload.entitlementSnapshot?.sourceDescription, 'adminGrant');
 
+  seedAnalyticsUsage(databasePath, successPayload.session.userID);
+
+  const usageSummaryResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/usage-summary?days=7&limit=5&includeIdentity=true`, {
+    headers: {
+      Authorization: `Bearer ${adminToken}`
+    }
+  });
+  assert.equal(usageSummaryResponse.status, 200, 'expected admin usage summary to succeed');
+  const usageSummaryPayload = await usageSummaryResponse.json();
+  assert.equal(usageSummaryPayload.usageAnalytics?.topUserLimit, 5);
+  assert.equal(usageSummaryPayload.usageAnalytics?.activeUserCount, 1);
+  assert.equal(usageSummaryPayload.usageAnalytics?.unitsUsed, 9);
+  assert.equal(usageSummaryPayload.usageAnalytics?.averageUnitsPerActiveUser, 9);
+  assert.equal(usageSummaryPayload.usageAnalytics?.topUsers?.[0]?.userID, successPayload.session.userID);
+  assert.equal(usageSummaryPayload.usageAnalytics?.topUsers?.[0]?.plan, 'pro');
+  assert.equal(usageSummaryPayload.usageAnalytics?.topUsers?.[0]?.subscriptionSource, 'adminGrant');
+  assert.equal(usageSummaryPayload.usageAnalytics?.topUsers?.[0]?.email, sharedBody.email);
+  assert.equal(usageSummaryPayload.usageAnalytics?.byPlan?.[0]?.plan, 'pro');
+  assert.equal(usageSummaryPayload.usageAnalytics?.byPlan?.[0]?.source, 'adminGrant');
+  assert.equal(usageSummaryPayload.usageAnalytics?.telemetry?.telemetryCoverageRatio, 1);
+
+  const rangedUsageSummaryResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/usage-summary?start=2000-01-01T00%3A00%3A00.000Z&end=2000-01-02T00%3A00%3A00.000Z`, {
+    headers: {
+      Authorization: `Bearer ${adminToken}`
+    }
+  });
+  assert.equal(rangedUsageSummaryResponse.status, 200, 'expected ranged admin usage summary to succeed');
+  const rangedUsageSummaryPayload = await rangedUsageSummaryResponse.json();
+  assert.equal(rangedUsageSummaryPayload.usageAnalytics?.activeUserCount, 0);
+
+  const allTimeUsageSummaryResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/usage-summary?period=all&limit=1`, {
+    headers: {
+      Authorization: `Bearer ${adminToken}`
+    }
+  });
+  assert.equal(allTimeUsageSummaryResponse.status, 200, 'expected all-time admin usage summary to succeed');
+  const allTimeUsageSummaryPayload = await allTimeUsageSummaryResponse.json();
+  assert.equal(allTimeUsageSummaryPayload.usageAnalytics?.isAllTime, true);
+  assert.equal(allTimeUsageSummaryPayload.usageAnalytics?.topUserLimit, 1);
+
   const creditResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/quota-adjustment`, {
     method: 'POST',
     headers: {
@@ -431,6 +472,54 @@ try {
   assert.equal(clearOverridePayload.subscription?.status, 'refunded');
   assert.equal(clearOverridePayload.subscriptionOverride, null);
 
+  const pendingGrantEmail = 'future-pro@example.com';
+  const pendingGrantResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/pending-subscription-grant`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`
+    },
+    body: JSON.stringify({
+      email: pendingGrantEmail,
+      reason: 'Future tester pro grant'
+    })
+  });
+  assert.equal(pendingGrantResponse.status, 200, 'expected pending subscription grant to succeed');
+  const pendingGrantPayload = await pendingGrantResponse.json();
+  assert.equal(pendingGrantPayload.pending, true);
+  assert.equal(pendingGrantPayload.grant?.normalized_email, pendingGrantEmail);
+
+  const futureUserToken = signIdentityToken({
+    iss: 'https://appleid.apple.com',
+    aud: 'Nadav.Trai',
+    sub: 'apple-user-future-pro',
+    email: pendingGrantEmail,
+    nonce: sha256Hex(rawNonce),
+    exp: Math.floor(Date.now() / 1000) + 300,
+    iat: Math.floor(Date.now() / 1000) - 10
+  });
+  const futureUserResponse = await postJSON('/v1/auth/apple/exchange', {
+    ...sharedBody,
+    appleUserID: 'apple-user-future-pro',
+    email: pendingGrantEmail,
+    displayName: 'Future Pro',
+    identityToken: futureUserToken,
+    rawNonce
+  });
+  assert.equal(futureUserResponse.status, 200, 'expected future granted user sign-in to succeed');
+  const futureUserPayload = await futureUserResponse.json();
+  assert.equal(futureUserPayload.billing?.entitlementSnapshot?.plan, 'pro');
+  assert.equal(futureUserPayload.billing?.entitlementSnapshot?.sourceDescription, 'adminGrant');
+
+  const appliedGrantInspectResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/user-inspect?email=${encodeURIComponent(pendingGrantEmail)}`, {
+    headers: {
+      Authorization: `Bearer ${adminToken}`
+    }
+  });
+  assert.equal(appliedGrantInspectResponse.status, 200, 'expected applied grant user inspection to succeed');
+  const appliedGrantInspectPayload = await appliedGrantInspectResponse.json();
+  assert.equal(appliedGrantInspectPayload.effectiveSubscription?.plan, 'pro');
+
   const badNonceResponse = await postJSON('/v1/auth/apple/exchange', {
     ...sharedBody,
     identityToken: goodToken,
@@ -490,6 +579,52 @@ async function postJSON(pathname, body) {
     },
     body: JSON.stringify(body)
   });
+}
+
+function seedAnalyticsUsage(databasePath, userID) {
+  const db = new DatabaseSync(databasePath);
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT INTO usage_ledger (id, user_id, feature, unit_cost, request_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run('ulg_analytics_1', userID, 'agentCoachChat', 3, 'req_analytics_1', now);
+    db.prepare(`
+      INSERT INTO usage_ledger (id, user_id, feature, unit_cost, request_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run('ulg_analytics_2', userID, 'foodPhotoAnalysis', 6, 'req_analytics_2', now);
+    db.prepare(`
+      INSERT INTO ai_requests (
+        id, user_id, feature, provider, model, action, outcome, latency_ms,
+        input_tokens, output_tokens, total_tokens, cached_input_tokens, reasoning_tokens,
+        provider_cost_estimate, provider_usage_json, request_format, retry_count, retry_reason, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'air_analytics_1',
+      userID,
+      'agentCoachChat',
+      'openai',
+      'gpt-5.4-mini',
+      'test',
+      'success',
+      120,
+      1000,
+      200,
+      1200,
+      100,
+      20,
+      0.001,
+      null,
+      'trai_v1',
+      0,
+      null,
+      now
+    );
+  } finally {
+    db.close();
+  }
 }
 
 function sha256Hex(value) {

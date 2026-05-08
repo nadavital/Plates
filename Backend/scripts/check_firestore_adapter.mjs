@@ -98,6 +98,71 @@ await db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?)
 `).run('ulg_1', 'usr_1', 'coachChat', 3, 'req_1', '2026-05-02T00:00:00.000Z');
 
+const topUsers = await db.prepare(`
+  SELECT
+    usage_ledger.user_id,
+    COALESCE(subscriptions.plan, 'free') AS plan,
+    COALESCE(subscriptions.source, 'system') AS subscription_source,
+    COALESCE(subscriptions.status, 'unknown') AS subscription_status,
+    COUNT(*) AS request_count,
+    COALESCE(SUM(usage_ledger.unit_cost), 0) AS units_used,
+    MAX(usage_ledger.created_at) AS last_used_at
+  FROM usage_ledger
+  LEFT JOIN subscriptions ON subscriptions.user_id = usage_ledger.user_id
+  WHERE usage_ledger.created_at >= ? AND usage_ledger.created_at < ?
+  GROUP BY
+    usage_ledger.user_id,
+    COALESCE(subscriptions.plan, 'free'),
+    COALESCE(subscriptions.source, 'system'),
+    COALESCE(subscriptions.status, 'unknown')
+  ORDER BY units_used DESC, request_count DESC, last_used_at DESC
+  LIMIT 5000
+`).all('2026-05-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z');
+assert.deepEqual(topUsers, [{
+  user_id: 'usr_1',
+  plan: 'pro',
+  subscription_source: 'appStore',
+  subscription_status: 'active',
+  request_count: 1,
+  units_used: 3,
+  last_used_at: '2026-05-02T00:00:00.000Z'
+}]);
+
+await db.prepare(`
+  INSERT INTO pending_subscription_grants (
+    id, normalized_email, plan, status, source, renews_at, expires_at, reason,
+    created_by, created_at, updated_at, applied_user_id, applied_at, revoked_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run('psg_1', 'future@example.com', 'pro', 'active', 'adminGrant', null, null, 'test grant', 'test', '2026-05-02T00:00:00.000Z', '2026-05-02T00:00:00.000Z', null, null, null);
+
+let pendingGrant = await db.prepare(`
+  SELECT *
+  FROM pending_subscription_grants
+  WHERE normalized_email = ?
+    AND revoked_at IS NULL
+    AND applied_at IS NULL
+  ORDER BY updated_at DESC
+  LIMIT 1
+`).get('future@example.com');
+assert.equal(pendingGrant.plan, 'pro');
+
+await db.prepare(`
+  UPDATE pending_subscription_grants
+  SET applied_user_id = ?, applied_at = ?, updated_at = ?
+  WHERE id = ?
+`).run('usr_1', '2026-05-03T00:00:00.000Z', '2026-05-03T00:00:00.000Z', 'psg_1');
+
+pendingGrant = await db.prepare(`
+  SELECT *
+  FROM pending_subscription_grants
+  WHERE normalized_email = ?
+    AND revoked_at IS NULL
+    AND applied_at IS NULL
+  ORDER BY updated_at DESC
+  LIMIT 1
+`).get('future@example.com');
+assert.equal(pendingGrant, undefined);
+
 await db.prepare(`
   SELECT feature, COUNT(*) AS count
   FROM usage_ledger

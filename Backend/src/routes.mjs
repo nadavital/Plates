@@ -29,6 +29,8 @@ export function createRouteHandlers({
   requireAdmin,
   resolveAdminLookup,
   resolveAdminUserID,
+  normalizeGrantEmail,
+  applyPendingSubscriptionGrantForEmail,
   ensureQuotaPeriod,
   getActiveSubscriptionOverride,
   getEffectiveSubscription,
@@ -139,6 +141,10 @@ export function createRouteHandlers({
 
     if (req.method === 'POST' && url.pathname === '/v1/admin/subscription-override') {
       return handleAdminSubscriptionOverride(req, res);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/admin/pending-subscription-grant') {
+      return handleAdminPendingSubscriptionGrant(req, res);
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/admin/quota-adjustment') {
@@ -395,8 +401,36 @@ export function createRouteHandlers({
   async function handleAdminUsageSummary(req, res, url) {
     requireAdmin(req);
 
-    const requestedDays = Number.parseInt(url.searchParams.get('days') ?? '30', 10);
-    sendJson(res, 200, await buildAdminUsageSummary(requestedDays));
+    sendJson(res, 200, await buildAdminUsageSummary({
+      days: parseOptionalInteger(url.searchParams.get('days')),
+      start: url.searchParams.get('start'),
+      end: url.searchParams.get('end'),
+      period: url.searchParams.get('period'),
+      topUserLimit: parseOptionalInteger(
+        url.searchParams.get('limit') ?? url.searchParams.get('topUserLimit')
+      ),
+      includeIdentity: parseBooleanQueryValue(
+        url.searchParams.get('includeIdentity') ?? url.searchParams.get('includeIdentities')
+      )
+    }));
+  }
+
+  function parseOptionalInteger(value) {
+    if (value == null || String(value).trim().length === 0) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function parseBooleanQueryValue(value) {
+    if (typeof value !== 'string') {
+      return false;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
   }
 
   async function handleAdminReconcileSubscription(req, res) {
@@ -531,6 +565,134 @@ export function createRouteHandlers({
       WHERE user_id = ?
         AND revoked_at IS NULL
     `).run(now, now, userID);
+  }
+
+  async function handleAdminPendingSubscriptionGrant(req, res) {
+    requireAdmin(req);
+    const body = await readJson(req);
+    const normalizedEmail = normalizeGrantEmail(body.email);
+
+    if (!normalizedEmail) {
+      throw new HttpError(400, {
+        error: 'invalid_email',
+        message: 'email is required.'
+      });
+    }
+
+    const plan = String(body.plan ?? 'pro').trim();
+    const allowedPlans = new Set(['free', 'pro', 'developer']);
+    if (!allowedPlans.has(plan)) {
+      throw new HttpError(400, {
+        error: 'invalid_plan',
+        message: 'plan must be one of: free, pro, developer.'
+      });
+    }
+
+    const status = String(body.status ?? 'active').trim();
+    const allowedStatuses = new Set(['active', 'trial', 'gracePeriod', 'billingRetry', 'expired', 'refunded', 'revoked']);
+    if (!allowedStatuses.has(status)) {
+      throw new HttpError(400, {
+        error: 'invalid_status',
+        message: 'status is not recognized.'
+      });
+    }
+
+    const source = normalizeAdminSubscriptionSource(body.source, plan);
+    if (!allowedAdminSubscriptionSources.has(source)) {
+      throw new HttpError(400, {
+        error: 'invalid_source',
+        message: 'source must be one of: system, adminGrant, promo, developer.'
+      });
+    }
+
+    const now = isoNow();
+    const reason = normalizeAdminReason(body.reason) ?? 'pending email subscription grant';
+    const existingGrant = await db.prepare(`
+      SELECT *
+      FROM pending_subscription_grants
+      WHERE normalized_email = ?
+      LIMIT 1
+    `).get(normalizedEmail);
+
+    if (existingGrant) {
+      await db.prepare(`
+        UPDATE pending_subscription_grants
+        SET plan = ?, status = ?, source = ?, renews_at = ?, expires_at = ?,
+          reason = ?, created_by = ?, updated_at = ?, applied_user_id = NULL,
+          applied_at = NULL, revoked_at = NULL
+        WHERE id = ?
+      `).run(
+        plan,
+        status,
+        source,
+        body.renewsAt ?? null,
+        body.expiresAt ?? null,
+        reason,
+        body.createdBy ?? 'admin',
+        now,
+        existingGrant.id
+      );
+    } else {
+      await db.prepare(`
+        INSERT INTO pending_subscription_grants (
+          id, normalized_email, plan, status, source, renews_at, expires_at, reason,
+          created_by, created_at, updated_at, applied_user_id, applied_at, revoked_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        createPendingGrantID(),
+        normalizedEmail,
+        plan,
+        status,
+        source,
+        body.renewsAt ?? null,
+        body.expiresAt ?? null,
+        reason,
+        body.createdBy ?? 'admin',
+        now,
+        now,
+        null,
+        null,
+        null
+      );
+    }
+
+    const existingIdentity = await db.prepare(`
+      SELECT user_id
+      FROM auth_identities
+      WHERE provider = ? AND LOWER(email) = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get('apple', normalizedEmail);
+    const userID = existingIdentity?.user_id ?? null;
+
+    let appliedUser = null;
+    if (userID) {
+      await applyPendingSubscriptionGrantForEmail(userID, normalizedEmail, now);
+      const subscription = await getEffectiveSubscription(userID, now);
+      const quotaPeriod = await ensureQuotaPeriod(userID, subscription.plan, now);
+      appliedUser = {
+        userID,
+        subscription,
+        quotaSnapshot: await buildQuotaSnapshot(quotaPeriod)
+      };
+    }
+
+    const grant = await db.prepare(`
+      SELECT *
+      FROM pending_subscription_grants
+      WHERE normalized_email = ?
+      LIMIT 1
+    `).get(normalizedEmail);
+
+    sendJson(res, 200, {
+      grant,
+      appliedUser,
+      pending: !appliedUser
+    });
+  }
+
+  function createPendingGrantID() {
+    return `psg_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
   }
 
   function normalizeAdminSubscriptionSource(value, plan) {

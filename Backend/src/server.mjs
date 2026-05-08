@@ -144,10 +144,10 @@ async function buildAdminUserInspection(userID) {
   };
 }
 
-async function buildAdminUsageSummary(days = 30) {
+async function buildAdminUsageSummary(options = 30) {
   return {
     generatedAt: new Date().toISOString(),
-    usageAnalytics: await buildGlobalUsageAnalytics(days),
+    usageAnalytics: await buildGlobalUsageAnalytics(options),
     monetizationPolicy: buildMonetizationPolicySummary()
   };
 }
@@ -438,7 +438,9 @@ const {
   ensureSubscription,
   requireAdmin,
   resolveAdminLookup,
-  resolveAdminUserID
+  resolveAdminUserID,
+  normalizeGrantEmail,
+  applyPendingSubscriptionGrantForEmail
 } = authHelpers;
 
 appStoreHelpers = createAppStoreHelpers({
@@ -531,6 +533,8 @@ const { routeRequest, handleServerError } = createRouteHandlers({
   requireAdmin,
   resolveAdminLookup,
   resolveAdminUserID,
+  normalizeGrantEmail,
+  applyPendingSubscriptionGrantForEmail,
   ensureQuotaPeriod,
   getActiveSubscriptionOverride,
   getEffectiveSubscription,

@@ -8,6 +8,7 @@ const TABLES = new Set([
   'ai_requests',
   'admin_adjustments',
   'subscription_overrides',
+  'pending_subscription_grants',
   'storekit_transactions',
   'app_store_notifications'
 ]);
@@ -144,6 +145,19 @@ async function readRows(firestore, sql, params) {
       .slice(0, limitFromSQL(sql));
   }
 
+  if (sql.includes('from pending_subscription_grants') && sql.includes('normalized_email = ?')) {
+    let rows = await whereRows(firestore, 'pending_subscription_grants', [['normalized_email', '==', params[0]]]);
+    if (sql.includes('revoked_at is null')) {
+      rows = rows.filter((row) => row.revoked_at == null);
+    }
+    if (sql.includes('applied_at is null')) {
+      rows = rows.filter((row) => row.applied_at == null);
+    }
+    return rows
+      .sort(desc('updated_at'))
+      .slice(0, limitFromSQL(sql));
+  }
+
   if (sql.includes('from usage_ledger')) {
     return await readUsageLedger(firestore, sql, params);
   }
@@ -228,6 +242,9 @@ async function writeRows(firestore, sql, params) {
   if (sql.startsWith('insert into subscription_overrides')) {
     return await setRow(firestore, 'subscription_overrides', params[0], rowFrom(params, ['id', 'user_id', 'plan', 'status', 'source', 'renews_at', 'expires_at', 'reason', 'created_by', 'created_at', 'updated_at', 'revoked_at']), { create: true });
   }
+  if (sql.startsWith('insert into pending_subscription_grants')) {
+    return await setRow(firestore, 'pending_subscription_grants', params[0], rowFrom(params, ['id', 'normalized_email', 'plan', 'status', 'source', 'renews_at', 'expires_at', 'reason', 'created_by', 'created_at', 'updated_at', 'applied_user_id', 'applied_at', 'revoked_at']), { create: true });
+  }
   if (sql.startsWith('insert into storekit_transactions')) {
     const row = rowFrom(params, ['id', 'user_id', 'environment', 'product_id', 'transaction_id', 'original_transaction_id', 'purchase_date', 'expires_date', 'revocation_date', 'signed_date', 'app_account_token', 'raw_jws', 'created_at', 'updated_at']);
     const existing = await firstWhere(firestore, 'storekit_transactions', [['transaction_id', '==', row.transaction_id]]);
@@ -287,6 +304,30 @@ async function writeRows(firestore, sql, params) {
     await batch.commit();
     return result(rows.length);
   }
+  if (sql.startsWith('update pending_subscription_grants') && sql.includes('set plan = ?')) {
+    const [plan, status, source, renewsAt, expiresAt, reason, createdBy, updatedAt, id] = params;
+    return await updateByID(firestore, 'pending_subscription_grants', id, {
+      plan,
+      status,
+      source,
+      renews_at: renewsAt,
+      expires_at: expiresAt,
+      reason,
+      created_by: createdBy,
+      updated_at: updatedAt,
+      applied_user_id: null,
+      applied_at: null,
+      revoked_at: null
+    });
+  }
+  if (sql.startsWith('update pending_subscription_grants') && sql.includes('set applied_user_id')) {
+    const [appliedUserID, appliedAt, updatedAt, id] = params;
+    return await updateByID(firestore, 'pending_subscription_grants', id, {
+      applied_user_id: appliedUserID,
+      applied_at: appliedAt,
+      updated_at: updatedAt
+    });
+  }
 
   throw new Error(`Unsupported Firestore write SQL: ${sql}`);
 }
@@ -318,6 +359,20 @@ async function readUsageLedger(firestore, sql, params) {
     }).sort((a, b) => (b.units_used - a.units_used) || (b.request_count - a.request_count));
   }
 
+  if (sql.includes('group by') && sql.includes('usage_ledger.user_id')) {
+    const subscriptions = await allRows(firestore, 'subscriptions');
+    const byUser = new Map(subscriptions.map((row) => [row.user_id, row]));
+    return groupRows(filtered, ['user_id'], {
+      user_id: (items) => items[0].user_id,
+      plan: (items) => byUser.get(items[0].user_id)?.plan ?? 'free',
+      subscription_source: (items) => byUser.get(items[0].user_id)?.source ?? 'system',
+      subscription_status: (items) => byUser.get(items[0].user_id)?.status ?? 'unknown',
+      request_count: (items) => items.length,
+      units_used: (items) => sum(items, 'unit_cost'),
+      last_used_at: (items) => max(items, 'created_at')
+    }).sort((a, b) => (b.units_used - a.units_used) || (b.request_count - a.request_count) || compareDesc(a.last_used_at, b.last_used_at)).slice(0, limitFromSQL(sql));
+  }
+
   if (sql.includes('coalesce(subscriptions.plan')) {
     const subscriptions = await allRows(firestore, 'subscriptions');
     const byUser = new Map(subscriptions.map((row) => [row.user_id, row]));
@@ -327,19 +382,6 @@ async function readUsageLedger(firestore, sql, params) {
       units_used: (items) => sum(items, 'unit_cost'),
       active_user_count: (items) => new Set(items.map((row) => row.user_id)).size
     }).sort((a, b) => (b.units_used - a.units_used) || (b.request_count - a.request_count));
-  }
-
-  if (sql.includes('group by') && sql.includes('usage_ledger.user_id')) {
-    const subscriptions = await allRows(firestore, 'subscriptions');
-    const byUser = new Map(subscriptions.map((row) => [row.user_id, row]));
-    return groupRows(filtered, ['user_id'], {
-      user_id: (items) => items[0].user_id,
-      plan: (items) => byUser.get(items[0].user_id)?.plan ?? 'free',
-      subscription_status: (items) => byUser.get(items[0].user_id)?.status ?? 'unknown',
-      request_count: (items) => items.length,
-      units_used: (items) => sum(items, 'unit_cost'),
-      last_used_at: (items) => max(items, 'created_at')
-    }).sort((a, b) => (b.units_used - a.units_used) || (b.request_count - a.request_count) || compareDesc(a.last_used_at, b.last_used_at)).slice(0, limitFromSQL(sql));
   }
 
   if (sql.includes('count(*) as request_count') || sql.includes('sum(unit_cost)')) {
@@ -404,6 +446,9 @@ function filterByUserAndDate(rows, sql, params) {
     }
   } else if (sql.includes('where created_at >= ?')) {
     filtered = filtered.filter((row) => row.created_at >= params[0]);
+    if (sql.includes('created_at < ?')) {
+      filtered = filtered.filter((row) => row.created_at < params[1]);
+    }
   } else if (sql.includes('where user_id = ?')) {
     filtered = filtered.filter((row) => row.user_id === params[0]);
   }

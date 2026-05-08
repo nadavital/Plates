@@ -123,12 +123,32 @@ function applySQLiteMigrations(db) {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pending_subscription_grants (
+      id TEXT PRIMARY KEY,
+      normalized_email TEXT NOT NULL UNIQUE,
+      plan TEXT NOT NULL,
+      status TEXT NOT NULL,
+      source TEXT NOT NULL,
+      renews_at TEXT,
+      expires_at TEXT,
+      reason TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      applied_user_id TEXT,
+      applied_at TEXT,
+      revoked_at TEXT,
+      FOREIGN KEY(applied_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
   db.exec('CREATE INDEX IF NOT EXISTS usage_ledger_user_created_at_idx ON usage_ledger (user_id, created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS usage_ledger_created_at_idx ON usage_ledger (created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS ai_requests_user_created_at_idx ON ai_requests (user_id, created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS ai_requests_created_at_idx ON ai_requests (created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS ai_requests_provider_model_created_at_idx ON ai_requests (provider, model, created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS subscription_overrides_user_active_idx ON subscription_overrides (user_id, revoked_at, expires_at, updated_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS pending_subscription_grants_email_active_idx ON pending_subscription_grants (normalized_email, revoked_at, applied_at, updated_at)');
   backfillSubscriptionSourcesSQLite(db);
   backfillSubscriptionOverridesSQLite(db);
 }

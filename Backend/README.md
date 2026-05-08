@@ -214,7 +214,8 @@ Recommended order:
 - The current launch pricing assumption is a break-even-oriented `Trai Pro` monthly plan at `$3.99`, with backend quotas tuned to avoid subsidizing Gemini usage.
 - `GET /v1/admin/user-inspect`, `GET /v1/admin/usage-summary`, `POST /v1/admin/reconcile-subscription`, `POST /v1/admin/quota-adjustment`, and `POST /v1/admin/quota-reset` provide support tooling for drift debugging, manual repair, and beta support credits.
 - `GET /v1/admin/user-inspect` now includes trailing AI telemetry summaries by feature and by provider/model when token metadata is available.
-- `GET /v1/admin/usage-summary` returns trailing-window usage averages, plan breakdowns, top users, and telemetry cost rollups so quota changes can be based on real per-user behavior.
+- `GET /v1/admin/usage-summary` returns trailing-window or explicit-date usage averages, effective-plan breakdowns, top users, and telemetry cost rollups so quota changes can be based on real per-user behavior. Use `days`, `start`, `end`, `period=all`, `limit`, and `includeIdentity=true` to tune the admin report.
+- `POST /v1/admin/pending-subscription-grant` stores email-based Pro grants before signup and applies them automatically when Sign in with Apple later returns the same normalized email.
 - Real token-cost estimation is driven by model-aware defaults for the shipped OpenAI and Gemini models, and can still be overridden with `OPENAI_INPUT_USD_PER_1M_TOKENS`, `OPENAI_OUTPUT_USD_PER_1M_TOKENS`, `OPENAI_CACHED_INPUT_USD_PER_1M_TOKENS`, `GEMINI_INPUT_USD_PER_1M_TOKENS`, `GEMINI_OUTPUT_USD_PER_1M_TOKENS`, and `GEMINI_CACHED_INPUT_USD_PER_1M_TOKENS`.
 - The iOS app can use the `Local Development` backend environment to point at `http://127.0.0.1:8789` during simulator-based testing.
 - The iOS app should use `Staging` by default in development builds once a real public staging service exists.

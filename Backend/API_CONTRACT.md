@@ -209,6 +209,28 @@ Response:
 - recent admin adjustments
 - current monetization policy summary
 
+### `GET /v1/admin/usage-summary`
+
+Admin-authenticated analytics endpoint for credit usage, active-user averages, top users, feature mix, and token-cost telemetry.
+
+Query params:
+
+- `days`: rolling window length, clamped from `1` to `90`; defaults to `30`
+- `start`: optional ISO-8601 inclusive window start
+- `end`: optional ISO-8601 exclusive window end; defaults to now
+- `period=all`: uses an all-time window
+- `limit`: number of top users to return, clamped from `1` to `100`; defaults to `25`
+- `includeIdentity=true`: includes top-user email and display name for admin-only support review
+
+Response:
+
+- window metadata: `windowDays`, `windowStart`, `windowEnd`, `isAllTime`, and `topUserLimit`
+- overall usage: active user count, request count, units used, average units per active user, and estimated AI cost
+- `byPlan`, grouped by effective subscription state, including active admin overrides
+- `topUsers`, ordered by units used, including effective and raw subscription state
+- `topFeatures`, ordered by units used
+- provider/model telemetry with token averages, latency averages, retry rate, and tracked cost estimates
+
 ### `POST /v1/admin/reconcile-subscription`
 
 Admin-authenticated reconciliation endpoint that recomputes a user subscription from stored verified App Store records.
@@ -240,6 +262,30 @@ Response:
   }
 }
 ```
+
+### `POST /v1/admin/pending-subscription-grant`
+
+Admin-authenticated endpoint for granting a subscription by email before the user has signed in.
+
+Request:
+
+```json
+{
+  "email": "future-user@example.com",
+  "plan": "pro",
+  "status": "active",
+  "source": "adminGrant",
+  "reason": "Tester grant"
+}
+```
+
+If a matching Apple identity already exists, the grant is applied immediately. Otherwise it is stored in `pending_subscription_grants` and consumed automatically the next time a Sign in with Apple account supplies the same normalized email. This depends on Apple returning that email; Hide My Email users may need a grant against the relay email instead.
+
+Response:
+
+- `grant`: stored pending-grant row
+- `appliedUser`: applied user/subscription payload when the account already exists
+- `pending`: `true` when the grant is waiting for a future signup
 
 ### `POST /v1/admin/quota-adjustment`
 

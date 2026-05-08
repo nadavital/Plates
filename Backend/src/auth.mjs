@@ -77,6 +77,7 @@ export function createAuthHelpers({
       `).run(nextEmail, nextDisplayName, now, 'apple', body.appleUserID);
 
       await ensureSubscription(identity.id, now);
+      await applyPendingSubscriptionGrantForEmail(identity.id, nextEmail, now);
       return {
         id: identity.id,
         email: nextEmail,
@@ -106,6 +107,7 @@ export function createAuthHelpers({
     );
 
     await ensureSubscription(userID, now);
+    await applyPendingSubscriptionGrantForEmail(userID, body.email, now);
 
     return {
       id: userID,
@@ -260,6 +262,69 @@ export function createAuthHelpers({
     }
 
     return subscription;
+  }
+
+  function normalizeGrantEmail(email) {
+    const normalized = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  async function findPendingSubscriptionGrantForEmail(email) {
+    const normalizedEmail = normalizeGrantEmail(email);
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    return await db.prepare(`
+      SELECT *
+      FROM pending_subscription_grants
+      WHERE normalized_email = ?
+        AND revoked_at IS NULL
+        AND applied_at IS NULL
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(normalizedEmail);
+  }
+
+  async function applyPendingSubscriptionGrantForEmail(userID, email, now) {
+    const grant = await findPendingSubscriptionGrantForEmail(email);
+    if (!grant) {
+      return null;
+    }
+
+    await ensureSubscription(userID, now);
+    await db.prepare(`
+      UPDATE subscription_overrides
+      SET revoked_at = ?, updated_at = ?
+      WHERE user_id = ? AND revoked_at IS NULL
+    `).run(now, now, userID);
+
+    await db.prepare(`
+      INSERT INTO subscription_overrides (
+        id, user_id, plan, status, source, renews_at, expires_at, reason, created_by, created_at, updated_at, revoked_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      createID('sov'),
+      userID,
+      grant.plan,
+      grant.status,
+      grant.source,
+      grant.renews_at ?? null,
+      grant.expires_at ?? null,
+      grant.reason ?? 'pending email subscription grant',
+      grant.created_by ?? 'admin',
+      now,
+      now,
+      null
+    );
+
+    await db.prepare(`
+      UPDATE pending_subscription_grants
+      SET applied_user_id = ?, applied_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(userID, now, now, grant.id);
+
+    return grant;
   }
 
   function requireAdmin(req) {
@@ -433,6 +498,9 @@ export function createAuthHelpers({
     rotateSessionTokens,
     requireSession,
     ensureSubscription,
+    normalizeGrantEmail,
+    findPendingSubscriptionGrantForEmail,
+    applyPendingSubscriptionGrantForEmail,
     requireAdmin,
     resolveAdminLookup,
     resolveAdminUserID
