@@ -117,6 +117,7 @@ extension ChatView {
         )
         try? modelContext.save()
         WidgetDataProvider.shared.scheduleRefresh()
+        scheduleFoodMemoryResolution(for: entry.id)
         rebuildSessionMessages(preferLiveQueryData: true)
 
         HapticManager.success()
@@ -601,9 +602,7 @@ extension ChatView {
         refreshFoodEntrySnapshot(entry, userEditedFields: Set(edit.changes.map(\.fieldKey)))
 
         try? modelContext.save()
-        Task { @MainActor in
-            _ = try? FoodMemoryService().resolveEntry(id: entry.id, modelContext: modelContext)
-        }
+        scheduleFoodMemoryResolution(for: entry.id)
         WidgetDataProvider.shared.scheduleRefresh()
 
         BehaviorTracker(modelContext: modelContext).record(
@@ -676,9 +675,7 @@ extension ChatView {
 
         try? modelContext.save()
         if shouldResolveUpdatedEntry {
-            Task { @MainActor in
-                _ = try? FoodMemoryService().resolveEntry(id: entry.id, modelContext: modelContext)
-            }
+            scheduleFoodMemoryResolution(for: entry.id)
         }
         WidgetDataProvider.shared.scheduleRefresh()
 
@@ -724,6 +721,14 @@ extension ChatView {
         )
         HapticManager.lightTap()
     }
+}
+
+private func scheduleFoodMemoryResolution(for entryID: UUID) {
+    guard let modelContainer = TraiApp.sharedModelContainer else { return }
+    FoodMemoryBackgroundService.shared.scheduleResolveEntry(
+        id: entryID,
+        modelContainer: modelContainer
+    )
 }
 
 private extension ChatView {

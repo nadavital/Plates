@@ -1,6 +1,6 @@
 import Foundation
 
-struct FoodMemoryMatchExplanation: Codable, Sendable {
+nonisolated struct FoodMemoryMatchExplanation: Codable, Sendable {
     let resolverVersion: Int
     let topSignals: [String]
     let penalties: [String]
@@ -22,7 +22,7 @@ struct FoodMemoryMatchResult: Sendable {
     let explanation: FoodMemoryMatchExplanation
 }
 
-struct FoodMemoryMatcher {
+nonisolated struct FoodMemoryMatcher {
     let resolverVersion: Int
     private let normalizationService = FoodNormalizationService()
     private let snapshotBuilder = FoodSnapshotBuilder()
@@ -621,7 +621,7 @@ struct FoodMemoryMatcher {
     }
 }
 
-private struct ScoredCandidate {
+private nonisolated struct ScoredCandidate {
     let memory: FoodMemory
     let score: Double
     let signals: [String]

@@ -34,6 +34,8 @@ struct TraiApp: App {
     @State private var lastHealthKitWorkoutSyncDate: Date?
     @AppStorage("healthkitRecentWorkoutSyncTimestamp")
     private var persistedHealthKitWorkoutSyncTimestamp: Double = 0
+    @AppStorage("foodMemoryLaunchMaintenanceTimestamp")
+    private var persistedFoodMemoryLaunchMaintenanceTimestamp: Double = 0
     @AppStorage("reminderScheduleRefreshToken")
     private var reminderScheduleRefreshToken: String = ""
     @State private var startupCoordinator = AppStartupCoordinator()
@@ -45,8 +47,10 @@ struct TraiApp: App {
     @Environment(\.scenePhase) private var scenePhase
     private let startupTaskDeferral: Duration = .seconds(2)
     private let startupMigrationDeferral: Duration = .seconds(90)
+    private let foodMemoryMaintenanceDeferral: Duration = .seconds(30)
     private let foregroundHealthKitSyncDelay: Duration = .seconds(35)
     private let reminderBackgroundRefreshInterval: TimeInterval = 12 * 60 * 60
+    private let foodMemoryLaunchMaintenanceInterval: TimeInterval = 12 * 60 * 60
     private let minimumHealthKitSyncInterval: TimeInterval = 6 * 60 * 60
     private let initialHealthKitSyncLookbackDays = 30
     private let incrementalHealthKitSyncLookbackDays = 10
@@ -154,6 +158,9 @@ struct TraiApp: App {
                 TraiApp.sharedModelContainer = container
                 if isUITesting {
                     seedUITestProfileIfNeeded(modelContainer: container)
+                    if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
+                        seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
+                    }
                 }
                 if AppLaunchArguments.shouldSeedLiveWorkoutPerfData {
                     seedLiveWorkoutPerformanceDataIfNeeded(modelContainer: container)
@@ -206,15 +213,7 @@ struct TraiApp: App {
                         scheduleReminderScheduleRefreshIfNeeded()
                         scheduleReminderBackgroundRefresh()
                         runLaunchReplayEvaluationIfRequested()
-                        if !AppLaunchArguments.shouldRunFoodRecommendationReplayEvaluation {
-                            Task { @MainActor in
-                                try? FoodMemoryService().runMaintenance(
-                                    backfillLimit: 24,
-                                    resolveLimit: 12,
-                                    modelContext: modelContainer.mainContext
-                                )
-                            }
-                        }
+                        scheduleFoodMemoryMaintenanceIfNeeded()
                     }
                     .onOpenURL { url in
                         handleDeepLink(url)
@@ -435,6 +434,29 @@ struct TraiApp: App {
             guard !Task.isCancelled else { return }
             await runStartupMigrationWhenIdle()
         }
+    }
+
+    @MainActor
+    private func scheduleFoodMemoryMaintenanceIfNeeded() {
+        guard !AppLaunchArguments.shouldRunFoodRecommendationReplayEvaluation else { return }
+        guard startupCoordinator.claimFoodMemoryMaintenance() else { return }
+
+        let now = Date()
+        if persistedFoodMemoryLaunchMaintenanceTimestamp > 0 {
+            let lastRun = Date(timeIntervalSince1970: persistedFoodMemoryLaunchMaintenanceTimestamp)
+            guard now.timeIntervalSince(lastRun) >= foodMemoryLaunchMaintenanceInterval else { return }
+        }
+
+        guard scenePhase == .active else { return }
+        guard !hasActiveLiveWorkoutInProgress() else { return }
+
+        persistedFoodMemoryLaunchMaintenanceTimestamp = now.timeIntervalSince1970
+        FoodMemoryBackgroundService.shared.scheduleMaintenance(
+            modelContainer: modelContainer,
+            backfillLimit: 8,
+            resolveLimit: 4,
+            delay: foodMemoryMaintenanceDeferral
+        )
     }
 
     @MainActor
@@ -827,6 +849,292 @@ private func seedUITestProfileIfNeeded(modelContainer: ModelContainer) {
     profile.hasCompletedOnboarding = true
     context.insert(profile)
     try? context.save()
+}
+
+@MainActor
+private func seedAppStoreScreenshotDataIfNeeded(modelContainer: ModelContainer) {
+    let context = modelContainer.mainContext
+    var markerDescriptor = FetchDescriptor<CoachMemory>(
+        predicate: #Predicate<CoachMemory> { $0.content == "App Store Screenshot Seed" }
+    )
+    markerDescriptor.fetchLimit = 1
+    guard ((try? context.fetch(markerDescriptor)) ?? []).isEmpty else { return }
+
+    let calendar = Calendar.current
+    let now = Date()
+    let today = calendar.startOfDay(for: now)
+
+    let profile = fetchOrCreateScreenshotProfile(context: context)
+    profile.name = "Nadav"
+    profile.hasCompletedOnboarding = true
+    profile.goal = .recomposition
+    profile.currentWeightKg = 78.4
+    profile.targetWeightKg = 75.0
+    profile.dailyCalorieGoal = 2450
+    profile.dailyProteinGoal = 175
+    profile.dailyCarbsGoal = 260
+    profile.dailyFatGoal = 72
+    profile.dailyFiberGoal = 34
+    profile.dailySugarGoal = 55
+    profile.enabledMacros = MacroType.defaultEnabled
+    profile.usesMetricWeight = false
+    profile.usesMetricExerciseWeight = false
+    profile.preferredWorkoutDays = 4
+    profile.workoutExperienceLevel = "intermediate"
+    profile.workoutTimePerSession = 55
+    profile.defaultWorkoutAction = "recommendedWorkout"
+    profile.workoutPlan = screenshotWorkoutPlan()
+
+    let chatSessionId = UUID(uuidString: "48D643F0-4B92-4C90-9754-8546F511C6EF") ?? UUID()
+    UserDefaults.standard.set(chatSessionId.uuidString, forKey: "currentChatSessionId")
+    UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "lastChatActivityDate")
+
+    seedScreenshotFoodEntries(context: context, calendar: calendar, today: today)
+    seedScreenshotWeightEntries(context: context, calendar: calendar, today: today)
+    seedScreenshotWorkouts(context: context, calendar: calendar, today: today)
+    seedScreenshotChat(context: context, sessionId: chatSessionId, now: now)
+    seedScreenshotGoalsAndMemory(context: context, now: now)
+
+    try? context.save()
+}
+
+@MainActor
+private func fetchOrCreateScreenshotProfile(context: ModelContext) -> UserProfile {
+    var descriptor = FetchDescriptor<UserProfile>()
+    descriptor.fetchLimit = 1
+    if let profile = (try? context.fetch(descriptor))?.first {
+        return profile
+    }
+
+    let profile = UserProfile()
+    context.insert(profile)
+    return profile
+}
+
+private func seedScreenshotFoodEntries(context: ModelContext, calendar: Calendar, today: Date) {
+    let mealSession = UUID()
+    let items: [(String, Int, Double, Double, Double, Double, Double, String, String, Int, Int)] = [
+        ("Greek Yogurt Berry Bowl", 420, 38, 46, 12, 8, 16, "breakfast", "yogurt bowl with berries and granola", 8, 10),
+        ("Turkey Avocado Wrap", 610, 47, 58, 22, 10, 7, "lunch", "turkey avocado wrap", 12, 35),
+        ("Iced Protein Latte", 190, 25, 14, 4, 0, 6, "snack", "protein latte", 15, 5),
+        ("Salmon Rice Bowl", 735, 52, 76, 24, 9, 8, "dinner", "salmon rice bowl with vegetables", 19, 15)
+    ]
+
+    for (index, item) in items.enumerated() {
+        let entry = FoodEntry()
+        entry.name = item.0
+        entry.calories = item.1
+        entry.proteinGrams = item.2
+        entry.carbsGrams = item.3
+        entry.fatGrams = item.4
+        entry.fiberGrams = item.5
+        entry.sugarGrams = item.6
+        entry.mealType = item.7
+        entry.input = index == 3 ? .camera : .manual
+        entry.sessionId = index == 3 ? mealSession : nil
+        entry.sessionOrder = index == 3 ? 0 : index
+        entry.servingSize = "1 serving"
+        entry.userDescription = item.8
+        entry.loggedAt = calendar.date(byAdding: .minute, value: item.10, to: calendar.date(byAdding: .hour, value: item.9, to: today) ?? today) ?? Date()
+        entry.ensureDisplayMetadata()
+        context.insert(entry)
+    }
+}
+
+private func seedScreenshotWeightEntries(context: ModelContext, calendar: Calendar, today: Date) {
+    for dayOffset in stride(from: -42, through: 0, by: 7) {
+        let entry = WeightEntry(weightKg: 80.1 + Double(dayOffset) * 0.04, loggedAt: calendar.date(byAdding: .day, value: dayOffset, to: today) ?? today)
+        entry.bodyFatPercentage = 17.8 + Double(dayOffset) * 0.01
+        context.insert(entry)
+    }
+}
+
+private func seedScreenshotWorkouts(context: ModelContext, calendar: Calendar, today: Date) {
+    let workouts: [(String, LiveWorkout.WorkoutType, [String], Int, Int)] = [
+        ("Upper Strength", .strength, ["Chest", "Back", "Shoulders"], -1, 58),
+        ("Zone 2 Run", .cardio, ["Conditioning"], -3, 36),
+        ("Lower Power", .strength, ["Quads", "Glutes", "Hamstrings"], -5, 62),
+        ("Push Hypertrophy", .strength, ["Chest", "Shoulders", "Triceps"], -8, 54)
+    ]
+
+    for workoutData in workouts {
+        let startedAt = calendar.date(byAdding: .day, value: workoutData.3, to: today) ?? today
+        let workout = LiveWorkout(
+            name: workoutData.0,
+            workoutType: workoutData.1,
+            targetMuscleGroups: LiveWorkout.MuscleGroup.fromTargetStrings(workoutData.2),
+            focusAreas: workoutData.2
+        )
+        workout.startedAt = calendar.date(byAdding: .hour, value: 17, to: startedAt) ?? startedAt
+        workout.completedAt = calendar.date(byAdding: .minute, value: workoutData.4, to: workout.startedAt)
+        workout.healthKitCalories = workoutData.1 == .cardio ? 390 : 260
+        workout.healthKitAvgHeartRate = workoutData.1 == .cardio ? 148 : 116
+
+        if workoutData.1 == .cardio {
+            let run = LiveWorkoutEntry(exerciseName: "Outdoor Run", orderIndex: 0, exerciseType: "cardio")
+            run.durationSeconds = workoutData.4 * 60
+            run.distanceMeters = 6200
+            run.caloriesBurned = 390
+            run.completedAt = workout.completedAt
+            workout.entries = [run]
+        } else {
+            let first = LiveWorkoutEntry(exerciseName: workoutData.0.contains("Lower") ? "Back Squat" : "Incline Dumbbell Press", orderIndex: 0)
+            first.addSet(.init(reps: 8, weight: .init(kg: 42.5, lbs: 94), preferredWeightUnit: .lbs, completed: true))
+            first.addSet(.init(reps: 8, weight: .init(kg: 45, lbs: 99), preferredWeightUnit: .lbs, completed: true))
+            first.addSet(.init(reps: 7, weight: .init(kg: 45, lbs: 99), preferredWeightUnit: .lbs, completed: true))
+            first.completedAt = workout.completedAt
+
+            let second = LiveWorkoutEntry(exerciseName: workoutData.0.contains("Lower") ? "Romanian Deadlift" : "Chest-Supported Row", orderIndex: 1)
+            second.addSet(.init(reps: 10, weight: .init(kg: 50, lbs: 110), preferredWeightUnit: .lbs, completed: true))
+            second.addSet(.init(reps: 10, weight: .init(kg: 52.5, lbs: 116), preferredWeightUnit: .lbs, completed: true))
+            second.completedAt = workout.completedAt
+            workout.entries = [first, second]
+        }
+        context.insert(workout)
+    }
+
+    context.insert(WorkoutGoal(
+        title: "Train 4x this week",
+        goalKind: .frequency,
+        linkedWorkoutType: .strength,
+        targetValue: 4,
+        targetUnit: "workouts",
+        periodUnit: .week,
+        periodCount: 1,
+        notes: "Build consistent strength training weeks."
+    ))
+    context.insert(WorkoutGoal(
+        title: "Bench 185 lb for 5",
+        goalKind: .weight,
+        linkedWorkoutType: .strength,
+        linkedActivityName: "Bench Press",
+        targetValue: 185,
+        targetUnit: "lb",
+        notes: "Progress upper-body strength without rushing recovery."
+    ))
+}
+
+private func seedScreenshotChat(context: ModelContext, sessionId: UUID, now: Date) {
+    if AppLaunchArguments.appStoreScreenshotChatScenarioRawValue == "plan" {
+        seedScreenshotPlanChat(context: context, sessionId: sessionId, now: now)
+        return
+    }
+
+    let user = ChatMessage(
+        content: "I'm about to start Upper Strength, but my lower back feels tight. Can you adjust it?",
+        isFromUser: true,
+        sessionId: sessionId
+    )
+    user.timestamp = now.addingTimeInterval(-240)
+    let coach = ChatMessage(
+        content: "I used your recent recovery notes and today's plan to make the lift more joint-friendly while keeping the strength work on track.",
+        isFromUser: false,
+        sessionId: sessionId
+    )
+    coach.timestamp = now.addingTimeInterval(-210)
+    let memory = "Prefers lower-back friendly substitutions when squats feel heavy."
+    coach.setSuggestedWorkout(SuggestedWorkoutEntry(
+        name: "Adjusted Upper Strength",
+        workoutType: "strength",
+        targetMuscleGroups: ["legs", "back", "chest"],
+        exercises: [
+            .init(name: "Back Squat", sets: 1, reps: 6, weightKg: 84),
+            .init(name: "Chest-Supported Row", sets: 3, reps: 8, weightKg: 45),
+            .init(name: "Incline Dumbbell Press", sets: 3, reps: 10, weightKg: 27)
+        ],
+        durationMinutes: 38,
+        rationale: "Adjusted from your plan and saved preferences."
+    ))
+    context.insert(user)
+    context.insert(coach)
+    context.insert(CoachMemory(
+        content: memory,
+        category: .preference,
+        topic: .workout,
+        source: "app_store_screenshot_seed",
+        importance: 5
+    ))
+}
+
+private func seedScreenshotPlanChat(context: ModelContext, sessionId: UUID, now: Date) {
+    let user = ChatMessage(
+        content: "Build this week around strength, recovery, and my Friday Zone 2 run.",
+        isFromUser: true,
+        sessionId: sessionId
+    )
+    user.timestamp = now.addingTimeInterval(-240)
+
+    let coach = ChatMessage(
+        content: "I matched your recomp goal, recent workouts, and recovery pattern to a 4-day plan that keeps Friday's run protected.",
+        isFromUser: false,
+        sessionId: sessionId
+    )
+    coach.timestamp = now.addingTimeInterval(-210)
+    coach.setSuggestedWorkoutPlan(WorkoutPlanSuggestionEntry(
+        plan: screenshotWorkoutPlan(),
+        message: "4-day strength plan with recovery built in."
+    ))
+
+    context.insert(user)
+    context.insert(coach)
+}
+
+private func seedScreenshotGoalsAndMemory(context: ModelContext, now: Date) {
+    context.insert(CoachMemory(
+        content: "Prefers fast high-protein lunches like bowls, wraps, and protein coffee on training days.",
+        category: .preference,
+        topic: .food,
+        source: "app_store_screenshot_seed",
+        importance: 4
+    ))
+    context.insert(CoachMemory(
+        content: "App Store Screenshot Seed",
+        category: .context,
+        topic: .general,
+        source: "app_store_screenshot_seed",
+        importance: 1
+    ))
+}
+
+private func screenshotWorkoutPlan() -> WorkoutPlan {
+    WorkoutPlan(
+        splitType: .upperLower,
+        daysPerWeek: 4,
+        templates: [
+            WorkoutPlan.WorkoutTemplate(
+                name: "Upper Strength",
+                targetMuscleGroups: ["chest", "back", "shoulders"],
+                exercises: [
+                    .init(exerciseName: "Bench Press", muscleGroup: "chest", defaultSets: 4, defaultReps: 5, repRange: "4-6", restSeconds: 150, order: 0),
+                    .init(exerciseName: "Chest-Supported Row", muscleGroup: "back", defaultSets: 4, defaultReps: 8, repRange: "8-10", restSeconds: 120, order: 1),
+                    .init(exerciseName: "Incline Dumbbell Press", muscleGroup: "chest", defaultSets: 3, defaultReps: 10, repRange: "8-12", restSeconds: 90, order: 2)
+                ],
+                estimatedDurationMinutes: 55,
+                order: 0,
+                notes: "Heavy upper-body day with controlled progression."
+            ),
+            WorkoutPlan.WorkoutTemplate(
+                name: "Lower Power",
+                targetMuscleGroups: ["quads", "glutes", "hamstrings"],
+                exercises: [
+                    .init(exerciseName: "Back Squat", muscleGroup: "quads", defaultSets: 4, defaultReps: 5, repRange: "4-6", restSeconds: 180, order: 0),
+                    .init(exerciseName: "Romanian Deadlift", muscleGroup: "hamstrings", defaultSets: 3, defaultReps: 8, repRange: "8-10", restSeconds: 120, order: 1),
+                    .init(exerciseName: "Walking Lunge", muscleGroup: "glutes", defaultSets: 3, defaultReps: 12, repRange: "10-12", restSeconds: 90, order: 2)
+                ],
+                estimatedDurationMinutes: 60,
+                order: 1,
+                notes: "Lower-body strength and posterior-chain focus."
+            )
+        ],
+        rationale: "Four focused sessions balance strength progress, recovery, and recomposition.",
+        guidelines: [
+            "Add weight when all top sets reach the target reps.",
+            "Keep two reps in reserve on accessory work.",
+            "Pair harder training days with the higher-carb nutrition target."
+        ],
+        progressionStrategy: .defaultStrategy,
+        warnings: nil
+    )
 }
 
 @MainActor

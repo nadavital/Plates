@@ -326,7 +326,14 @@ struct DashboardView: View {
         return parts.joined(separator: "|")
     }
 
-    private var selectedDayFoodEntries: [FoodEntry] { cachedSelectedDayFoodEntries }
+    private var selectedDayFoodEntries: [FoodEntry] {
+        let fastQueryEntries = selectedDayFastQueryFoodEntries()
+        return fastQueryEntries.isEmpty ? cachedSelectedDayFoodEntries : fastQueryEntries
+    }
+
+    private var visibleSelectedDayNutritionTotals: DashboardNutritionTotals {
+        DashboardNutritionTotals(entries: selectedDayFoodEntries)
+    }
 
     /// Last 7 days of food entries for trend charts
     private var last7DaysFoodEntries: [FoodEntry] { cachedLast7DaysFoodEntries }
@@ -519,8 +526,8 @@ struct DashboardView: View {
                 if showRemindersBinding {
                     pendingScrollToReminders = true
                 }
-                await Task.yield()
                 refreshDateScopedCaches()
+                await Task.yield()
                 scheduleRemindersLoad(
                     delayMilliseconds: Self.remindersInitialLoadDelayMilliseconds
                 )
@@ -941,6 +948,22 @@ struct DashboardView: View {
         )
     }
 
+    private func selectedDayFastQueryFoodEntries() -> [FoodEntry] {
+        let calendar = Calendar.current
+        let selectedStart = calendar.startOfDay(for: selectedDate)
+        guard let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart) else { return [] }
+        let fastWindowCutoff = calendar.date(
+            byAdding: .day,
+            value: -(Self.dashboardFastFoodWindowDays - 1),
+            to: calendar.startOfDay(for: .now)
+        ) ?? .distantPast
+        guard selectedStart >= fastWindowCutoff else { return [] }
+
+        return allFoodEntries.filter {
+            $0.loggedAt >= selectedStart && $0.loggedAt < selectedEnd
+        }
+    }
+
     private func fetchFoodEntries(start: Date, end: Date) -> [FoodEntry] {
         let from = start
         let to = end
@@ -1019,27 +1042,27 @@ struct DashboardView: View {
     }
 
     private var totalCalories: Int {
-        selectedDayNutritionTotals.calories
+        visibleSelectedDayNutritionTotals.calories
     }
 
     private var totalProtein: Double {
-        selectedDayNutritionTotals.protein
+        visibleSelectedDayNutritionTotals.protein
     }
 
     private var totalCarbs: Double {
-        selectedDayNutritionTotals.carbs
+        visibleSelectedDayNutritionTotals.carbs
     }
 
     private var totalFat: Double {
-        selectedDayNutritionTotals.fat
+        visibleSelectedDayNutritionTotals.fat
     }
 
     private var totalFiber: Double {
-        selectedDayNutritionTotals.fiber
+        visibleSelectedDayNutritionTotals.fiber
     }
 
     private var totalSugar: Double {
-        selectedDayNutritionTotals.sugar
+        visibleSelectedDayNutritionTotals.sugar
     }
 
     private var todaysReminderItems: [TodaysRemindersCard.ReminderItem] {

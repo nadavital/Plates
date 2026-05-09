@@ -356,6 +356,64 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         XCTAssertEqual(refreshedEntry.foodMemoryResolutionState, .createdCandidate)
     }
 
+    func testBackgroundServiceResolvesEntryUsingSeparateModelContext() async throws {
+        let schema = Schema([
+            FoodEntry.self,
+            FoodMemory.self
+        ])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
+        )
+        let context = ModelContext(container)
+        let entry = makeEntry(
+            name: "Chicken Rice Bowl",
+            loggedAt: Date(timeIntervalSince1970: 1_714_000_000),
+            components: [
+                component("grilled chicken", role: .protein, calories: 240, protein: 38, carbs: 0, fat: 5),
+                component("white rice", role: .carb, calories: 205, protein: 4, carbs: 45, fat: 0)
+            ]
+        )
+
+        context.insert(entry)
+        let entryID = entry.id
+        try context.save()
+
+        FoodMemoryBackgroundService.shared.scheduleResolveEntry(
+            id: entryID,
+            modelContainer: container,
+            delay: .zero
+        )
+
+        for _ in 0..<20 {
+            try await Task.sleep(for: .milliseconds(100))
+
+            let verificationContext = ModelContext(container)
+            let entries = try verificationContext.fetch(FetchDescriptor<FoodEntry>())
+            let refreshedEntry = try XCTUnwrap(entries.first(where: { $0.id == entryID }))
+            let memories = try verificationContext.fetch(FetchDescriptor<FoodMemory>())
+
+            if refreshedEntry.foodMemoryResolutionState == .createdCandidate,
+               refreshedEntry.foodMemoryNeedsResolution == false,
+               memories.count == 1 {
+                return
+            }
+        }
+
+        let verificationContext = ModelContext(container)
+        let entries = try verificationContext.fetch(FetchDescriptor<FoodEntry>())
+        let refreshedEntry = try XCTUnwrap(entries.first(where: { $0.id == entryID }))
+        let memories = try verificationContext.fetch(FetchDescriptor<FoodMemory>())
+
+        XCTFail(
+            "Background food-memory resolution did not finish. state=\(refreshedEntry.foodMemoryResolutionState.rawValue), needsResolution=\(refreshedEntry.foodMemoryNeedsResolution), memories=\(memories.count)"
+        )
+    }
+
     func testCreatingCombinedFileBackedContainerSucceeds() throws {
         let schema = Schema([
             FoodEntry.self,

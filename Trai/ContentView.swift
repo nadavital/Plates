@@ -367,7 +367,12 @@ struct MainTabView: View {
     private func handleTabViewAppear() {
         if !hasInitializedSelection {
             hasInitializedSelection = true
-            if AppLaunchArguments.isUITesting {
+            if AppLaunchArguments.shouldUseAppStoreScreenshotSeed,
+               let rawTab = AppLaunchArguments.appStoreScreenshotInitialTabRawValue,
+               let screenshotTab = AppTab(rawValue: rawTab) {
+                selectedTabState = screenshotTab
+                persistedSelectedTabRaw = screenshotTab.rawValue
+            } else if AppLaunchArguments.isUITesting {
                 selectedTabState = .dashboard
                 persistedSelectedTabRaw = AppTab.dashboard.rawValue
             } else {
@@ -526,8 +531,9 @@ struct MainTabView: View {
             return
         }
 
-        let primary = LiveWorkoutEntry(exerciseName: "UI Test Squat", orderIndex: 0)
-        let cleanWeight = CleanWeight(kg: 60, lbs: 132.3)
+        workout.startedAt = Date().addingTimeInterval(-34 * 60)
+        let primary = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        let cleanWeight = CleanWeight(kg: 84, lbs: 185)
         for _ in 0..<4 {
             primary.addSet(LiveWorkoutEntry.SetData(
                 reps: 8,
@@ -537,11 +543,11 @@ struct MainTabView: View {
             ))
         }
 
-        let secondary = LiveWorkoutEntry(exerciseName: "UI Test Press", orderIndex: 1)
+        let secondary = LiveWorkoutEntry(exerciseName: "Incline Press", orderIndex: 1)
         for _ in 0..<3 {
             secondary.addSet(LiveWorkoutEntry.SetData(
                 reps: 10,
-                weight: CleanWeight(kg: 35, lbs: 77.2),
+                weight: CleanWeight(kg: 34, lbs: 75),
                 completed: false,
                 isWarmup: false
             ))

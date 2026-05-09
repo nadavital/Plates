@@ -31,7 +31,7 @@ struct FoodCameraViewfinder: View {
                 .ignoresSafeArea()
 
             // Camera preview
-            CameraPreviewView(cameraService: cameraService)
+            cameraPreview
                 .ignoresSafeArea()
                 .contentShape(.rect)
                 .onTapGesture {
@@ -85,9 +85,38 @@ struct FoodCameraViewfinder: View {
                     selectedPhotoItem: $selectedPhotoItem
                 )
                 .padding(.top, 20)
-                .padding(.bottom, 40)
+                .padding(.bottom, AppLaunchArguments.shouldUseAppStoreScreenshotSeed ? 92 : 40)
             }
         }
+    }
+
+    @ViewBuilder
+    private var cameraPreview: some View {
+        if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
+            FoodCameraFakeViewfinder()
+        } else {
+            CameraPreviewView(cameraService: cameraService)
+        }
+    }
+}
+
+private struct FoodCameraFakeViewfinder: View {
+    var body: some View {
+        Image("AppStoreFoodCameraSample")
+            .resizable()
+            .scaledToFill()
+            .overlay {
+                LinearGradient(
+                    colors: [
+                        .black.opacity(0.10),
+                        .clear,
+                        .black.opacity(0.08)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .accessibilityLabel("Camera preview showing a meal")
     }
 }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-struct FoodMemoryIndex {
+nonisolated struct FoodMemoryIndex {
     private let nameLookup: [String: [FoodMemory]]
     private let componentLookup: [String: [FoodMemory]]
     private let macroLookup: [String: [FoodMemory]]

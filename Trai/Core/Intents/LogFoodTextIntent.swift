@@ -80,7 +80,6 @@ struct LogFoodTextIntent: AppIntent {
             entry.setAcceptedSnapshot(acceptedSnapshot)
 
             context.insert(entry)
-            _ = try? FoodMemoryService().resolvePendingEntries(limit: 3, modelContext: context)
             BehaviorTracker(modelContext: context).record(
                 actionKey: BehaviorActionKey.logFood,
                 domain: .nutrition,
@@ -94,6 +93,11 @@ struct LogFoodTextIntent: AppIntent {
                 saveImmediately: false
             )
             try context.save()
+            FoodMemoryBackgroundService.shared.scheduleResolveEntry(
+                id: entry.id,
+                modelContainer: container,
+                delay: .milliseconds(150)
+            )
             WidgetDataProvider.shared.scheduleRefresh(
                 modelContainer: container,
                 delay: .milliseconds(150)

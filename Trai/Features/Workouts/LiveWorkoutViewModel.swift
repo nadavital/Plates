@@ -131,7 +131,12 @@ final class LiveWorkoutViewModel {
     var workoutCalories: Double = 0
     var lastCalorieUpdate: Date?
     var isHeartRateAvailable: Bool { currentHeartRate != nil }
-    var isWatchConnected: Bool { healthKitService?.isWatchConnected ?? false }
+    var isWatchConnected: Bool {
+        if AppLaunchArguments.shouldShowAppStoreScreenshotWatchConnected {
+            return true
+        }
+        return healthKitService?.isWatchConnected ?? false
+    }
     var watchSetupErrorMessage: String?
     var isRetryingWatchSync = false
 
@@ -389,6 +394,7 @@ final class LiveWorkoutViewModel {
         self.healthKitService = healthKitService
         usesMetricWeightPreference = getUserUsesMetricWeight()
         volumePRModePreference = getUserVolumePRMode()
+        seedScreenshotWatchDataIfNeeded()
         guard !isSetupActive else {
             refreshEntriesAndMetrics()
             return
@@ -574,6 +580,10 @@ final class LiveWorkoutViewModel {
     // MARK: - Apple Watch Monitoring
 
     func startHeartRateMonitoring() {
+        if seedScreenshotWatchDataIfNeeded() {
+            return
+        }
+
         guard let service = healthKitService else {
             watchSetupErrorMessage = "HealthKit is unavailable on this device."
             return
@@ -614,6 +624,9 @@ final class LiveWorkoutViewModel {
     func stopHeartRateMonitoring() {
         healthKitService?.stopHeartRateStreaming()
         healthKitService?.stopCalorieStreaming()
+        if AppLaunchArguments.shouldShowAppStoreScreenshotWatchConnected {
+            return
+        }
         currentHeartRate = nil
         lastHeartRateUpdate = nil
         lastPublishedWatchPayload = nil
@@ -622,6 +635,10 @@ final class LiveWorkoutViewModel {
 
     /// Updates heart rate and calories from the HealthKit service - called by the view
     func updateWatchDataFromService() {
+        if seedScreenshotWatchDataIfNeeded() {
+            return
+        }
+
         guard let service = healthKitService else { return }
         let nextPayload = LiveWorkoutUpdatePolicy.WatchPayload(
             roundedHeartRate: service.currentHeartRate.map { Int($0.rounded()) },
@@ -647,6 +664,19 @@ final class LiveWorkoutViewModel {
     /// Legacy method for backwards compatibility
     func updateHeartRateFromService() {
         updateWatchDataFromService()
+    }
+
+    @discardableResult
+    private func seedScreenshotWatchDataIfNeeded() -> Bool {
+        guard AppLaunchArguments.shouldShowAppStoreScreenshotWatchConnected else {
+            return false
+        }
+        currentHeartRate = 132
+        lastHeartRateUpdate = Date()
+        workoutCalories = 286
+        lastCalorieUpdate = Date()
+        watchSetupErrorMessage = nil
+        return true
     }
 
     private func syncWatchData(using service: HealthKitService) async throws {

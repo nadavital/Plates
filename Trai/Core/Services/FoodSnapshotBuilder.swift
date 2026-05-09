@@ -1,6 +1,6 @@
 import Foundation
 
-struct FoodSnapshotBuilder {
+nonisolated struct FoodSnapshotBuilder {
     private let normalizationService = FoodNormalizationService()
     private let snapshotVersion = 2
 

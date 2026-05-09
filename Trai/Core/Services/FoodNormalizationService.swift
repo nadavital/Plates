@@ -1,6 +1,6 @@
 import Foundation
 
-struct FoodNormalizationService {
+nonisolated struct FoodNormalizationService {
     struct NormalizedServing: Sendable {
         let quantity: Double?
         let unit: String?

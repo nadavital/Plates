@@ -24,10 +24,9 @@ struct FoodMemoryShadowSummary: Sendable {
 
 typealias FoodMemoryCameraSuggestion = FoodSuggestion
 
-struct FoodMemoryService {
+nonisolated struct FoodMemoryService {
     private let matcher = FoodMemoryMatcher()
 
-    @MainActor
     func enqueueResolution(for entry: FoodEntry, modelContext: ModelContext) {
         if entry.acceptedSnapshot != nil {
             entry.foodMemoryNeedsResolution = true
@@ -36,13 +35,13 @@ struct FoodMemoryService {
         }
     }
 
-    @MainActor
     func backfillHistoricalEntries(limit: Int, modelContext: ModelContext) throws -> Int {
         guard limit > 0 else { return 0 }
 
-        let descriptor = FetchDescriptor<FoodEntry>(
+        var descriptor = FetchDescriptor<FoodEntry>(
             sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)]
         )
+        descriptor.fetchLimit = max(limit * 8, 48)
         let candidates = try modelContext.fetch(descriptor)
         var backfilledEntries = 0
 
@@ -63,23 +62,29 @@ struct FoodMemoryService {
         return backfilledEntries
     }
 
-    @MainActor
     func resolvePendingEntries(limit: Int, modelContext: ModelContext) throws -> Int {
         guard limit > 0 else { return 0 }
-        let descriptor = FetchDescriptor<FoodEntry>(
+        var descriptor = FetchDescriptor<FoodEntry>(
             predicate: #Predicate { $0.foodMemoryNeedsResolution == true },
             sortBy: [SortDescriptor(\FoodEntry.loggedAt)]
         )
+        descriptor.fetchLimit = limit
 
         let entryIDs = try modelContext.fetch(descriptor)
-            .prefix(limit)
             .map(\.id)
         guard !entryIDs.isEmpty else { return 0 }
+
+        return try resolveEntries(ids: entryIDs, modelContext: modelContext)
+    }
+
+    func resolveEntries(ids entryIDs: [UUID], modelContext: ModelContext) throws -> Int {
+        let uniqueEntryIDs = Array(Set(entryIDs))
+        guard !uniqueEntryIDs.isEmpty else { return 0 }
 
         var workingMemories = try modelContext.fetch(FetchDescriptor<FoodMemory>())
         var resolvedEntries = 0
 
-        for entryID in entryIDs {
+        for entryID in uniqueEntryIDs {
             if try resolveEntry(
                 id: entryID,
                 workingMemories: &workingMemories,
@@ -94,22 +99,10 @@ struct FoodMemoryService {
         return resolvedEntries
     }
 
-    @MainActor
     func resolveEntry(id entryID: UUID, modelContext: ModelContext) throws -> Bool {
-        var workingMemories = try modelContext.fetch(FetchDescriptor<FoodMemory>())
-        let resolved = try resolveEntry(
-            id: entryID,
-            workingMemories: &workingMemories,
-            modelContext: modelContext
-        )
-        guard resolved else { return false }
-
-        try modelContext.save()
-        _ = try consolidateDuplicateMemories(modelContext: modelContext)
-        return true
+        try resolveEntries(ids: [entryID], modelContext: modelContext) > 0
     }
 
-    @MainActor
     func consolidateDuplicateMemories(modelContext: ModelContext) throws -> Int {
         let memories = try modelContext.fetch(
             FetchDescriptor<FoodMemory>(
@@ -126,7 +119,6 @@ struct FoodMemoryService {
         )
     }
 
-    @MainActor
     func consolidateDuplicateMemories(
         memoryIDs: [UUID],
         modelContext: ModelContext
@@ -149,7 +141,6 @@ struct FoodMemoryService {
         )
     }
 
-    @MainActor
     func runMaintenance(
         backfillLimit: Int,
         resolveLimit: Int,
@@ -163,7 +154,6 @@ struct FoodMemoryService {
         )
     }
 
-    @MainActor
     func shadowSummary(modelContext: ModelContext) throws -> FoodMemoryShadowSummary {
         let entries = try modelContext.fetch(
             FetchDescriptor<FoodEntry>(sortBy: [SortDescriptor(\FoodEntry.loggedAt, order: .reverse)])
@@ -234,7 +224,6 @@ struct FoodMemoryService {
         }
     }
 
-    @MainActor
     private func resolveEntry(
         id entryID: UUID,
         workingMemories: inout [FoodMemory],

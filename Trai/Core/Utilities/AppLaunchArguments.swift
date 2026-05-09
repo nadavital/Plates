@@ -14,6 +14,11 @@ enum AppLaunchArguments {
     static let uiTestLiveWorkoutPreset = "--ui-test-live-workout-preset"
     static let mockFoodAIResponses = "--ui-test-mock-food-ai"
     static let forceFoodCameraPermissionFallback = "--ui-test-force-no-camera-food-flow"
+    static let appStoreScreenshotMode = "--app-store-screenshot-mode"
+    static let appStoreScreenshotInitialTab = "--app-store-screenshot-tab"
+    static let appStoreScreenshotFoodReview = "--app-store-screenshot-food-review"
+    static let appStoreScreenshotWatchConnected = "--app-store-screenshot-watch-connected"
+    static let appStoreScreenshotChatScenario = "--app-store-screenshot-chat-scenario"
     static let enableTabPrewarm = "--enable-tab-prewarm"
     static let disableTabPrewarm = "--disable-tab-prewarm"
     static let disableHeavyTabDeferral = "--disable-heavy-tab-deferral"
@@ -62,6 +67,42 @@ enum AppLaunchArguments {
 
     static var shouldUseMockFoodAIResponses: Bool {
         ProcessInfo.processInfo.arguments.contains(mockFoodAIResponses)
+    }
+
+    static var shouldUseAppStoreScreenshotSeed: Bool {
+        ProcessInfo.processInfo.arguments.contains(appStoreScreenshotMode)
+    }
+
+    static var appStoreScreenshotInitialTabRawValue: String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: appStoreScreenshotInitialTab) else {
+            return nil
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else {
+            return nil
+        }
+        return arguments[valueIndex]
+    }
+
+    static var appStoreScreenshotChatScenarioRawValue: String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: appStoreScreenshotChatScenario) else {
+            return nil
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else {
+            return nil
+        }
+        return arguments[valueIndex]
+    }
+
+    static var shouldShowAppStoreScreenshotFoodReview: Bool {
+        ProcessInfo.processInfo.arguments.contains(appStoreScreenshotFoodReview)
+    }
+
+    static var shouldShowAppStoreScreenshotWatchConnected: Bool {
+        ProcessInfo.processInfo.arguments.contains(appStoreScreenshotWatchConnected)
     }
 
     static var shouldForceFoodCameraPermissionFallback: Bool {

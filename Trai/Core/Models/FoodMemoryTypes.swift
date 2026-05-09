@@ -68,7 +68,7 @@ enum LoggedFoodComponentStatus: String, Codable, Sendable {
     case removed
 }
 
-struct AcceptedFoodSnapshot: Codable, Sendable {
+nonisolated struct AcceptedFoodSnapshot: Codable, Sendable {
     let version: Int
     let source: AcceptedFoodSource
     let kind: FoodMemoryKind
@@ -208,7 +208,7 @@ struct AcceptedFoodSnapshot: Codable, Sendable {
     }
 }
 
-struct AcceptedFoodComponent: Codable, Sendable, Hashable {
+nonisolated struct AcceptedFoodComponent: Codable, Sendable, Hashable {
     let id: String
     let displayName: String
     let normalizedName: String
@@ -226,7 +226,7 @@ struct AcceptedFoodComponent: Codable, Sendable, Hashable {
     let source: FoodComponentSource
 }
 
-struct LoggedFoodComponent: Codable, Sendable, Hashable, Identifiable {
+nonisolated struct LoggedFoodComponent: Codable, Sendable, Hashable, Identifiable {
     let id: String
     let originalComponentID: String?
     var displayName: String
@@ -323,7 +323,7 @@ struct LoggedFoodComponent: Codable, Sendable, Hashable, Identifiable {
 }
 
 extension LoggedFoodComponent {
-    init(component: AcceptedFoodComponent) {
+    nonisolated init(component: AcceptedFoodComponent) {
         self.init(
             id: component.id,
             originalComponentID: component.id,
@@ -345,14 +345,14 @@ extension LoggedFoodComponent {
     }
 }
 
-struct FoodMemoryAlias: Codable, Sendable, Hashable {
+nonisolated struct FoodMemoryAlias: Codable, Sendable, Hashable {
     let normalizedName: String
     let displayName: String
     let observationCount: Int
     let wasUserEdited: Bool
 }
 
-struct FoodMemoryNutritionProfile: Codable, Sendable {
+nonisolated struct FoodMemoryNutritionProfile: Codable, Sendable {
     let medianCalories: Int
     let medianProteinGrams: Double
     let medianCarbsGrams: Double
@@ -365,14 +365,14 @@ struct FoodMemoryNutritionProfile: Codable, Sendable {
     let upperProteinBound: Double
 }
 
-struct FoodMemoryServingProfile: Codable, Sendable {
+nonisolated struct FoodMemoryServingProfile: Codable, Sendable {
     let commonServingText: String?
     let commonQuantity: Double?
     let commonUnit: String?
     let quantityVariance: Double?
 }
 
-struct FoodMemoryTimeProfile: Codable, Sendable {
+nonisolated struct FoodMemoryTimeProfile: Codable, Sendable {
     let hourCounts: [Int]
     let bucketCounts: [String: Int]
     let weekdayCount: Int
@@ -396,7 +396,7 @@ struct FoodMemoryTimeProfile: Codable, Sendable {
     }
 }
 
-struct FoodMemoryComponentSummary: Codable, Sendable, Hashable {
+nonisolated struct FoodMemoryComponentSummary: Codable, Sendable, Hashable {
     let normalizedName: String
     let role: FoodComponentRole
     let observationCount: Int
@@ -406,7 +406,7 @@ struct FoodMemoryComponentSummary: Codable, Sendable, Hashable {
     let typicalFatGrams: Double
 }
 
-struct FoodMemoryFingerprint: Codable, Sendable, Hashable {
+nonisolated struct FoodMemoryFingerprint: Codable, Sendable, Hashable {
     let version: Int
     let type: FingerprintType
     let value: String
@@ -422,7 +422,7 @@ enum FingerprintType: String, Codable, Sendable {
     case mealTimeBucket
 }
 
-struct FoodMemoryQualitySignals: Codable, Sendable {
+nonisolated struct FoodMemoryQualitySignals: Codable, Sendable {
     let proportionUserEdited: Double
     let proportionWithStructuredComponents: Double
     let distinctObservationDays: Int
@@ -437,7 +437,7 @@ enum FoodSuggestionOutcome: String, Codable, Sendable {
     case dismissed
 }
 
-struct FoodMemorySuggestionStats: Codable, Sendable {
+nonisolated struct FoodMemorySuggestionStats: Codable, Sendable {
     let timesShown: Int
     let timesTapped: Int
     let timesAccepted: Int
@@ -450,7 +450,7 @@ struct FoodMemorySuggestionStats: Codable, Sendable {
     let lastRefinedAt: Date?
 }
 
-struct FoodMemoryRepeatPattern: Codable, Sendable {
+nonisolated struct FoodMemoryRepeatPattern: Codable, Sendable {
     let distinctConsumptionDays: Int
     let daysWithMultipleUses: Int
     let maxUsesInDay: Int
@@ -462,7 +462,7 @@ struct FoodMemoryRepeatPattern: Codable, Sendable {
     let lastConsumptionAt: Date
 }
 
-struct FoodMemoryMatchStats: Codable, Sendable {
+nonisolated struct FoodMemoryMatchStats: Codable, Sendable {
     let acceptedMatches: Int
     let rejectedMatches: Int
     let ambiguousMatches: Int
@@ -470,7 +470,7 @@ struct FoodMemoryMatchStats: Codable, Sendable {
 }
 
 private extension String {
-    var nilIfEmpty: String? {
+    nonisolated var nilIfEmpty: String? {
         isEmpty ? nil : self
     }
 }

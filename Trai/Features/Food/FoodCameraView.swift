@@ -42,6 +42,7 @@ struct FoodCameraView: View {
     @State private var navigationPath: [FoodCameraRoute] = []
     @State private var showingManualEntry = false
     @State private var pendingManualEntry: FoodEntry?
+    @State private var didSeedAppStoreScreenshotReview = false
 
     private var enabledMacros: Set<MacroType> {
         profiles.first?.enabledMacros ?? MacroType.defaultEnabled
@@ -85,6 +86,9 @@ struct FoodCameraView: View {
                             )
                         }
                     }
+                    .task {
+                        seedAppStoreScreenshotReviewIfNeeded()
+                    }
                 }
             }
         }
@@ -120,6 +124,44 @@ struct FoodCameraView: View {
         .proUpsellPresenter()
     }
 
+    private func seedAppStoreScreenshotReviewIfNeeded() {
+        guard !didSeedAppStoreScreenshotReview,
+              AppLaunchArguments.shouldUseAppStoreScreenshotSeed,
+              AppLaunchArguments.shouldShowAppStoreScreenshotFoodReview else {
+            return
+        }
+
+        didSeedAppStoreScreenshotReview = true
+        var seededDraft = FoodLogDraft(
+            sessionId: sessionId,
+            image: UIImage(named: "AppStoreFoodCameraSample"),
+            description: "salmon rice bowl with avocado, edamame, carrots, cucumber, and sesame",
+            inputSource: .photo
+        )
+        seededDraft.refinedSuggestion = SuggestedFoodEntry(
+            id: "app-store-salmon-bowl",
+            name: "Salmon Rice Power Bowl",
+            calories: 690,
+            proteinGrams: 48,
+            carbsGrams: 66,
+            fatGrams: 24,
+            fiberGrams: 10,
+            sugarGrams: 8,
+            servingSize: "1 bowl",
+            emoji: "🍣",
+            components: [
+                SuggestedFoodComponent(displayName: "grilled salmon", role: "protein", quantity: 6, unit: "oz", calories: 320, proteinGrams: 38, carbsGrams: 0, fatGrams: 18, fiberGrams: 0, sugarGrams: 0, confidence: "high"),
+                SuggestedFoodComponent(displayName: "rice and vegetables", role: "base", quantity: 1, unit: "bowl", calories: 370, proteinGrams: 10, carbsGrams: 66, fatGrams: 6, fiberGrams: 10, sugarGrams: 8, confidence: "high")
+            ],
+            mealKind: "lunch",
+            notes: "Balanced protein-forward bowl with rice, avocado, and vegetables.",
+            confidence: "high",
+            schemaVersion: 2
+        )
+        draft = seededDraft
+        navigationPath = [.review]
+    }
+
     private var draftBinding: Binding<FoodLogDraft> {
         Binding(
             get: { draft ?? FoodLogDraft(sessionId: sessionId, inputSource: .description) },
@@ -139,6 +181,7 @@ struct FoodCameraView: View {
         modelContext.insert(entry)
         try? modelContext.save()
         WidgetDataProvider.shared.scheduleRefresh()
+        scheduleFoodMemoryResolution(for: entry.id)
         recordFoodLogBehavior(entry: entry, source: "manual_entry", modelContext: modelContext)
         saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
         HapticManager.success()
@@ -344,6 +387,58 @@ private struct FoodLogCaptureStepView: View {
     }
 
     private func loadSuggestions() {
+        if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
+            memorySuggestions = [
+                FoodSuggestion(
+                    memoryID: UUID(uuidString: "2F6D93DF-6762-4C2A-A3C2-BC7A9E48C101") ?? UUID(),
+                    title: "Salmon rice bowl",
+                    subtitle: "Lunch you repeat",
+                    detail: "620 cal · 44g protein",
+                    emoji: "🍣",
+                    relevanceScore: 0.94,
+                    suggestedEntry: SuggestedFoodEntry(
+                        name: "Salmon Rice Bowl",
+                        calories: 620,
+                        proteinGrams: 44,
+                        carbsGrams: 58,
+                        fatGrams: 22,
+                        fiberGrams: 7,
+                        sugarGrams: 6,
+                        servingSize: "1 bowl",
+                        emoji: "🍣",
+                        mealKind: "lunch",
+                        notes: "Matched to the meal in view and your usual bowl pattern.",
+                        confidence: "high",
+                        schemaVersion: 2
+                    )
+                ),
+                FoodSuggestion(
+                    memoryID: UUID(uuidString: "89FDF30F-3636-4E01-A4D6-08FD7C5C39B5") ?? UUID(),
+                    title: "Post-workout bowl",
+                    subtitle: "Training-day favorite",
+                    detail: "680 cal · 52g protein",
+                    emoji: "🥗",
+                    relevanceScore: 0.88,
+                    suggestedEntry: SuggestedFoodEntry(
+                        name: "Post-Workout Chicken Bowl",
+                        calories: 680,
+                        proteinGrams: 52,
+                        carbsGrams: 72,
+                        fatGrams: 16,
+                        fiberGrams: 8,
+                        sugarGrams: 5,
+                        servingSize: "1 bowl",
+                        emoji: "🥗",
+                        mealKind: "dinner",
+                        notes: "A fast high-protein option for lifting days.",
+                        confidence: "high",
+                        schemaVersion: 2
+                    )
+                )
+            ]
+            return
+        }
+
         memorySuggestions = (try? FoodSuggestionService().cameraSuggestions(
             limit: 3,
             targetDate: targetDate,
@@ -527,6 +622,7 @@ private struct FoodLogReviewStepView: View {
         modelContext.insert(entry)
         try? modelContext.save()
         WidgetDataProvider.shared.scheduleRefresh()
+        scheduleFoodMemoryResolution(for: entry.id)
 
         let behaviorSource = isRefined
             ? "refined_\(draft.inputSource.behaviorSource)"
@@ -559,6 +655,14 @@ private struct FoodLogReviewStepView: View {
             return .memorySuggestion
         }
     }
+}
+
+private func scheduleFoodMemoryResolution(for entryID: UUID) {
+    guard let modelContainer = TraiApp.sharedModelContainer else { return }
+    FoodMemoryBackgroundService.shared.scheduleResolveEntry(
+        id: entryID,
+        modelContainer: modelContainer
+    )
 }
 
 private func assignFoodSession(_ sessionId: UUID?, to entry: FoodEntry, modelContext: ModelContext) {
