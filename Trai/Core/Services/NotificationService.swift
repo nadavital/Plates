@@ -122,7 +122,7 @@ final class NotificationService {
     func requestAuthorization() async -> Bool {
         registerNotificationCategoriesIfNeeded()
         do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge, .timeSensitive])
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             isAuthorized = granted
             await updateAuthorizationStatus()
             return granted

@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct SuggestedReminder: Codable, Sendable {
+nonisolated struct SuggestedReminder: Codable, Sendable {
     let title: String
     let body: String
     let hour: Int

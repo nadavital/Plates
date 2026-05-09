@@ -69,7 +69,7 @@ extension LiveWorkout {
 // MARK: - Muscle Groups
 
 extension LiveWorkout {
-    enum MuscleGroup: String, CaseIterable, Identifiable {
+    nonisolated enum MuscleGroup: String, CaseIterable, Identifiable {
         case chest = "chest"
         case back = "back"
         case shoulders = "shoulders"

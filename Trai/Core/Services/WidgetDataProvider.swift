@@ -80,7 +80,7 @@ private actor WidgetDataRefreshActor {
     }
 }
 
-private struct WidgetDataSnapshotBuilder {
+nonisolated private struct WidgetDataSnapshotBuilder {
     private let readyThreshold: Double = 48
     private let recoveringThreshold: Double = 24
 
@@ -394,13 +394,13 @@ private struct WidgetDataSnapshotBuilder {
     }
 }
 
-private enum WidgetRecoveryStatus {
+nonisolated private enum WidgetRecoveryStatus {
     case ready
     case recovering
     case tired
 }
 
-private struct WidgetMuscleRecoveryInfo {
+nonisolated private struct WidgetMuscleRecoveryInfo {
     let muscleGroup: LiveWorkout.MuscleGroup
     let status: WidgetRecoveryStatus
 }

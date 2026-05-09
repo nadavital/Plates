@@ -223,7 +223,8 @@ final class HealthKitService {
                     session.loggedAt = workout.startDate
                     session.sourceIsHealthKit = true
 
-                    if let energy = workout.totalEnergyBurned {
+                    let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)
+                    if let energy = energyType.flatMap({ workout.statistics(for: $0)?.sumQuantity() }) {
                         session.caloriesBurned = Int(energy.doubleValue(for: .kilocalorie()))
                     }
                     if let distance = workout.totalDistance {

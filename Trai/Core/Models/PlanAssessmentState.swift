@@ -10,7 +10,7 @@ import Foundation
 // MARK: - Plan Assessment State
 
 /// Tracks the state of plan reassessment for a user
-struct PlanAssessmentState: Codable, Sendable {
+nonisolated struct PlanAssessmentState: Codable, Sendable {
     /// When the plan was last assessed/reviewed
     var lastAssessmentDate: Date?
 
@@ -39,7 +39,7 @@ struct PlanAssessmentState: Codable, Sendable {
 // MARK: - Plan Recommendation
 
 /// A recommendation to review the nutrition plan
-struct PlanRecommendation: Codable, Identifiable, Equatable, Sendable {
+nonisolated struct PlanRecommendation: Codable, Identifiable, Equatable, Sendable {
     var id: UUID
     let trigger: RecommendationTrigger
     let createdAt: Date
@@ -59,7 +59,7 @@ struct PlanRecommendation: Codable, Identifiable, Equatable, Sendable {
 
     // MARK: - Trigger Types
 
-    enum RecommendationTrigger: String, Codable {
+    nonisolated enum RecommendationTrigger: String, Codable {
         /// User's weight has changed significantly from baseline
         case weightChange = "weight_change"
 
@@ -72,7 +72,7 @@ struct PlanRecommendation: Codable, Identifiable, Equatable, Sendable {
 
     // MARK: - Trigger Details
 
-    struct TriggerDetails: Codable, Equatable {
+    nonisolated struct TriggerDetails: Codable, Equatable {
         // For weight change
         var weightChangeKg: Double?
         var baselineWeightKg: Double?
@@ -109,7 +109,7 @@ struct PlanRecommendation: Codable, Identifiable, Equatable, Sendable {
 // MARK: - Dismissed Recommendation
 
 /// Tracks a recommendation that was dismissed by the user
-struct DismissedRecommendation: Codable, Identifiable, Sendable {
+nonisolated struct DismissedRecommendation: Codable, Identifiable, Sendable {
     var id: UUID
     let trigger: PlanRecommendation.RecommendationTrigger
     let dismissedAt: Date

@@ -841,24 +841,24 @@ extension AIFunctionExecutor {
                     "carbs": Int(totalCarbs),
                     "fat": Int(totalFat)
                 ],
-                "daily_averages": dayCount > 1 ? [
+                "daily_averages": (dayCount > 1 ? [
                     "calories": totalCalories / dayCount,
                     "protein": Int(totalProtein) / dayCount,
                     "carbs": Int(totalCarbs) / dayCount,
                     "fat": Int(totalFat) / dayCount
-                ] : nil as [String: Int]?,
+                ] : nil as [String: Int]?) as Any,
                 "targets": [
                     "calories": targetCalories,
                     "protein": targetProtein,
                     "carbs": targetCarbs,
                     "fat": targetFat
                 ],
-                "remaining": dayCount == 1 ? [
+                "remaining": (dayCount == 1 ? [
                     "calories": targetCalories - totalCalories,
                     "protein": targetProtein - Int(totalProtein),
                     "carbs": targetCarbs - Int(totalCarbs),
                     "fat": targetFat - Int(totalFat)
-                ] : nil as [String: Int]?,
+                ] : nil as [String: Int]?) as Any,
                 "entry_count": entries.count
             ]
         ))

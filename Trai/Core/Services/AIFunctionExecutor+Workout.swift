@@ -268,7 +268,6 @@ extension AIFunctionExecutor {
         }
 
         // Build rationale from recovery status
-        let recoveryService = MuscleRecoveryService.shared
         let muscleNames = muscleStrings.map { $0.capitalized }.joined(separator: ", ")
         let rationale: String
         if !muscleStrings.isEmpty {

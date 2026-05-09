@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum WorkoutMode: String, Codable, CaseIterable, Identifiable {
+nonisolated enum WorkoutMode: String, Codable, CaseIterable, Identifiable {
     case strength = "strength"
     case cardio = "cardio"
     case hiit = "hiit"

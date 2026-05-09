@@ -78,7 +78,7 @@ final class FoodRecommendationLegacyCleanupTests: XCTestCase {
         context.insert(FoodRecommendationTestSupport.entry(name: "Chicken Rice Bowl", loggedAt: FoodRecommendationTestSupport.day(0), components: chickenRiceComponents()))
         try context.save()
 
-        try FoodMemoryService().resolvePendingEntries(limit: 5, modelContext: context)
+        _ = try FoodMemoryService().resolvePendingEntries(limit: 5, modelContext: context)
         let refreshed = try XCTUnwrap(context.fetch(FetchDescriptor<FoodEntry>()).first)
 
         XCTAssertNotNil(refreshed.acceptedSnapshot)

@@ -96,7 +96,7 @@ struct ChatFoodAnalysisResult: Sendable {
 }
 
 /// Food entry suggested by AI for logging
-struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
+nonisolated struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
     var id: String = UUID().uuidString
     let name: String
     let calories: Int
@@ -115,7 +115,7 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
     let confidence: String?
     let schemaVersion: Int
 
-    private enum CodingKeys: String, CodingKey {
+    nonisolated private enum CodingKeys: String, CodingKey {
         case id
         case name
         case calories
@@ -237,7 +237,7 @@ struct SuggestedFoodEntry: Codable, Sendable, Identifiable, Equatable {
     }
 }
 
-struct SuggestedFoodComponent: Codable, Sendable, Equatable, Hashable {
+nonisolated struct SuggestedFoodComponent: Codable, Sendable, Equatable, Hashable {
     let id: String
     let displayName: String
     let role: String?
@@ -334,7 +334,7 @@ struct FitnessContext: Sendable {
 // MARK: - Suggested Food Edit
 
 /// Represents a proposed edit to an existing food entry (needs user confirmation)
-struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
+nonisolated struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
     let entryId: UUID
     let name: String
     let emoji: String?
@@ -342,7 +342,7 @@ struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
 
     var id: UUID { entryId }
 
-    struct FieldChange: Codable, Sendable, Identifiable {
+    nonisolated struct FieldChange: Codable, Sendable, Identifiable {
         var id: String { field }
         let field: String
         let fieldKey: String  // Internal key for applying (e.g., "calories", "proteinGrams")
@@ -363,7 +363,7 @@ struct SuggestedFoodEdit: Codable, Sendable, Identifiable {
     }
 }
 
-struct SuggestedFoodComponentEdit: Codable, Sendable, Identifiable {
+nonisolated struct SuggestedFoodComponentEdit: Codable, Sendable, Identifiable {
     let entryId: UUID
     let name: String
     let emoji: String?
@@ -373,7 +373,7 @@ struct SuggestedFoodComponentEdit: Codable, Sendable, Identifiable {
 
     var id: UUID { entryId }
 
-    struct NutritionSnapshot: Codable, Sendable {
+    nonisolated struct NutritionSnapshot: Codable, Sendable {
         let calories: Int
         let proteinGrams: Double
         let carbsGrams: Double
@@ -389,8 +389,8 @@ struct SuggestedFoodComponentEdit: Codable, Sendable, Identifiable {
         }
     }
 
-    struct Operation: Codable, Sendable, Identifiable {
-        enum OperationType: String, Codable, Sendable {
+    nonisolated struct Operation: Codable, Sendable, Identifiable {
+        nonisolated enum OperationType: String, Codable, Sendable {
             case remove
             case restore
             case setFraction = "set_fraction"
@@ -423,7 +423,7 @@ struct SuggestedFoodComponentEdit: Codable, Sendable, Identifiable {
 // MARK: - Plan Update Suggestion
 
 /// Plan update suggested by AI for user confirmation
-struct PlanUpdateSuggestionEntry: Codable, Sendable, Identifiable {
+nonisolated struct PlanUpdateSuggestionEntry: Codable, Sendable, Identifiable {
     var id: String {
         "\(calories ?? 0)-\(proteinGrams ?? 0)-\(carbsGrams ?? 0)-\(fatGrams ?? 0)-\(fiberGrams ?? 0)-\(sugarGrams ?? 0)-\(goal ?? "")"
     }
@@ -483,7 +483,7 @@ struct PlanUpdateSuggestionEntry: Codable, Sendable, Identifiable {
 // MARK: - Workout Plan Suggestion
 
 /// Workout plan update suggested by AI for user confirmation
-struct WorkoutPlanSuggestionEntry: Codable, Sendable, Identifiable {
+nonisolated struct WorkoutPlanSuggestionEntry: Codable, Sendable, Identifiable {
     var id: UUID = UUID()
     let plan: WorkoutPlan
     let message: String
@@ -492,7 +492,7 @@ struct WorkoutPlanSuggestionEntry: Codable, Sendable, Identifiable {
 // MARK: - Suggested Workout Entry
 
 /// Workout suggested by AI for user confirmation before starting
-struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
+nonisolated struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
     var id: UUID = UUID()
     let name: String
     let workoutType: String
@@ -501,7 +501,7 @@ struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
     let durationMinutes: Int
     let rationale: String
 
-    struct SuggestedExercise: Codable, Sendable, Identifiable {
+    nonisolated struct SuggestedExercise: Codable, Sendable, Identifiable {
         var id: UUID = UUID()
         let name: String
         let sets: Int
@@ -524,7 +524,7 @@ struct SuggestedWorkoutEntry: Codable, Sendable, Identifiable {
 // MARK: - Suggested Workout Log
 
 /// Completed workout log suggested by AI for user confirmation before saving
-struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
+nonisolated struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
     var id: UUID = UUID()
     let name: String?  // Trai-generated workout name
     let workoutType: String
@@ -532,12 +532,12 @@ struct SuggestedWorkoutLog: Codable, Sendable, Identifiable {
     let exercises: [LoggedExercise]
     let notes: String?
 
-    struct LoggedExercise: Codable, Sendable, Identifiable {
+    nonisolated struct LoggedExercise: Codable, Sendable, Identifiable {
         var id: UUID = UUID()
         let name: String
         let sets: [SetData]
 
-        struct SetData: Codable, Sendable, Identifiable {
+        nonisolated struct SetData: Codable, Sendable, Identifiable {
             var id: UUID = UUID()
             let reps: Int
             let weightKg: Double?

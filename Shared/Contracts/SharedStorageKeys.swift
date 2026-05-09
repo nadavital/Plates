@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SharedStorageKeys {
+nonisolated enum SharedStorageKeys {
     enum AppGroup {
         static let suiteName = "group.com.nadav.trai"
         static let widgetData = "widgetData"

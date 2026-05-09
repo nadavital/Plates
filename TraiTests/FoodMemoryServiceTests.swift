@@ -347,7 +347,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
 
         context.insert(entry)
         let entryID = entry.id
-        try service.resolvePendingEntries(limit: 5, modelContext: context)
+        _ = try service.resolvePendingEntries(limit: 5, modelContext: context)
 
         let memories = try context.fetch(FetchDescriptor<FoodMemory>())
         let refreshedEntries = try context.fetch(FetchDescriptor<FoodEntry>())
@@ -725,7 +725,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
 
         context.insert(entry)
         let entryID = entry.id
-        try service.resolvePendingEntries(limit: 5, modelContext: context)
+        _ = try service.resolvePendingEntries(limit: 5, modelContext: context)
 
         let memories = try context.fetch(FetchDescriptor<FoodMemory>())
         let refreshedEntry = try XCTUnwrap(
@@ -778,7 +778,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         context.insert(first)
         context.insert(second)
         let secondID = second.id
-        try service.resolvePendingEntries(limit: 5, modelContext: context)
+        _ = try service.resolvePendingEntries(limit: 5, modelContext: context)
 
         let memories = try context.fetch(FetchDescriptor<FoodMemory>())
         let refreshedSecond = try XCTUnwrap(
@@ -831,7 +831,7 @@ final class FoodMemoryModelStorageTests: XCTestCase {
         context.insert(salmonMeal)
         let chickenID = chickenMeal.id
         let salmonID = salmonMeal.id
-        try service.resolvePendingEntries(limit: 5, modelContext: context)
+        _ = try service.resolvePendingEntries(limit: 5, modelContext: context)
 
         let memories = try context.fetch(FetchDescriptor<FoodMemory>())
         let refreshedChicken = try XCTUnwrap(

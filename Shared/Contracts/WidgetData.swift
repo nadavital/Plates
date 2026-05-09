@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct WidgetData: Codable {
+nonisolated struct WidgetData: Codable {
     var caloriesConsumed: Int
     var calorieGoal: Int
     var proteinConsumed: Int
@@ -80,7 +80,7 @@ struct WidgetData: Codable {
     var calorieProgress: Double { progress(for: .calories) }
     var proteinProgress: Double { progress(for: .protein) }
 
-    enum Macro {
+    nonisolated enum Macro {
         case calories
         case protein
         case carbs
