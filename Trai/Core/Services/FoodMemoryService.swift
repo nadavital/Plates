@@ -78,7 +78,7 @@ nonisolated struct FoodMemoryService {
     }
 
     func resolveEntries(ids entryIDs: [UUID], modelContext: ModelContext) throws -> Int {
-        let uniqueEntryIDs = Array(Set(entryIDs))
+        let uniqueEntryIDs = orderedUniqueEntryIDs(entryIDs)
         guard !uniqueEntryIDs.isEmpty else { return 0 }
 
         var workingMemories = try modelContext.fetch(FetchDescriptor<FoodMemory>())
@@ -97,6 +97,11 @@ nonisolated struct FoodMemoryService {
         try modelContext.save()
         _ = try consolidateDuplicateMemories(modelContext: modelContext)
         return resolvedEntries
+    }
+
+    private func orderedUniqueEntryIDs(_ entryIDs: [UUID]) -> [UUID] {
+        var seen = Set<UUID>()
+        return entryIDs.filter { seen.insert($0).inserted }
     }
 
     func resolveEntry(id entryID: UUID, modelContext: ModelContext) throws -> Bool {

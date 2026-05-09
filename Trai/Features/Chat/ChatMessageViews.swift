@@ -470,7 +470,8 @@ struct SuggestionCard: View {
                 Spacer(minLength: 0)
             }
             .padding(14)
-            .frame(width: 160, height: 60)
+            .frame(width: 180, alignment: .leading)
+            .frame(minHeight: 60, alignment: .leading)
             .background(Color(.secondarySystemBackground))
             .clipShape(.rect(cornerRadius: 14))
         }
@@ -533,7 +534,7 @@ struct EmptyChatView: View {
             VStack(spacing: 8) {
                 Label("Messages won't be saved", systemImage: "clock.badge.xmark")
                 Label("Memories won't be created", systemImage: "lightbulb.slash")
-                Label("Chat history stays private", systemImage: "lock.fill")
+                Label("AI requests are still processed by Trai", systemImage: "network")
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)

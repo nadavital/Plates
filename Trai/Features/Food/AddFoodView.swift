@@ -16,6 +16,7 @@ struct AddFoodView: View {
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
+    @Query private var profiles: [UserProfile]
 
     @State private var aiService = AIService()
     @State private var presentedAccountSetupContext: AccountSetupContext?
@@ -394,9 +395,16 @@ struct AddFoodView: View {
         entry.setAcceptedSnapshot(acceptedSnapshot)
 
         modelContext.insert(entry)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            errorMessage = "We couldn’t save this food entry. Please try again."
+            HapticManager.error()
+            return
+        }
         WidgetDataProvider.shared.scheduleRefresh()
-        saveMacrosToHealthKit(entry)
+        FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profiles.first, healthKitService: healthKitService)
         dismiss()
     }
 
@@ -427,29 +435,17 @@ struct AddFoodView: View {
         entry.setAcceptedSnapshot(acceptedSnapshot)
 
         modelContext.insert(entry)
-        try? modelContext.save()
-        WidgetDataProvider.shared.scheduleRefresh()
-        saveMacrosToHealthKit(entry)
-        dismiss()
-    }
-
-    private func saveMacrosToHealthKit(_ entry: FoodEntry) {
-        guard let healthKitService else { return }
-        Task {
-            do {
-                try await healthKitService.saveFoodMacros(
-                    calories: entry.calories,
-                    proteinGrams: entry.proteinGrams,
-                    carbsGrams: entry.carbsGrams,
-                    fatGrams: entry.fatGrams,
-                    fiberGrams: entry.fiberGrams,
-                    sugarGrams: entry.sugarGrams,
-                    date: entry.loggedAt
-                )
-            } catch {
-                print("Failed to save macros to HealthKit: \(error)")
-            }
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            errorMessage = "We couldn’t save this food entry. Please try again."
+            HapticManager.error()
+            return
         }
+        WidgetDataProvider.shared.scheduleRefresh()
+        FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profiles.first, healthKitService: healthKitService)
+        dismiss()
     }
 }
 

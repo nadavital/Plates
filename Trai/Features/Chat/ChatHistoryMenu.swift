@@ -12,6 +12,7 @@ struct ChatHistoryMenu: View {
     let onSelectSession: (UUID) -> Void
     let onClearHistory: () -> Void
     let onNewChat: () -> Void
+    @State private var isShowingClearConfirmation = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -35,7 +36,7 @@ struct ChatHistoryMenu: View {
                     Divider()
 
                     Button("Clear All History", role: .destructive) {
-                        onClearHistory()
+                        isShowingClearConfirmation = true
                     }
                 }
             } label: {
@@ -45,6 +46,18 @@ struct ChatHistoryMenu: View {
             Button("New Chat", systemImage: "square.and.pencil") {
                 onNewChat()
             }
+        }
+        .confirmationDialog(
+            "Clear Chat History?",
+            isPresented: $isShowingClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear All History", role: .destructive) {
+                onClearHistory()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes all saved chats on this device.")
         }
     }
 

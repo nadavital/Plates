@@ -1055,6 +1055,10 @@ struct WorkoutGoalsOverviewSection: View {
         .onTapGesture {
             onGoalTap(insight.goal)
         }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            onGoalTap(insight.goal)
+        }
     }
 
     private func staleCheckInCard(_ goal: WorkoutGoal) -> some View {

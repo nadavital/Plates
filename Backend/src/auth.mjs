@@ -70,6 +70,28 @@ export function createAuthHelpers({
       const nextEmail = body.email ?? identity.email ?? null;
       const nextDisplayName = body.displayName ?? identity.display_name ?? null;
 
+      if (identity.status === 'deleted') {
+        const userID = createID('usr');
+        await db.prepare(`
+          INSERT INTO users (id, created_at, updated_at, status)
+          VALUES (?, ?, ?, ?)
+        `).run(userID, now, now, 'active');
+
+        await db.prepare(`
+          UPDATE auth_identities
+          SET user_id = ?, email = ?, display_name = ?, updated_at = ?
+          WHERE provider = ? AND provider_user_id = ?
+        `).run(userID, nextEmail, nextDisplayName, now, 'apple', body.appleUserID);
+
+        await ensureSubscription(userID, now);
+        await applyPendingSubscriptionGrantForEmail(userID, nextEmail, now);
+        return {
+          id: userID,
+          email: nextEmail,
+          displayName: nextDisplayName
+        };
+      }
+
       await db.prepare(`
         UPDATE auth_identities
         SET email = ?, display_name = ?, updated_at = ?
@@ -216,6 +238,13 @@ export function createAuthHelpers({
       throw new HttpError(401, {
         error: 'session_expired',
         message: 'Session has expired.'
+      });
+    }
+
+    if (row.status !== 'active') {
+      throw new HttpError(401, {
+        error: 'account_inactive',
+        message: 'This account is no longer active.'
       });
     }
 

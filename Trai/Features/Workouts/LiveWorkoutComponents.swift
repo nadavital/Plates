@@ -19,6 +19,7 @@ struct WorkoutTimerHeader: View {
     var showsWatchSyncButton: Bool = false
     var isWatchSyncing: Bool = false
     var onRetryWatchSync: (() -> Void)?
+    var watchConnectionHint: String?
 
     // Optional Apple Watch data - only shown when available
     var heartRate: Double?
@@ -76,6 +77,16 @@ struct WorkoutTimerHeader: View {
                     .buttonStyle(.plain)
                     .disabled(isWatchSyncing)
                 }
+            }
+
+            if showsWatchSyncButton,
+               let watchConnectionHint,
+               !watchConnectionHint.isEmpty {
+                Label(watchConnectionHint, systemImage: "applewatch")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Stats row - volume and optional watch data

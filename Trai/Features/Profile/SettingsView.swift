@@ -10,10 +10,15 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var profile: UserProfile
     @Environment(\.dismiss) private var dismiss
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(AppAccountService.self) private var appAccountService: AppAccountService?
     @State private var showPlanAdjustment = false
     @State private var showWorkoutPlanSetup = false
     @State private var showWorkoutPlanEdit = false
     @State private var pendingEnabledMacroReveal: MacroType?
+    @State private var presentedAccountSetupContext: AccountSetupContext?
+    @State private var isShowingDeleteAccountConfirmation = false
+    @State private var accountActionError: AccountActionError?
     @AppStorage("trai_coach_tone") private var coachToneRaw: String = TraiCoachTone.encouraging.rawValue
 
     var body: some View {
@@ -36,7 +41,7 @@ struct SettingsView: View {
                     TextField("cm", value: $profile.heightCm, format: .number)
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
+                        .frame(minWidth: 60, idealWidth: 72, maxWidth: 96)
                     Text("cm")
                         .foregroundStyle(.secondary)
                 }
@@ -48,7 +53,7 @@ struct SettingsView: View {
                     TextField("—", value: $profile.targetWeightKg, format: .number.precision(.fractionLength(1)))
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
+                        .frame(minWidth: 60, idealWidth: 72, maxWidth: 96)
                     Text(profile.usesMetricWeight ? "kg" : "lbs")
                         .foregroundStyle(.secondary)
                 }
@@ -81,6 +86,48 @@ struct SettingsView: View {
                 Text("Trai")
             } footer: {
                 Text("Trai guidance will adapt to this tone while still learning from your behavior.")
+            }
+
+            if let accountSessionService {
+                Section {
+                    if accountSessionService.isAuthenticated {
+                        LabeledContent {
+                            Text(accountSessionService.currentUserDisplayName)
+                                .multilineTextAlignment(.trailing)
+                        } label: {
+                            Label("Signed In", systemImage: "person.crop.circle.badge.checkmark")
+                        }
+
+                        Button {
+                            accountSessionService.signOut()
+                        } label: {
+                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+
+                        Button(role: .destructive) {
+                            isShowingDeleteAccountConfirmation = true
+                        } label: {
+                            Label(
+                                accountSessionService.isSyncingAccount ? "Deleting Account..." : "Delete Account",
+                                systemImage: "person.crop.circle.badge.xmark"
+                            )
+                        }
+                        .disabled(accountSessionService.isSyncingAccount)
+                    } else {
+                        Button {
+                            if let recommendedEnvironment = appAccountService?.recommendedBackendEnvironmentForRealAccountSignIn {
+                                appAccountService?.setBackendEnvironment(recommendedEnvironment)
+                            }
+                            presentedAccountSetupContext = .secureExistingData
+                        } label: {
+                            Label("Set Up Account", systemImage: "person.crop.circle.badge.plus")
+                        }
+                    }
+                } header: {
+                    Text("Account")
+                } footer: {
+                    Text("Deleting your account removes Trai backend account data and signs you out on this device. App Store subscriptions remain managed by Apple.")
+                }
             }
 
 #if DEBUG
@@ -198,7 +245,7 @@ struct SettingsView: View {
                         Text("lbs").tag(false)
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 110)
+                    .frame(minWidth: 110, idealWidth: 128, maxWidth: 160)
                 }
 
                 // Exercise weight units
@@ -210,7 +257,7 @@ struct SettingsView: View {
                         Text("lbs").tag(false)
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 110)
+                    .frame(minWidth: 110, idealWidth: 128, maxWidth: 160)
                 }
             } header: {
                 Text("Units")
@@ -268,6 +315,29 @@ struct SettingsView: View {
             PlanAdjustmentSheet(profile: profile)
                 .traiSheetBranding()
         }
+        .sheet(item: $presentedAccountSetupContext) { context in
+            AccountSetupView(context: context)
+                .traiSheetBranding()
+        }
+        .confirmationDialog(
+            "Delete Trai Account?",
+            isPresented: $isShowingDeleteAccountConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Account", role: .destructive) {
+                deleteAccount()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes your Trai backend account data and signs you out. It does not cancel App Store subscriptions.")
+        }
+        .alert(item: $accountActionError) { error in
+            Alert(
+                title: Text("Account Action Failed"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .alert(item: $pendingEnabledMacroReveal) { macro in
             Alert(
                 title: Text("\(macro.displayName) target ready"),
@@ -297,6 +367,22 @@ struct SettingsView: View {
         )
     }
 
+    private func deleteAccount() {
+        guard let accountSessionService else { return }
+        Task {
+            do {
+                try await accountSessionService.deleteAccount()
+            } catch {
+                accountActionError = AccountActionError(message: error.localizedDescription)
+            }
+        }
+    }
+
+}
+
+private struct AccountActionError: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 // MARK: - Macro Toggle Row

@@ -266,6 +266,7 @@ struct LiveWorkoutView: View {
                         onRetryWatchSync: {
                             viewModel.retryWatchSync()
                         },
+                        watchConnectionHint: viewModel.watchConnectionHint,
                         heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )
@@ -353,6 +354,7 @@ struct LiveWorkoutView: View {
                         onRetryWatchSync: {
                             viewModel.retryWatchSync()
                         },
+                        watchConnectionHint: viewModel.watchConnectionHint,
                         heartRate: viewModel.isWatchConnected ? viewModel.currentHeartRate : nil,
                         calories: viewModel.isWatchConnected ? viewModel.workoutCalories : nil
                     )

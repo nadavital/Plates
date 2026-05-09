@@ -1133,6 +1133,14 @@ struct WorkoutsView: View {
     }
 
     private func startWorkoutFromTemplate(_ template: WorkoutPlan.WorkoutTemplate) {
+        if let activeWorkout {
+            pendingTemplate = nil
+            pendingWorkout = activeWorkout
+            showingWorkoutSheet = true
+            HapticManager.selectionChanged()
+            return
+        }
+
         let workout = templateService.createStartWorkout(from: template)
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
@@ -1159,6 +1167,13 @@ struct WorkoutsView: View {
         type: LiveWorkout.WorkoutType = .strength,
         muscles: [LiveWorkout.MuscleGroup] = []
     ) {
+        if let activeWorkout {
+            pendingWorkout = activeWorkout
+            showingWorkoutSheet = true
+            HapticManager.selectionChanged()
+            return
+        }
+
         let workout = templateService.createCustomWorkout(
             name: name,
             type: type,
@@ -1203,6 +1218,7 @@ struct WorkoutsView: View {
     private func deleteWorkout(_ workout: WorkoutSession) {
         modelContext.delete(workout)
         try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
     }
 
     private func deleteLiveWorkout(_ workout: LiveWorkout) {
@@ -1224,6 +1240,7 @@ struct WorkoutsView: View {
 
         modelContext.delete(workout)
         try? modelContext.save()
+        WidgetDataProvider.shared.scheduleRefresh()
     }
 
     private func syncHealthKit() async {

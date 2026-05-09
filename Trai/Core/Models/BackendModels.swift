@@ -41,6 +41,16 @@ struct BackendSessionSnapshot: Codable, Equatable {
     var lastAuthenticatedAt: Date
 }
 
+struct BackendSessionTokens: Codable, Equatable {
+    var accessToken: String
+    var refreshToken: String?
+}
+
+struct DeleteAccountResponse: Codable, Equatable {
+    var ok: Bool
+    var deletedAt: Date?
+}
+
 struct RefreshSessionRequest: Codable, Equatable {
     var refreshToken: String
     var appAccountToken: String

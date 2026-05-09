@@ -154,6 +154,21 @@ final class TraiBackendClient {
         )
     }
 
+    func deleteAccount(
+        session: BackendSessionSnapshot,
+        accountSnapshot: AppAccountSnapshot
+    ) async throws -> DeleteAccountResponse {
+        try await send(
+            path: "/v1/account",
+            method: "DELETE",
+            body: Optional<String>.none,
+            environment: accountSnapshot.backendEnvironment,
+            customBackendBaseURL: accountSnapshot.customBackendBaseURL,
+            accessToken: session.accessToken,
+            appAccountToken: accountSnapshot.appAccountToken
+        )
+    }
+
     func syncStoreKitEntitlements(
         signedTransactions: [String],
         _ entitlements: [StoreKitEntitlementRecord],

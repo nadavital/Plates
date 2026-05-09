@@ -68,12 +68,8 @@ extension ChatView {
         entry.inputMethod = "chat"
         entry.ensureDisplayMetadata()
 
-        let logDate: Date
         if let loggedAt = meal.loggedAtDate {
             entry.loggedAt = loggedAt
-            logDate = loggedAt
-        } else {
-            logDate = entry.loggedAt
         }
         let acceptedSnapshot = FoodSnapshotBuilder().buildAcceptedSnapshot(
             from: meal,
@@ -84,21 +80,6 @@ extension ChatView {
 
         message.replaceSuggestedMeal(meal)
         modelContext.insert(entry)
-
-        // Sync to Apple Health if enabled
-        if profile?.syncFoodToHealthKit == true {
-            let healthKitCalories = meal.calories
-            let healthKitMealName = meal.name
-            Task {
-                do {
-                    guard let healthKitService else { return }
-                    try await healthKitService.saveDietaryEnergyAuthorized(Double(healthKitCalories), date: logDate)
-                    print("HealthKit: Saved \(healthKitCalories) calories for \(healthKitMealName)")
-                } catch {
-                    print("HealthKit: Failed to save dietary energy - \(error.localizedDescription)")
-                }
-            }
-        }
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.markMealLogged(mealId: meal.id, entryId: entry.id)
@@ -115,7 +96,17 @@ extension ChatView {
             ],
             saveImmediately: false
         )
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this meal. Please try again."
+            rebuildSessionMessages(preferLiveQueryData: true)
+            HapticManager.error()
+            return
+        }
+
+        FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profile, healthKitService: healthKitService)
         WidgetDataProvider.shared.scheduleRefresh()
         scheduleFoodMemoryResolution(for: entry.id)
         rebuildSessionMessages(preferLiveQueryData: true)

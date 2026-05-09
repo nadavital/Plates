@@ -265,12 +265,12 @@ final class BillingService {
             switch purchaseResult {
             case .success(let verificationResult):
                 let transaction = try verifiedTransaction(from: verificationResult)
-                if !usesBackendEntitlementSourceOfTruth {
-                    applyEntitlements(
-                        from: [transaction],
-                        sourceDescription: "storekit-purchase"
-                    )
-                }
+                applyEntitlements(
+                    from: [transaction],
+                    sourceDescription: usesBackendEntitlementSourceOfTruth
+                        ? "storekit-purchase-provisional"
+                        : "storekit-purchase"
+                )
                 await syncStoreKitTransactionsToBackend(
                     [transaction],
                     signedTransactions: [verificationResult.jwsRepresentation],
@@ -333,10 +333,12 @@ final class BillingService {
             lastStoreKitErrorMessage = "Some App Store entitlements could not be verified."
         }
 
-        if !usesBackendEntitlementSourceOfTruth {
+        if !usesBackendEntitlementSourceOfTruth || !verifiedTransactions.isEmpty {
             applyEntitlements(
                 from: verifiedTransactions,
-                sourceDescription: "storekit-current-entitlements"
+                sourceDescription: usesBackendEntitlementSourceOfTruth
+                    ? "storekit-current-entitlements-provisional"
+                    : "storekit-current-entitlements"
             )
         }
         await syncStoreKitTransactionsToBackend(

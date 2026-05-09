@@ -264,6 +264,32 @@ async function writeRows(firestore, sql, params) {
     return await setRow(firestore, 'app_store_notifications', id, { ...next, id });
   }
 
+  if (sql.startsWith('update auth_identities') && sql.includes('set user_id = ?')) {
+    const [userID, email, displayName, updatedAt, provider, providerUserID] = params;
+    const row = (await whereRows(firestore, 'auth_identities', [['provider', '==', provider]]))
+      .find((candidate) => candidate.provider_user_id === providerUserID);
+    if (!row) return result(0);
+    return await updateByID(firestore, 'auth_identities', row.id, {
+      user_id: userID,
+      email,
+      display_name: displayName,
+      updated_at: updatedAt
+    });
+  }
+  if (sql.startsWith('update auth_identities') && sql.includes('where user_id = ?')) {
+    const [updatedAt, userID] = params;
+    const rows = await whereRows(firestore, 'auth_identities', [['user_id', '==', userID]]);
+    const batch = firestore.batch();
+    for (const row of rows) {
+      batch.update(docRef(firestore, 'auth_identities', row.id), {
+        email: null,
+        display_name: null,
+        updated_at: updatedAt
+      });
+    }
+    await batch.commit();
+    return result(rows.length);
+  }
   if (sql.startsWith('update auth_identities')) {
     const [email, displayName, updatedAt, provider, providerUserID] = params;
     const row = (await whereRows(firestore, 'auth_identities', [['provider', '==', provider]]))
@@ -320,6 +346,20 @@ async function writeRows(firestore, sql, params) {
       revoked_at: null
     });
   }
+  if (sql.startsWith('update pending_subscription_grants') && sql.includes('applied_user_id = null')) {
+    const [updatedAt, userID] = params;
+    const rows = await whereRows(firestore, 'pending_subscription_grants', [['applied_user_id', '==', userID]]);
+    const batch = firestore.batch();
+    for (const row of rows) {
+      batch.update(docRef(firestore, 'pending_subscription_grants', row.id), {
+        applied_user_id: null,
+        applied_at: null,
+        updated_at: updatedAt
+      });
+    }
+    await batch.commit();
+    return result(rows.length);
+  }
   if (sql.startsWith('update pending_subscription_grants') && sql.includes('set applied_user_id')) {
     const [appliedUserID, appliedAt, updatedAt, id] = params;
     return await updateByID(firestore, 'pending_subscription_grants', id, {
@@ -327,6 +367,13 @@ async function writeRows(firestore, sql, params) {
       applied_at: appliedAt,
       updated_at: updatedAt
     });
+  }
+  if (sql.startsWith('update users')) {
+    const [status, updatedAt, id] = params;
+    return await updateByID(firestore, 'users', id, { status, updated_at: updatedAt });
+  }
+  if (sql.startsWith('delete from')) {
+    return await deleteRows(firestore, sql, params);
   }
 
   throw new Error(`Unsupported Firestore write SQL: ${sql}`);
@@ -526,6 +573,28 @@ async function updateFirstWhere(firestore, table, clauses, changes) {
   const row = await firstWhere(firestore, table, clauses);
   if (!row) return result(0);
   return await updateByID(firestore, table, row.id, changes);
+}
+
+async function deleteRows(firestore, sql, params) {
+  const match = sql.match(/^delete from ([a-z_]+)/);
+  const table = match?.[1];
+  if (!table || !TABLES.has(table)) {
+    throw new Error(`Unsupported Firestore delete SQL: ${sql}`);
+  }
+
+  let rows;
+  if (sql.includes('where user_id = ?')) {
+    rows = await whereRows(firestore, table, [['user_id', '==', params[0]]]);
+  } else {
+    throw new Error(`Unsupported Firestore delete SQL: ${sql}`);
+  }
+
+  const batch = firestore.batch();
+  for (const row of rows) {
+    batch.delete(docRef(firestore, table, row.id));
+  }
+  await batch.commit();
+  return result(rows.length);
 }
 
 function docRef(firestore, table, id) {

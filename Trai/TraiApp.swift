@@ -415,7 +415,9 @@ struct TraiApp: App {
             await MainActor.run {
                 let interval = PerformanceTrace.begin("startup_deferral", category: .launch)
                 // Keep non-critical cleanup and widget persistence off the first-frame path.
-                LiveActivityManager.shared.cancelAllActivities()
+                if !hasActiveLiveWorkoutInProgress() {
+                    LiveActivityManager.shared.cancelAllActivities()
+                }
                 processPendingWidgetFoodLogs()
                 startupCoordinator.markDeferredStartupWorkCompleted()
                 PerformanceTrace.event("startup_deferral_completed", category: .launch)

@@ -21,6 +21,7 @@ struct FoodCameraReviewView: View {
     let onAnalyze: () -> Void
     let onSave: (SuggestedFoodEntry, Bool) -> Void
     let onRefine: (String) -> Void
+    let onManualEntry: () -> Void
 
     @State private var isRefining = false
     @State private var refinementText = ""
@@ -61,7 +62,7 @@ struct FoodCameraReviewView: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 300)
+                        .frame(height: 240)
                         .clipShape(.rect(cornerRadius: 16))
                 } else {
                     VStack(spacing: 16) {
@@ -110,7 +111,11 @@ struct FoodCameraReviewView: View {
                         }
                     )
                 } else if let error = errorMessage {
-                    FoodCameraErrorCard(message: error, onRetry: onAnalyze)
+                    FoodCameraErrorCard(
+                        message: error,
+                        onRetry: onAnalyze,
+                        onManualEntry: onManualEntry
+                    )
                 }
 
                 // Refinement chat interface
@@ -159,7 +164,7 @@ struct FoodCameraReviewView: View {
             }
             .padding()
         }
-        .background(Color(.systemBackground))
+        .traiBackground(intensity: 0.45)
         .onChange(of: refinedSuggestion) { _, newValue in
             guard newValue != nil, isRefining else { return }
 
@@ -411,6 +416,7 @@ struct FoodRefinementInput: View {
 struct FoodCameraErrorCard: View {
     let message: String
     let onRetry: () -> Void
+    let onManualEntry: () -> Void
 
     var body: some View {
         VStack(spacing: 12) {
@@ -423,8 +429,13 @@ struct FoodCameraErrorCard: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            Button("Try Again", action: onRetry)
-                .buttonStyle(.traiPrimary())
+            HStack(spacing: 10) {
+                Button("Try Again", action: onRetry)
+                    .buttonStyle(.traiPrimary())
+
+                Button("Log Manually", action: onManualEntry)
+                    .buttonStyle(.traiSecondary())
+            }
         }
         .frame(maxWidth: .infinity)
         .traiCard()

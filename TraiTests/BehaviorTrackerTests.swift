@@ -44,3 +44,81 @@ final class BehaviorTrackerTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class FoodHealthKitSyncPolicyTests: XCTestCase {
+    func testFoodSyncRequiresExplicitEnabledProfile() {
+        XCTAssertFalse(FoodHealthKitSyncPolicy.shouldSyncFood(profile: nil))
+
+        let profile = UserProfile()
+        profile.syncFoodToHealthKit = false
+        XCTAssertFalse(FoodHealthKitSyncPolicy.shouldSyncFood(profile: profile))
+
+        profile.syncFoodToHealthKit = true
+        XCTAssertTrue(FoodHealthKitSyncPolicy.shouldSyncFood(profile: profile))
+    }
+
+    func testFoodSyncUsesFirstProfileFromQueryResults() {
+        let disabledProfile = UserProfile()
+        disabledProfile.syncFoodToHealthKit = false
+
+        let enabledProfile = UserProfile()
+        enabledProfile.syncFoodToHealthKit = true
+
+        XCTAssertFalse(FoodHealthKitSyncPolicy.shouldSyncFood(profiles: [disabledProfile, enabledProfile]))
+        XCTAssertTrue(FoodHealthKitSyncPolicy.shouldSyncFood(profiles: [enabledProfile, disabledProfile]))
+    }
+}
+
+@MainActor
+final class AccountSessionTokenPersistenceTests: XCTestCase {
+    func testLegacyDefaultsSessionMigratesSecretsToTokenStore() throws {
+        let suiteName = "AccountSessionTokenPersistenceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let tokenStore = InMemorySessionTokenStore()
+        let legacySnapshot = BackendSessionSnapshot(
+            userID: "usr_test",
+            identityProvider: .apple,
+            email: "user@example.com",
+            displayName: "User",
+            accessToken: "access-secret",
+            refreshToken: "refresh-secret",
+            expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
+            lastAuthenticatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        defaults.set(try JSONEncoder().encode(legacySnapshot), forKey: "account.backendSessionSnapshot.v1")
+
+        let migrated = AccountSessionService.loadPersistedSessionSnapshot(defaults: defaults, tokenStore: tokenStore)
+        AccountSessionService.persistSessionSnapshot(
+            migrated.snapshot,
+            authState: .authenticated,
+            defaults: defaults,
+            tokenStore: tokenStore
+        )
+
+        XCTAssertEqual(migrated.snapshot?.accessToken, "access-secret")
+        XCTAssertTrue(migrated.needsRewrite)
+        XCTAssertEqual(tokenStore.loadTokens(for: "usr_test")?.refreshToken, "refresh-secret")
+        let persistedData = try XCTUnwrap(defaults.data(forKey: "account.backendSessionSnapshot.v1"))
+        let persistedString = String(data: persistedData, encoding: .utf8) ?? ""
+        XCTAssertFalse(persistedString.contains("access-secret"))
+        XCTAssertFalse(persistedString.contains("refresh-secret"))
+    }
+}
+
+private final class InMemorySessionTokenStore: SessionTokenStoring {
+    private var tokensByUserID: [String: BackendSessionTokens] = [:]
+
+    func loadTokens(for userID: String) -> BackendSessionTokens? {
+        tokensByUserID[userID]
+    }
+
+    func saveTokens(_ tokens: BackendSessionTokens, for userID: String) {
+        tokensByUserID[userID] = tokens
+    }
+
+    func deleteTokens(for userID: String) {
+        tokensByUserID.removeValue(forKey: userID)
+    }
+}

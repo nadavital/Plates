@@ -19,6 +19,8 @@ struct AllWorkoutsSheet: View {
     let onDeleteLiveWorkout: (LiveWorkout) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var pendingWorkoutDelete: WorkoutSession?
+    @State private var pendingLiveWorkoutDelete: LiveWorkout?
 
     private var allDates: [Date] {
         let sessionDates = Set(workoutsByDate.map { $0.date })
@@ -45,9 +47,9 @@ struct AllWorkoutsSheet: View {
                                 onLiveWorkoutTap(workout)
                                 dismiss()
                             }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
-                                    onDeleteLiveWorkout(workout)
+                                    pendingLiveWorkoutDelete = workout
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
@@ -60,9 +62,9 @@ struct AllWorkoutsSheet: View {
                                 onWorkoutTap(workout)
                                 dismiss()
                             }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
-                                    onDelete(workout)
+                                    pendingWorkoutDelete = workout
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
@@ -86,7 +88,40 @@ struct AllWorkoutsSheet: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Delete Workout?",
+            isPresented: isShowingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Workout", role: .destructive) {
+                if let pendingLiveWorkoutDelete {
+                    onDeleteLiveWorkout(pendingLiveWorkoutDelete)
+                } else if let pendingWorkoutDelete {
+                    onDelete(pendingWorkoutDelete)
+                }
+                pendingLiveWorkoutDelete = nil
+                pendingWorkoutDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingLiveWorkoutDelete = nil
+                pendingWorkoutDelete = nil
+            }
+        } message: {
+            Text("This removes the workout from your history.")
+        }
         .traiSheetBranding()
+    }
+
+    private var isShowingDeleteConfirmation: Binding<Bool> {
+        Binding(
+            get: { pendingWorkoutDelete != nil || pendingLiveWorkoutDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingWorkoutDelete = nil
+                    pendingLiveWorkoutDelete = nil
+                }
+            }
+        )
     }
 }
 

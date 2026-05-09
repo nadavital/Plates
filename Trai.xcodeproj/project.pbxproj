@@ -296,6 +296,7 @@
 			buildConfigurationList = 507B712D2EFDE03F00DE636E /* Build configuration list for PBXNativeTarget "Trai" */;
 			buildPhases = (
 				507B711E2EFDE03E00DE636E /* Sources */,
+				A7C0D0013E00000100C0D001 /* Check Source Tree Secrets */,
 				507B711F2EFDE03E00DE636E /* Frameworks */,
 				507B71202EFDE03E00DE636E /* Resources */,
 				50550A8C2F2067D100068DCD /* Embed Foundation Extensions */,
@@ -393,6 +394,29 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A7C0D0013E00000100C0D001 /* Check Source Tree Secrets */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/check_no_source_tree_secrets.sh",
+			);
+			name = "Check Source Tree Secrets";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh \"$SRCROOT/scripts/check_no_source_tree_secrets.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		50550A732F2067D000068DCD /* Resources */ = {
@@ -701,8 +725,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiAppInfo.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trai needs camera access to take photos of your food for AI analysis";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads your health data to track workouts, weight, and body composition";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves your weight and nutrition data to Apple Health";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads activity, workouts, heart rate, weight, and body composition data to personalize your fitness and nutrition tracking.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves workouts, active energy, nutrition, and weight data to Apple Health when you choose to sync.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Trai needs photo library access to select food photos for AI analysis";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -740,8 +764,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiAppInfo.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trai needs camera access to take photos of your food for AI analysis";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads your health data to track workouts, weight, and body composition";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves your weight and nutrition data to Apple Health";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads activity, workouts, heart rate, weight, and body composition data to personalize your fitness and nutrition tracking.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves workouts, active energy, nutrition, and weight data to Apple Health when you choose to sync.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Trai needs photo library access to select food photos for AI analysis";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

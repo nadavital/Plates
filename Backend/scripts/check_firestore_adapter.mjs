@@ -199,6 +199,74 @@ const owner = await db.prepare(`
 `).get('orig_1');
 assert.equal(owner.user_id, 'usr_1');
 
+await db.prepare(`
+  UPDATE auth_identities
+  SET email = NULL, display_name = NULL, updated_at = ?
+  WHERE user_id = ?
+`).run('2026-05-04T00:00:00.000Z', 'usr_1');
+
+const scrubbedIdentity = await db.prepare(`
+  SELECT users.id, users.status, auth_identities.email, auth_identities.display_name
+  FROM auth_identities
+  JOIN users ON users.id = auth_identities.user_id
+  WHERE auth_identities.provider = ? AND auth_identities.provider_user_id = ?
+`).get('apple', 'apple-user-1');
+assert.equal(scrubbedIdentity.email, null);
+assert.equal(scrubbedIdentity.display_name, null);
+
+await db.prepare(`
+  DELETE FROM sessions
+  WHERE user_id = ?
+`).run('usr_1');
+
+const deletedSession = await db.prepare(`
+  SELECT
+    sessions.id,
+    sessions.user_id,
+    sessions.installation_id,
+    sessions.app_account_token,
+    sessions.expires_at,
+    users.status
+  FROM sessions
+  JOIN users ON users.id = sessions.user_id
+  WHERE sessions.access_token_hash = ?
+`).get('access_hash_1');
+assert.equal(deletedSession, undefined);
+
+await db.prepare(`
+  UPDATE users
+  SET status = ?, updated_at = ?
+  WHERE id = ?
+`).run('deleted', '2026-05-04T00:00:00.000Z', 'usr_1');
+
+const deletedIdentity = await db.prepare(`
+  SELECT users.id, users.status, auth_identities.email, auth_identities.display_name
+  FROM auth_identities
+  JOIN users ON users.id = auth_identities.user_id
+  WHERE auth_identities.provider = ? AND auth_identities.provider_user_id = ?
+`).get('apple', 'apple-user-1');
+assert.equal(deletedIdentity.status, 'deleted');
+
+await db.prepare(`
+  INSERT INTO users (id, created_at, updated_at, status)
+  VALUES (?, ?, ?, ?)
+`).run('usr_2', '2026-05-04T00:00:00.000Z', '2026-05-04T00:00:00.000Z', 'active');
+
+await db.prepare(`
+  UPDATE auth_identities
+  SET user_id = ?, email = ?, display_name = ?, updated_at = ?
+  WHERE provider = ? AND provider_user_id = ?
+`).run('usr_2', 'two@example.com', 'Two', '2026-05-04T00:01:00.000Z', 'apple', 'apple-user-1');
+
+const reattachedIdentity = await db.prepare(`
+  SELECT users.id, users.status, auth_identities.email, auth_identities.display_name
+  FROM auth_identities
+  JOIN users ON users.id = auth_identities.user_id
+  WHERE auth_identities.provider = ? AND auth_identities.provider_user_id = ?
+`).get('apple', 'apple-user-1');
+assert.equal(reattachedIdentity.id, 'usr_2');
+assert.equal(reattachedIdentity.email, 'two@example.com');
+
 console.log('Firestore adapter smoke check passed.');
 }
 
@@ -216,6 +284,7 @@ class FakeFirestore {
     return {
       set: (ref, value) => operations.push(() => ref.set(value)),
       update: (ref, value) => operations.push(() => ref.update(value)),
+      delete: (ref) => operations.push(() => ref.delete()),
       commit: async () => {
         for (const operation of operations) await operation();
       }
@@ -284,6 +353,10 @@ class FakeDocRef {
     const row = this.firestore.table(this.tableName).get(this.id);
     if (!row) throw new Error(`Missing fake document ${this.tableName}/${this.id}`);
     this.firestore.table(this.tableName).set(this.id, { ...row, ...value });
+  }
+
+  async delete() {
+    this.firestore.table(this.tableName).delete(this.id);
   }
 }
 

@@ -1375,6 +1375,7 @@ final class LiveWorkoutViewModel {
             object: nil,
             userInfo: ["workoutId": workout.id]
         )
+        WidgetDataProvider.shared.scheduleRefresh()
 
         if let modelContext {
             BehaviorTracker(modelContext: modelContext).record(

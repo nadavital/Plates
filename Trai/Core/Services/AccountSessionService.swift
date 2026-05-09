@@ -22,6 +22,7 @@ final class AccountSessionService {
     private let appAccountService: AppAccountService
     private let billingService: BillingService
     private let backendClient: TraiBackendClient
+    private let tokenStore: SessionTokenStoring
     @ObservationIgnored
     private var pendingAppleNonce: String?
     @ObservationIgnored
@@ -32,24 +33,26 @@ final class AccountSessionService {
     private(set) var isSyncingAccount = false
     private(set) var lastErrorMessage: String?
 
-    private init(
+    init(
         defaults: UserDefaults = .standard,
         appAccountService: AppAccountService? = nil,
         billingService: BillingService? = nil,
-        backendClient: TraiBackendClient? = nil
+        backendClient: TraiBackendClient? = nil,
+        tokenStore: SessionTokenStoring? = nil
     ) {
         self.defaults = defaults
         self.appAccountService = appAccountService ?? .shared
         self.billingService = billingService ?? .shared
         self.backendClient = backendClient ?? .shared
+        self.tokenStore = tokenStore ?? KeychainSessionTokenStore()
 
-        let initialSessionSnapshot: BackendSessionSnapshot?
-        if let data = defaults.data(forKey: DefaultsKey.sessionSnapshot),
-           let snapshot = try? decoder.decode(BackendSessionSnapshot.self, from: data) {
-            initialSessionSnapshot = snapshot
-        } else {
-            initialSessionSnapshot = nil
-        }
+        let persistedSession = Self.loadPersistedSessionSnapshot(
+            defaults: defaults,
+            decoder: decoder,
+            tokenStore: self.tokenStore
+        )
+        let initialSessionSnapshot = persistedSession.snapshot
+        let needsSessionSnapshotRewrite = persistedSession.needsRewrite
         self.sessionSnapshot = initialSessionSnapshot
 
         if let rawValue = defaults.string(forKey: DefaultsKey.authState),
@@ -59,6 +62,10 @@ final class AccountSessionService {
             self.authState = initialSessionSnapshot == nil ? .anonymous : .authenticated
         }
         self.pendingAppleNonce = defaults.string(forKey: DefaultsKey.pendingAppleNonce)
+
+        if needsSessionSnapshotRewrite {
+            persist()
+        }
     }
 
     var isAuthenticated: Bool {
@@ -308,6 +315,9 @@ final class AccountSessionService {
 
     func signOut() {
         invalidatePendingSessionOperations()
+        if let userID = sessionSnapshot?.userID {
+            tokenStore.deleteTokens(for: userID)
+        }
         sessionSnapshot = nil
         authState = .anonymous
         lastErrorMessage = nil
@@ -324,13 +334,37 @@ final class AccountSessionService {
         persist()
     }
 
-    private func persist() {
-        defaults.set(authState.rawValue, forKey: DefaultsKey.authState)
-        if let sessionSnapshot, let data = try? encoder.encode(sessionSnapshot) {
-            defaults.set(data, forKey: DefaultsKey.sessionSnapshot)
-        } else {
-            defaults.removeObject(forKey: DefaultsKey.sessionSnapshot)
+    func deleteAccount() async throws {
+        guard let sessionSnapshot else {
+            signOut()
+            return
         }
+
+        authState = .refreshing
+        isSyncingAccount = true
+        lastErrorMessage = nil
+        defer { isSyncingAccount = false }
+
+        do {
+            _ = try await backendClient.deleteAccount(
+                session: sessionSnapshot,
+                accountSnapshot: appAccountService.currentSnapshot
+            )
+            signOut()
+        } catch {
+            restoreSessionBackedAuthState(after: error)
+            throw error
+        }
+    }
+
+    private func persist() {
+        Self.persistSessionSnapshot(
+            sessionSnapshot,
+            authState: authState,
+            defaults: defaults,
+            encoder: encoder,
+            tokenStore: tokenStore
+        )
     }
 
     private func setPendingAppleNonce(_ nonce: String) {
@@ -370,6 +404,10 @@ final class AccountSessionService {
            existingSession.userID == resolvedSession.userID {
             resolvedSession.refreshToken = existingSession.refreshToken
         }
+        if let existingSession = sessionSnapshot,
+           existingSession.userID != resolvedSession.userID {
+            tokenStore.deleteTokens(for: existingSession.userID)
+        }
         sessionSnapshot = resolvedSession
         billingService.applyRemotePayload(bootstrap.billing)
     }
@@ -385,6 +423,88 @@ final class AccountSessionService {
         guard generation == sessionOperationGeneration else { return false }
         guard let accessToken else { return true }
         return sessionSnapshot?.accessToken == accessToken
+    }
+
+    static func loadPersistedSessionSnapshot(
+        defaults: UserDefaults,
+        decoder: JSONDecoder = JSONDecoder(),
+        tokenStore: SessionTokenStoring
+    ) -> (snapshot: BackendSessionSnapshot?, needsRewrite: Bool) {
+        guard let data = defaults.data(forKey: DefaultsKey.sessionSnapshot) else {
+            return (nil, false)
+        }
+
+        if let snapshot = try? decoder.decode(BackendSessionSnapshot.self, from: data) {
+            tokenStore.saveTokens(
+                BackendSessionTokens(accessToken: snapshot.accessToken, refreshToken: snapshot.refreshToken),
+                for: snapshot.userID
+            )
+            return (snapshot, true)
+        }
+
+        if let metadata = try? decoder.decode(PersistedBackendSessionMetadata.self, from: data),
+           let tokens = tokenStore.loadTokens(for: metadata.userID) {
+            return (metadata.sessionSnapshot(applying: tokens), false)
+        }
+
+        return (nil, false)
+    }
+
+    static func persistSessionSnapshot(
+        _ sessionSnapshot: BackendSessionSnapshot?,
+        authState: AccountAuthState,
+        defaults: UserDefaults,
+        encoder: JSONEncoder = JSONEncoder(),
+        tokenStore: SessionTokenStoring
+    ) {
+        defaults.set(authState.rawValue, forKey: DefaultsKey.authState)
+        if let sessionSnapshot {
+            tokenStore.saveTokens(
+                BackendSessionTokens(
+                    accessToken: sessionSnapshot.accessToken,
+                    refreshToken: sessionSnapshot.refreshToken
+                ),
+                for: sessionSnapshot.userID
+            )
+        }
+
+        if let sessionSnapshot,
+           let data = try? encoder.encode(PersistedBackendSessionMetadata(sessionSnapshot)) {
+            defaults.set(data, forKey: DefaultsKey.sessionSnapshot)
+        } else {
+            defaults.removeObject(forKey: DefaultsKey.sessionSnapshot)
+        }
+    }
+}
+
+private struct PersistedBackendSessionMetadata: Codable, Equatable {
+    var userID: String
+    var identityProvider: IdentityProvider
+    var email: String?
+    var displayName: String?
+    var expiresAt: Date?
+    var lastAuthenticatedAt: Date
+
+    init(_ snapshot: BackendSessionSnapshot) {
+        userID = snapshot.userID
+        identityProvider = snapshot.identityProvider
+        email = snapshot.email
+        displayName = snapshot.displayName
+        expiresAt = snapshot.expiresAt
+        lastAuthenticatedAt = snapshot.lastAuthenticatedAt
+    }
+
+    func sessionSnapshot(applying tokens: BackendSessionTokens) -> BackendSessionSnapshot {
+        BackendSessionSnapshot(
+            userID: userID,
+            identityProvider: identityProvider,
+            email: email,
+            displayName: displayName,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresAt: expiresAt,
+            lastAuthenticatedAt: lastAuthenticatedAt
+        )
     }
 }
 

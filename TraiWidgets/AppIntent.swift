@@ -30,7 +30,10 @@ struct OpenURLIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        // The URL will be handled by the app when it opens
+        if let route = AppRoute(url: url),
+           let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName) {
+            PendingAppRouteStore.setPendingRoute(route, defaults: defaults)
+        }
         return .result()
     }
 }
@@ -42,6 +45,7 @@ struct OpenURLIntent: AppIntent {
 struct AddSetIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Add Set"
     static var description = IntentDescription("Add a set to the current exercise")
+    static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
         // Use App Groups UserDefaults to signal the action
@@ -55,6 +59,7 @@ struct AddSetIntent: LiveActivityIntent {
 struct TogglePauseIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Toggle Pause"
     static var description = IntentDescription("Pause or resume the current workout")
+    static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
         // Use App Groups UserDefaults to signal the action

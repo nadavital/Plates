@@ -42,6 +42,7 @@ struct FoodCameraView: View {
     @State private var navigationPath: [FoodCameraRoute] = []
     @State private var showingManualEntry = false
     @State private var pendingManualEntry: FoodEntry?
+    @State private var foodSaveErrorMessage: String?
     @State private var didSeedAppStoreScreenshotReview = false
 
     private var enabledMacros: Set<MacroType> {
@@ -81,6 +82,7 @@ struct FoodCameraView: View {
                             FoodLogReviewStepView(
                                 draft: draftBinding,
                                 enabledMacros: enabledMacros,
+                                onManualEntry: { showingManualEntry = true },
                                 onFinish: { dismiss() },
                                 targetDate: targetDate
                             )
@@ -118,6 +120,11 @@ struct FoodCameraView: View {
             if newPath.isEmpty, draft != nil {
                 draft = nil
             }
+        }
+        .alert("Couldn’t Save Food", isPresented: saveErrorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(foodSaveErrorMessage ?? "Please try again.")
         }
         .tint(TraiColors.brandAccent)
         .accentColor(TraiColors.brandAccent)
@@ -179,13 +186,31 @@ struct FoodCameraView: View {
             entry.setAcceptedSnapshot(acceptedSnapshot)
         }
         modelContext.insert(entry)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            foodSaveErrorMessage = error.localizedDescription
+            HapticManager.error()
+            return
+        }
         WidgetDataProvider.shared.scheduleRefresh()
         scheduleFoodMemoryResolution(for: entry.id)
         recordFoodLogBehavior(entry: entry, source: "manual_entry", modelContext: modelContext)
-        saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
+        FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profiles.first, healthKitService: healthKitService)
         HapticManager.success()
         dismiss()
+    }
+
+    private var saveErrorBinding: Binding<Bool> {
+        Binding(
+            get: { foodSaveErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    foodSaveErrorMessage = nil
+                }
+            }
+        )
     }
 }
 
@@ -451,6 +476,7 @@ private struct FoodLogCaptureStepView: View {
 private struct FoodLogReviewStepView: View {
     @Binding var draft: FoodLogDraft
     let enabledMacros: Set<MacroType>
+    let onManualEntry: () -> Void
     let onFinish: () -> Void
     var targetDate: Date?
 
@@ -464,6 +490,7 @@ private struct FoodLogReviewStepView: View {
     @State private var analysisErrorMessage: String?
     @State private var isLoadingRefinement = false
     @State private var refinementErrorMessage: String?
+    @Query private var profiles: [UserProfile]
 
     var body: some View {
         FoodCameraReviewView(
@@ -479,7 +506,8 @@ private struct FoodLogReviewStepView: View {
             isLoadingRefinement: isLoadingRefinement,
             onAnalyze: analyzeFood,
             onSave: saveEntry,
-            onRefine: refineFood
+            onRefine: refineFood,
+            onManualEntry: onManualEntry
         )
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -620,7 +648,14 @@ private struct FoodLogReviewStepView: View {
 
         assignFoodSession(draft.sessionId, to: entry, modelContext: modelContext)
         modelContext.insert(entry)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            analysisErrorMessage = "We couldn’t save this food entry. Please try again."
+            HapticManager.error()
+            return
+        }
         WidgetDataProvider.shared.scheduleRefresh()
         scheduleFoodMemoryResolution(for: entry.id)
 
@@ -628,7 +663,7 @@ private struct FoodLogReviewStepView: View {
             ? "refined_\(draft.inputSource.behaviorSource)"
             : draft.inputSource.behaviorSource
         recordFoodLogBehavior(entry: entry, source: behaviorSource, modelContext: modelContext)
-        saveFoodMacrosToHealthKit(entry, healthKitService: healthKitService)
+        FoodHealthKitMacroSync.saveIfAllowed(entry, profile: profiles.first, healthKitService: healthKitService)
         reconcileShownSuggestionsAfterSave(
             draft.shownSuggestionIDs,
             preferredMemoryID: draft.memorySuggestionID,
@@ -698,46 +733,6 @@ private func combineDay(_ day: Date, withTimeFrom timeSource: Date) -> Date {
     dateComponents.minute = timeComponents.minute
     dateComponents.second = timeComponents.second
     return calendar.date(from: dateComponents) ?? day
-}
-
-private func saveFoodMacrosToHealthKit(_ entry: FoodEntry, healthKitService: HealthKitService?) {
-    guard let healthKitService else { return }
-    let snapshot = FoodMacroSaveSnapshot(entry: entry)
-    Task {
-        do {
-            try await healthKitService.saveFoodMacros(
-                calories: snapshot.calories,
-                proteinGrams: snapshot.proteinGrams,
-                carbsGrams: snapshot.carbsGrams,
-                fatGrams: snapshot.fatGrams,
-                fiberGrams: snapshot.fiberGrams,
-                sugarGrams: snapshot.sugarGrams,
-                date: snapshot.loggedAt
-            )
-        } catch {
-            print("Failed to save macros to HealthKit: \(error)")
-        }
-    }
-}
-
-private struct FoodMacroSaveSnapshot: Sendable {
-    let calories: Int
-    let proteinGrams: Double
-    let carbsGrams: Double
-    let fatGrams: Double
-    let fiberGrams: Double?
-    let sugarGrams: Double?
-    let loggedAt: Date
-
-    init(entry: FoodEntry) {
-        calories = entry.calories
-        proteinGrams = entry.proteinGrams
-        carbsGrams = entry.carbsGrams
-        fatGrams = entry.fatGrams
-        fiberGrams = entry.fiberGrams
-        sugarGrams = entry.sugarGrams
-        loggedAt = entry.loggedAt
-    }
 }
 
 private func recordFoodLogBehavior(entry: FoodEntry, source: String, modelContext: ModelContext) {

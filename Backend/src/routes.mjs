@@ -115,6 +115,10 @@ export function createRouteHandlers({
       return handleBootstrap(req, res);
     }
 
+    if (req.method === 'DELETE' && url.pathname === '/v1/account') {
+      return handleDeleteAccount(req, res);
+    }
+
     if (req.method === 'GET' && url.pathname === '/v1/billing/status') {
       return handleBillingStatus(req, res);
     }
@@ -319,6 +323,13 @@ export function createRouteHandlers({
       });
     }
 
+    if (row.status !== 'active') {
+      throw new HttpError(401, {
+        error: 'account_inactive',
+        message: 'This account is no longer active.'
+      });
+    }
+
     const now = isoNow();
     const tokens = await rotateSessionTokens(row.id, now);
     const identity = await db.prepare(`
@@ -364,6 +375,78 @@ export function createRouteHandlers({
       session: buildSessionSnapshot(auth.session, auth.user, now, auth.accessToken),
       billing
     });
+  }
+
+  async function handleDeleteAccount(req, res) {
+    const auth = await requireSession(req);
+    const now = isoNow();
+
+    await deleteAccountData(auth.user.id, now);
+
+    sendJson(res, 200, {
+      ok: true,
+      deletedAt: now
+    });
+  }
+
+  async function deleteAccountData(userID, now) {
+    await db.prepare(`
+      DELETE FROM sessions
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      DELETE FROM usage_ledger
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      DELETE FROM ai_requests
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      DELETE FROM quota_periods
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      DELETE FROM admin_adjustments
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      DELETE FROM subscription_overrides
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      UPDATE pending_subscription_grants
+      SET applied_user_id = NULL, applied_at = NULL, updated_at = ?
+      WHERE applied_user_id = ?
+    `).run(now, userID);
+
+    await db.prepare(`
+      DELETE FROM storekit_transactions
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      DELETE FROM subscriptions
+      WHERE user_id = ?
+    `).run(userID);
+
+    await db.prepare(`
+      UPDATE auth_identities
+      SET email = NULL, display_name = NULL, updated_at = ?
+      WHERE user_id = ?
+    `).run(now, userID);
+
+    await db.prepare(`
+      UPDATE users
+      SET status = ?, updated_at = ?
+      WHERE id = ?
+    `).run('deleted', now, userID);
   }
 
   async function handleBillingStatus(req, res) {

@@ -80,9 +80,14 @@ enum PendingAppRouteStore {
     }
 
     static func consumePendingRoute(defaults: UserDefaults = .standard) -> AppRoute? {
-        if let routeString = defaults.string(forKey: SharedStorageKeys.AppRouting.pendingRoute) {
-            defaults.removeObject(forKey: SharedStorageKeys.AppRouting.pendingRoute)
-            return AppRoute(urlString: routeString)
+        if let route = consumePendingRouteValue(defaults: defaults) {
+            return route
+        }
+
+        if defaults === UserDefaults.standard,
+           let appGroupDefaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName),
+           let route = consumePendingRouteValue(defaults: appGroupDefaults) {
+            return route
         }
 
         // Backwards compatibility for pre-route payload versions.
@@ -97,5 +102,13 @@ enum PendingAppRouteStore {
         }
 
         return nil
+    }
+
+    private static func consumePendingRouteValue(defaults: UserDefaults) -> AppRoute? {
+        guard let routeString = defaults.string(forKey: SharedStorageKeys.AppRouting.pendingRoute) else {
+            return nil
+        }
+        defaults.removeObject(forKey: SharedStorageKeys.AppRouting.pendingRoute)
+        return AppRoute(urlString: routeString)
     }
 }

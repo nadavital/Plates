@@ -321,7 +321,7 @@ struct FoodCameraSuggestionChip: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .frame(width: 220, alignment: .leading)
-            .frame(height: 108, alignment: .topLeading)
+            .frame(minHeight: 108, alignment: .topLeading)
             .glassEffect(
                 .regular.interactive(),
                 in: .rect(cornerRadius: 22)

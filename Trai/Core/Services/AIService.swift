@@ -53,7 +53,12 @@ final class AIService {
     // MARK: - Debug Logging
 
     func log(_ message: String, type: OSLogType = .debug) {
-        logger.log(level: type, "\(message)")
+        if debugLoggingEnabled {
+            logger.log(level: type, "\(message)")
+        } else if type == .error || type == .fault {
+            logger.log(level: type, "AI operation failed. Enable debug logging for details.")
+        }
+
         if debugLoggingEnabled {
             let prefix: String
             switch type {
@@ -67,6 +72,7 @@ final class AIService {
     }
 
     func logPrompt(_ prompt: String) {
+        guard debugLoggingEnabled else { return }
         log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", type: .info)
         log("📤 PROMPT SENT:", type: .info)
         log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", type: .info)
@@ -75,6 +81,7 @@ final class AIService {
     }
 
     func logResponse(_ response: String) {
+        guard debugLoggingEnabled else { return }
         log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", type: .info)
         log("📥 RESPONSE RECEIVED:", type: .info)
         log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", type: .info)

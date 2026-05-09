@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node --watch src/server.mjs",
     "start": "node src/server.mjs",
+    "test": "npm run verify:firestore-adapter && npm run verify:apple",
     "verify:firestore-adapter": "node scripts/check_firestore_adapter.mjs",
     "verify:apple": "node scripts/check_apple_verification.mjs"
   }
