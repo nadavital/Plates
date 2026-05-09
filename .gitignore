@@ -24,3 +24,16 @@ Backend/node_modules/
 Backend/data/*.sqlite
 Backend/.env
 Backend/.env.local
+
+# Local agent/cloud credentials and logs
+.agent/gcloud-config/
+.agent/**/logs/
+.agent/**/*.log
+.agent/**/access_tokens*.db
+.agent/**/credentials*.db
+.agent/**/legacy_credentials/
+.agent/**/adc.json
+.agent/**/.boto
+.agent/**/*.pem
+.agent/**/*.p8
+.agent/**/*.key

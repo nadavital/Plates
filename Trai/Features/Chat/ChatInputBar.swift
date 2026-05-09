@@ -52,6 +52,7 @@ struct ChatInputBar: View {
                 .glassEffect(.regular.tint(.red).interactive(), in: .circle)
                 .opacity(isLoading ? 0.5 : 1)
                 .disabled(isLoading)
+                .accessibilityLabel("Add attachment")
 
                 composerField
             }
@@ -79,6 +80,7 @@ struct ChatInputBar: View {
                                 .frame(width: 60, height: 60)
                                 .clipShape(.rect(cornerRadius: 8))
                         }
+                        .accessibilityLabel("Preview attached image")
 
                         Button {
                             withAnimation(.snappy) {
@@ -91,6 +93,7 @@ struct ChatInputBar: View {
                                 .foregroundStyle(.white)
                                 .background(Color.black.opacity(0.5), in: .circle)
                         }
+                        .accessibilityLabel("Remove attached image")
 
                         Spacer()
                     }
@@ -139,6 +142,7 @@ struct ChatInputBar: View {
             }
             .glassEffect(.regular.tint(.red).interactive(), in: .circle)
             .transition(.scale.combined(with: .opacity))
+            .accessibilityLabel("Stop response")
         } else {
             Button {
                 let outgoingText = draftText
@@ -155,6 +159,7 @@ struct ChatInputBar: View {
             .opacity(canSend ? 1 : 0.5)
             .disabled(!canSend)
             .transition(.scale.combined(with: .opacity))
+            .accessibilityLabel("Send message")
         }
     }
 
@@ -219,6 +224,7 @@ struct SimpleChatInputBar: View {
                 .glassEffect(.regular.tint(canSend ? .accent : .gray).interactive(), in: .circle)
                 .opacity(canSend ? 1 : 0.5)
                 .disabled(!canSend)
+                .accessibilityLabel("Send message")
             }
             .padding(.leading, 16)
             .padding(.trailing, 8)
@@ -306,6 +312,17 @@ private struct ChatDictationButton: View {
         .disabled(isDisabled || isPreparing)
         .opacity(isDisabled || isPreparing ? 0.55 : 1)
         .animation(.snappy(duration: 0.18), value: isRecording)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        if isPreparing {
+            "Preparing dictation"
+        } else if isRecording {
+            "Stop dictation"
+        } else {
+            "Start dictation"
+        }
     }
 }
 

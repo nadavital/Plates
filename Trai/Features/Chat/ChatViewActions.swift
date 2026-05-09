@@ -118,7 +118,14 @@ extension ChatView {
         withAnimation(.easeOut(duration: 0.2)) {
             message.markMealDismissed(mealId: meal.id)
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this workout plan update. Please try again."
+            HapticManager.error()
+            return
+        }
         rebuildSessionMessages(preferLiveQueryData: true)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.logFood,
@@ -192,17 +199,27 @@ extension ChatView {
         // Update assessment state - marks plan as reviewed with current weight as new baseline
         planAssessmentService.markPlanReviewed(profile: profile, currentWeightKg: currentWeight)
 
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.planUpdateApplied = true
-        }
-
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.applyPlanUpdate,
             domain: .planning,
             surface: .chat,
             outcome: .completed,
-            relatedEntityId: message.id
+            relatedEntityId: message.id,
+            saveImmediately: false
         )
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this plan update. Please try again."
+            HapticManager.error()
+            return
+        }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            message.planUpdateApplied = true
+        }
 
         HapticManager.success()
     }
@@ -284,7 +301,14 @@ extension ChatView {
             )
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this workout plan update. Please try again."
+            HapticManager.error()
+            return
+        }
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.workoutPlanUpdateApplied = true
@@ -295,8 +319,10 @@ extension ChatView {
             domain: .planning,
             surface: .chat,
             outcome: .completed,
-            relatedEntityId: message.id
+            relatedEntityId: message.id,
+            saveImmediately: false
         )
+        try? modelContext.save()
 
         HapticManager.success()
     }
@@ -364,7 +390,6 @@ extension ChatView {
 
         // Save to database
         modelContext.insert(workout)
-        try? modelContext.save()
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.completeWorkout,
             domain: .workout,
@@ -374,8 +399,17 @@ extension ChatView {
             metadata: [
                 "source": "chat_workout_log",
                 "workout_name": workout.name
-            ]
+            ],
+            saveImmediately: false
         )
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this workout. Please try again."
+            HapticManager.error()
+            return
+        }
 
         // Update message state
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -444,7 +478,6 @@ extension ChatView {
 
         // Save to database
         modelContext.insert(liveWorkout)
-        try? modelContext.save()
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,
             domain: .workout,
@@ -454,8 +487,17 @@ extension ChatView {
             metadata: [
                 "source": "chat_workout_suggestion",
                 "workout_name": liveWorkout.name
-            ]
+            ],
+            saveImmediately: false
         )
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t start this workout. Please try again."
+            HapticManager.error()
+            return
+        }
 
         // Update message state
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -592,17 +634,26 @@ extension ChatView {
         }
         refreshFoodEntrySnapshot(entry, userEditedFields: Set(edit.changes.map(\.fieldKey)))
 
-        try? modelContext.save()
-        scheduleFoodMemoryResolution(for: entry.id)
-        WidgetDataProvider.shared.scheduleRefresh()
-
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.editFood,
             domain: .nutrition,
             surface: .chat,
             outcome: .completed,
-            relatedEntityId: edit.entryId
+            relatedEntityId: edit.entryId,
+            saveImmediately: false
         )
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this food edit. Please try again."
+            HapticManager.error()
+            return
+        }
+
+        scheduleFoodMemoryResolution(for: entry.id)
+        WidgetDataProvider.shared.scheduleRefresh()
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.foodEditApplied = true
@@ -664,19 +715,28 @@ extension ChatView {
             refreshFoodEntrySnapshot(entry, userEditedFields: ["component_edit"])
         }
 
-        try? modelContext.save()
-        if shouldResolveUpdatedEntry {
-            scheduleFoodMemoryResolution(for: entry.id)
-        }
-        WidgetDataProvider.shared.scheduleRefresh()
-
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.editFood,
             domain: .nutrition,
             surface: .chat,
             outcome: .completed,
-            relatedEntityId: edit.entryId
+            relatedEntityId: edit.entryId,
+            saveImmediately: false
         )
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this food edit. Please try again."
+            HapticManager.error()
+            return
+        }
+
+        if shouldResolveUpdatedEntry {
+            scheduleFoodMemoryResolution(for: entry.id)
+        }
+        WidgetDataProvider.shared.scheduleRefresh()
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             message.foodComponentEditApplied = true
@@ -946,29 +1006,46 @@ extension ChatView {
         )
 
         modelContext.insert(reminder)
-        try? modelContext.save()
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.createReminder,
             domain: .reminder,
             surface: .chat,
             outcome: .completed,
             relatedEntityId: reminder.id,
-            metadata: ["title": suggestion.title]
+            metadata: ["title": suggestion.title],
+            saveImmediately: false
         )
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            message.errorMessage = "We couldn’t save this reminder. Please try again."
+            HapticManager.error()
+            return
+        }
 
         // Schedule the notification
         Task {
             let service = NotificationService()
             await service.updateAuthorizationStatus()
+            if !service.isAuthorized {
+                let granted = await service.requestAuthorization()
+                guard granted else {
+                    await MainActor.run {
+                        message.errorMessage = "Reminder saved, but notifications are off. Enable notifications in Settings to receive it."
+                        HapticManager.error()
+                    }
+                    return
+                }
+            }
             await service.scheduleCustomReminder(reminder)
+            await MainActor.run {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    message.reminderCreated = true
+                }
+                HapticManager.success()
+            }
         }
-
-        // Update message state
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            message.reminderCreated = true
-        }
-
-        HapticManager.success()
     }
 
     func editReminderSuggestion(_ suggestion: SuggestedReminder, for message: ChatMessage) {

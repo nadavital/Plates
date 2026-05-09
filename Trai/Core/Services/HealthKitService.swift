@@ -280,8 +280,6 @@ final class HealthKitService {
 
         try await builder.endCollection(at: endDate)
 
-        // Finalize with metadata
-        let finalMetadata = metadata ?? [:]
         let workout = try await builder.finishWorkout()
 
         return workout!
@@ -452,25 +450,27 @@ final class HealthKitService {
             anchor: heartRateAnchor,
             limit: HKObjectQueryNoLimit
         ) { [weak self] _, samples, _, newAnchor, error in
+            guard let service = self else { return }
             Task { @MainActor in
                 if let error {
                     print("Heart rate query error: \(error.localizedDescription)")
                     return
                 }
-                self?.heartRateAnchor = newAnchor
-                self?.processHeartRateSamples(samples)
+                service.heartRateAnchor = newAnchor
+                service.processHeartRateSamples(samples)
             }
         }
 
         // Update handler for continuous monitoring
         query.updateHandler = { [weak self] _, samples, _, newAnchor, error in
+            guard let service = self else { return }
             Task { @MainActor in
                 if let error {
                     print("Heart rate update error: \(error.localizedDescription)")
                     return
                 }
-                self?.heartRateAnchor = newAnchor
-                self?.processHeartRateSamples(samples)
+                service.heartRateAnchor = newAnchor
+                service.processHeartRateSamples(samples)
             }
         }
 
@@ -563,25 +563,27 @@ final class HealthKitService {
             anchor: calorieAnchor,
             limit: HKObjectQueryNoLimit
         ) { [weak self] _, samples, _, newAnchor, error in
+            guard let service = self else { return }
             Task { @MainActor in
                 if let error {
                     print("Calorie query error: \(error.localizedDescription)")
                     return
                 }
-                self?.calorieAnchor = newAnchor
-                self?.processCalorieSamples(samples)
+                service.calorieAnchor = newAnchor
+                service.processCalorieSamples(samples)
             }
         }
 
         // Update handler for continuous monitoring
         query.updateHandler = { [weak self] _, samples, _, newAnchor, error in
+            guard let service = self else { return }
             Task { @MainActor in
                 if let error {
                     print("Calorie update error: \(error.localizedDescription)")
                     return
                 }
-                self?.calorieAnchor = newAnchor
-                self?.processCalorieSamples(samples)
+                service.calorieAnchor = newAnchor
+                service.processCalorieSamples(samples)
             }
         }
 

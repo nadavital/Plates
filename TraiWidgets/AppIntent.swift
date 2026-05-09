@@ -149,20 +149,7 @@ struct LogQuickFoodIntent: AppIntent {
             return .result()
         }
 
-        // Load existing pending logs
-        var pendingLogs: [PendingFoodLog] = []
-        if let data = defaults.data(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs),
-           let existing = try? JSONDecoder().decode([PendingFoodLog].self, from: data) {
-            pendingLogs = existing
-        }
-
-        // Add new log
-        pendingLogs.append(log)
-
-        // Save back
-        if let encoded = try? JSONEncoder().encode(pendingLogs) {
-            defaults.set(encoded, forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
-        }
+        try PendingFoodLogQueue.append(log, to: defaults)
 
         // Reload widgets to show updated data
         WidgetCenter.shared.reloadAllTimelines()

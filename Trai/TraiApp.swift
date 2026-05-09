@@ -661,17 +661,32 @@ extension TraiApp {
     /// Process any pending food logs from widget quick actions
     @MainActor
     func processPendingWidgetFoodLogs() {
-        guard let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName),
-              let pendingData = defaults.data(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs),
-              let pendingLogs = try? JSONDecoder().decode([PendingFoodLog].self, from: pendingData),
-              !pendingLogs.isEmpty else {
+        guard let defaults = UserDefaults(suiteName: SharedStorageKeys.AppGroup.suiteName) else {
             return
         }
 
+        let pendingLogs = PendingFoodLogQueue.load(from: defaults)
+        guard !pendingLogs.isEmpty else { return }
+
         let context = modelContainer.mainContext
+        var alreadyPersistedIDs = Set<UUID>()
+        var stagedIDs = Set<UUID>()
+        var seenIDs = Set<UUID>()
 
         for log in pendingLogs {
+            guard seenIDs.insert(log.id).inserted else { continue }
+
+            do {
+                if try hasPersistedWidgetFoodEntry(id: log.id, context: context) {
+                    alreadyPersistedIDs.insert(log.id)
+                    continue
+                }
+            } catch {
+                continue
+            }
+
             let entry = FoodEntry()
+            entry.id = log.id
             entry.name = log.name
             entry.calories = log.calories
             entry.proteinGrams = Double(log.protein)
@@ -692,18 +707,40 @@ extension TraiApp {
                 ],
                 saveImmediately: false
             )
+            stagedIDs.insert(log.id)
         }
 
-        try? context.save()
+        var processedIDs = alreadyPersistedIDs
 
-        // Clear pending logs
-        defaults.removeObject(forKey: SharedStorageKeys.AppGroup.pendingFoodLogs)
+        if !stagedIDs.isEmpty {
+            do {
+                try context.save()
+                processedIDs.formUnion(stagedIDs)
+            } catch {
+                context.rollback()
+            }
+        }
+
+        try? PendingFoodLogQueue.remove(ids: processedIDs, from: defaults)
 
         // Refresh widgets with new data
-        WidgetDataProvider.shared.scheduleRefresh(
-            modelContainer: modelContainer,
-            delay: .milliseconds(150)
+        if !processedIDs.isEmpty {
+            WidgetDataProvider.shared.scheduleRefresh(
+                modelContainer: modelContainer,
+                delay: .milliseconds(150)
+            )
+        }
+    }
+
+    @MainActor
+    private func hasPersistedWidgetFoodEntry(id: UUID, context: ModelContext) throws -> Bool {
+        var descriptor = FetchDescriptor<FoodEntry>(
+            predicate: #Predicate<FoodEntry> { entry in
+                entry.id == id
+            }
         )
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).isEmpty == false
     }
 }
 

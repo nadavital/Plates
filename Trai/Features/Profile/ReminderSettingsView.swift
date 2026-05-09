@@ -15,6 +15,7 @@ struct ReminderSettingsView: View {
     @State private var notificationService: NotificationService?
     @State private var showAddReminderSheet = false
     @State private var customReminders: [CustomReminder] = []
+    @State private var reminderSaveErrorMessage: String?
 
     var body: some View {
         Form {
@@ -149,9 +150,17 @@ struct ReminderSettingsView: View {
         }
         .navigationTitle("Reminders")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showAddReminderSheet) {
-            CustomReminderSheet(notificationService: notificationService)
-        }
+            .sheet(isPresented: $showAddReminderSheet) {
+                CustomReminderSheet(notificationService: notificationService)
+            }
+            .alert("Reminder Not Updated", isPresented: Binding(
+                get: { reminderSaveErrorMessage != nil },
+                set: { if !$0 { reminderSaveErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(reminderSaveErrorMessage ?? "Please try again.")
+            }
         .onAppear {
             // Lazily create NotificationService on appear
             if notificationService == nil {
@@ -283,6 +292,15 @@ struct ReminderSettingsView: View {
             await notificationService?.cancelCustomReminder(id: reminder.id)
         }
         modelContext.delete(reminder)
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            reminderSaveErrorMessage = "We couldn’t delete this reminder. Please try again."
+            HapticManager.error()
+            fetchCustomReminders()
+            return
+        }
         fetchCustomReminders()
         HapticManager.lightTap()
     }

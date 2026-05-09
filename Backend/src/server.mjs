@@ -166,7 +166,10 @@ function buildSessionSnapshot(session, user, now, accessTokenOverride = session.
 }
 
 async function readJson(req, options = {}) {
-  const maxBytes = Number.isFinite(options.maxBytes) ? Math.max(options.maxBytes, 0) : null;
+  const requestedMaxBytes = Number.isFinite(options.maxBytes)
+    ? options.maxBytes
+    : config.jsonBodyMaxRequestBytes;
+  const maxBytes = Number.isFinite(requestedMaxBytes) ? Math.max(requestedMaxBytes, 0) : null;
   const chunks = [];
   let totalBytes = 0;
   for await (const chunk of req) {

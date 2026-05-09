@@ -20,6 +20,7 @@ struct CustomReminderSheet: View {
     @State private var selectedTime: Date = Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? Date()
     @State private var selectedDays: Set<Int> = []
     @State private var isEnabled: Bool = true
+    @State private var saveErrorMessage: String?
 
     private var isEditing: Bool { reminder != nil }
 
@@ -95,6 +96,14 @@ struct CustomReminderSheet: View {
                     isEnabled = reminder.isEnabled
                 }
             }
+            .alert("Reminder Not Saved", isPresented: Binding(
+                get: { saveErrorMessage != nil },
+                set: { if !$0 { saveErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(saveErrorMessage ?? "Please try again.")
+            }
         }
         .traiSheetBranding()
     }
@@ -166,6 +175,15 @@ struct CustomReminderSheet: View {
             reminder.repeatDaysSet = selectedDays
             reminder.isEnabled = isEnabled
 
+            do {
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                saveErrorMessage = "We couldn’t save this reminder. Please try again."
+                HapticManager.error()
+                return
+            }
+
             Task {
                 await notificationService?.scheduleCustomReminder(reminder)
             }
@@ -180,6 +198,15 @@ struct CustomReminderSheet: View {
                 isEnabled: true
             )
             modelContext.insert(newReminder)
+
+            do {
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                saveErrorMessage = "We couldn’t save this reminder. Please try again."
+                HapticManager.error()
+                return
+            }
 
             Task {
                 await notificationService?.scheduleCustomReminder(newReminder)

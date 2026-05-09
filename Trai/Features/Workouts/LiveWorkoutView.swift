@@ -23,6 +23,7 @@ struct LiveWorkoutView: View {
     private var usesMetricExerciseWeight: Bool {
         profiles.first?.usesMetricExerciseWeight ?? true
     }
+    private let finishOnPresentation: Bool
 
     private var relevantSessionGoals: [WorkoutGoal] {
         WorkoutGoalProgressResolver.relevantGoals(
@@ -58,11 +59,17 @@ struct LiveWorkoutView: View {
     @State private var showingLiveActivityDisabledAlert = false
     @State private var showingGeneralActivitySheet = false
     @State private var showingGoalSheet = false
+    @State private var didApplyPresentationFinishRequest = false
 
     // MARK: - Initialization
 
-    init(workout: LiveWorkout, template: WorkoutPlan.WorkoutTemplate? = nil) {
+    init(
+        workout: LiveWorkout,
+        template: WorkoutPlan.WorkoutTemplate? = nil,
+        finishOnPresentation: Bool = false
+    ) {
         self._viewModel = State(initialValue: LiveWorkoutViewModel(workout: workout, template: template))
+        self.finishOnPresentation = finishOnPresentation
     }
 
     // MARK: - Body
@@ -125,6 +132,7 @@ struct LiveWorkoutView: View {
                 activeWorkoutRuntimeState.beginLiveWorkoutPresentation()
                 viewModel.setup(with: modelContext, healthKitService: healthKitService)
                 startHeartRateUpdates()
+                applyPresentationFinishRequestIfNeeded()
 
                 // Check if Live Activities are disabled
                 if !AppLaunchArguments.isUITesting && !ActivityAuthorizationInfo().areActivitiesEnabled {
@@ -133,7 +141,6 @@ struct LiveWorkoutView: View {
             }
             .onDisappear {
                 activeWorkoutRuntimeState.endLiveWorkoutPresentation()
-                viewModel.stopTimer()
                 stopHeartRateUpdates()
             }
             .sheet(isPresented: $showingExerciseList) {
@@ -234,6 +241,18 @@ struct LiveWorkoutView: View {
     }
 
     // MARK: - Workout Content
+
+    private func applyPresentationFinishRequestIfNeeded() {
+        guard finishOnPresentation else { return }
+        guard !didApplyPresentationFinishRequest else { return }
+        guard viewModel.workout.completedAt == nil else { return }
+
+        didApplyPresentationFinishRequest = true
+        viewModel.finishWorkout()
+        withAnimation {
+            showingSummary = true
+        }
+    }
 
     @ViewBuilder
     private var workoutContent: some View {

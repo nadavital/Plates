@@ -32,6 +32,7 @@
 		F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */; };
 		F200000B2A00000100F20001 /* TraiCoachPatternServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200000C2A00000100F20001 /* TraiCoachPatternServiceTests.swift */; };
 		F200000F2A00000100F20001 /* WorkoutTemplateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */; };
+		F20000112A00000100F20001 /* PendingFoodLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000122A00000100F20001 /* PendingFoodLogTests.swift */; };
 		F3A100012E00000100A10001 /* FoodRecommendationTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */; };
 		F3A100032E00000100A10001 /* FoodRecommendationEvaluatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */; };
 		F3A1000B2E00000100A10001 /* FoodSuggestionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */; };
@@ -107,6 +108,7 @@
 		F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BehaviorTrackerTests.swift; sourceTree = "<group>"; };
 		F200000C2A00000100F20001 /* TraiCoachPatternServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiCoachPatternServiceTests.swift; sourceTree = "<group>"; };
 		F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutTemplateServiceTests.swift; sourceTree = "<group>"; };
+		F20000122A00000100F20001 /* PendingFoodLogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingFoodLogTests.swift; sourceTree = "<group>"; };
 		F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationTestSupport.swift; sourceTree = "<group>"; };
 		F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationEvaluatorTests.swift; sourceTree = "<group>"; };
 		F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodSuggestionIntegrationTests.swift; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				F20000022A00000100F20001 /* AppRouteTests.swift */,
 				F20000042A00000100F20001 /* BehaviorProfileServiceTests.swift */,
 				F200000A2A00000100F20001 /* BehaviorTrackerTests.swift */,
+				F20000122A00000100F20001 /* PendingFoodLogTests.swift */,
 				A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */,
 				A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */,
 				A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */,
@@ -479,6 +482,7 @@
 				F20000012A00000100F20001 /* AppRouteTests.swift in Sources */,
 				F20000032A00000100F20001 /* BehaviorProfileServiceTests.swift in Sources */,
 				F20000092A00000100F20001 /* BehaviorTrackerTests.swift in Sources */,
+				F20000112A00000100F20001 /* PendingFoodLogTests.swift in Sources */,
 				A30000092B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift in Sources */,
 				A30000012B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift in Sources */,
 				A30000072B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift in Sources */,
@@ -555,7 +559,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -587,7 +591,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -724,10 +728,10 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiAppInfo.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Trai needs camera access to take photos of your food for AI analysis";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads activity, workouts, heart rate, weight, and body composition data to personalize your fitness and nutrition tracking.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trai uses camera access for food photos you choose to send to cloud AI for analysis.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads activity, workouts, heart rate, weight, and body composition data for local fitness and nutrition tracking.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves workouts, active energy, nutrition, and weight data to Apple Health when you choose to sync.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Trai needs photo library access to select food photos for AI analysis";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Trai uses photo library access for food photos you choose to send to cloud AI for analysis.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -747,7 +751,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -763,10 +767,10 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TraiAppInfo.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Trai needs camera access to take photos of your food for AI analysis";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads activity, workouts, heart rate, weight, and body composition data to personalize your fitness and nutrition tracking.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trai uses camera access for food photos you choose to send to cloud AI for analysis.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Trai reads activity, workouts, heart rate, weight, and body composition data for local fitness and nutrition tracking.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Trai saves workouts, active energy, nutrition, and weight data to Apple Health when you choose to sync.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Trai needs photo library access to select food photos for AI analysis";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Trai uses photo library access for food photos you choose to send to cloud AI for analysis.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -786,7 +790,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

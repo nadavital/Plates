@@ -18,7 +18,7 @@ struct AccountOnboardingStepView: View {
             VStack(spacing: 24) {
                 onboardingHeader(
                     title: "Connect your Trai account",
-                    subtitle: "Sign in with Apple before plan choices so your Trai Pro access and future plan changes stay attached to your account."
+                    subtitle: "Sign in with Apple before plan choices so Trai Pro access and cloud AI features stay attached to your account."
                 )
 
                 if accountSessionService?.isAuthenticated == true {
@@ -30,7 +30,7 @@ struct AccountOnboardingStepView: View {
                         Text(accountSessionService?.currentUserDisplayName ?? "Connected")
                             .font(.body)
 
-                        Text("You’re all set. We’ll use this account for subscriptions and server-backed Trai features.")
+                        Text("You’re all set. We’ll use this account for subscriptions and cloud Trai AI features.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -74,7 +74,7 @@ struct AccountOnboardingStepView: View {
                 .frame(height: 52)
             }
 
-            Text("Your current logs and profile stay on this device either way.")
+            Text("Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

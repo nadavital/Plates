@@ -72,6 +72,13 @@ try {
   assert.equal(healthPayload.aiProvider, 'openai', 'expected OpenAI to remain the default provider');
   assert.equal(healthPayload.hasProviderKey, true, 'expected default provider key to be configured');
 
+  const oversizedNotificationResponse = await postJSON('/v1/app-store/notifications', {
+    signedPayload: 'x'.repeat(1024 * 1024)
+  });
+  assert.equal(oversizedNotificationResponse.status, 413, 'expected default JSON body limit to reject oversized requests');
+  const oversizedNotificationPayload = await oversizedNotificationResponse.json();
+  assert.equal(oversizedNotificationPayload.error, 'request_too_large');
+
   const rawNonce = crypto.randomBytes(16).toString('hex');
   const sharedBody = {
     installationID: 'local-installation',

@@ -280,6 +280,7 @@ struct SetRow: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: ExerciseSetLayout.setColumnWidth, alignment: .leading)
+                .accessibilityLabel(set.isWarmup ? "Mark set \(setNumber) as working set" : "Mark set \(setNumber) as warmup")
 
                 // Weight input
                 HStack(spacing: 8) {
@@ -316,6 +317,7 @@ struct SetRow: View {
                             .frame(width: ExerciseSetLayout.weightUnitWidth)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Switch weight unit")
                 }
                 .frame(width: ExerciseSetLayout.weightColumnWidth)
 
@@ -368,6 +370,7 @@ struct SetRow: View {
                         .foregroundStyle(set.notes.isEmpty ? Color.secondary : Color.accentColor)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(set.notes.isEmpty ? "Add set notes" : "Edit set notes")
 
                 // Delete button
                 Button(action: onDelete) {
@@ -377,6 +380,7 @@ struct SetRow: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Delete set \(setNumber)")
             }
 
             // Inline notes text field (expands below)

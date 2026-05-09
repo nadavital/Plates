@@ -256,6 +256,7 @@ private struct FoodCameraControlBar: View {
                 }
                 .disabled(isCapturingPhoto)
                 .opacity(isCapturingPhoto ? 0.6 : 1)
+                .accessibilityLabel(isCapturingPhoto ? "Capturing food photo" : "Capture food photo")
 
                 Button(action: onManualEntry) {
                     FoodCameraAccessoryButtonLabel(systemName: "square.and.pencil", title: "Manual")

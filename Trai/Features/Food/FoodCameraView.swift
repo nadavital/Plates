@@ -490,6 +490,7 @@ private struct FoodLogReviewStepView: View {
     @State private var analysisErrorMessage: String?
     @State private var isLoadingRefinement = false
     @State private var refinementErrorMessage: String?
+    @State private var isSaving = false
     @Query private var profiles: [UserProfile]
 
     var body: some View {
@@ -504,6 +505,7 @@ private struct FoodLogReviewStepView: View {
             refinementErrorMessage: refinementErrorMessage,
             enabledMacros: enabledMacros,
             isLoadingRefinement: isLoadingRefinement,
+            isSaving: isSaving,
             onAnalyze: analyzeFood,
             onSave: saveEntry,
             onRefine: refineFood,
@@ -580,7 +582,9 @@ private struct FoodLogReviewStepView: View {
                 draft.analysisResult = result
                 HapticManager.success()
             } catch {
-                analysisErrorMessage = error.localizedDescription
+                analysisErrorMessage = error.aiUserFacingMessage(
+                    fallback: "We couldn’t analyze this food right now. Please try again or enter it manually."
+                )
                 HapticManager.error()
             }
         }
@@ -608,13 +612,18 @@ private struct FoodLogReviewStepView: View {
                 draft.refinedSuggestion = refinedSuggestion
                 HapticManager.success()
             } catch {
-                refinementErrorMessage = error.localizedDescription
+                refinementErrorMessage = error.aiUserFacingMessage(
+                    fallback: "We couldn’t update this suggestion right now. Please try again."
+                )
                 HapticManager.error()
             }
         }
     }
 
     private func saveEntry(_ suggestion: SuggestedFoodEntry, isRefined: Bool) {
+        guard !isSaving else { return }
+        isSaving = true
+
         let snapshotBuilder = FoodSnapshotBuilder()
         let entry = FoodEntry()
         entry.name = suggestion.name
@@ -652,6 +661,7 @@ private struct FoodLogReviewStepView: View {
             try modelContext.save()
         } catch {
             modelContext.rollback()
+            isSaving = false
             analysisErrorMessage = "We couldn’t save this food entry. Please try again."
             HapticManager.error()
             return

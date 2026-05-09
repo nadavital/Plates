@@ -31,7 +31,7 @@ enum AccountSetupContext: String, Identifiable {
         case .restorePurchases:
             "Sign in before restoring purchases"
         case .aiFeatures:
-            "Sign in to use server-backed Trai AI"
+            "Sign in to use cloud Trai AI"
         }
     }
 
@@ -44,20 +44,20 @@ enum AccountSetupContext: String, Identifiable {
         case .restorePurchases:
             "Connect your Trai account before restoring purchases."
         case .aiFeatures:
-            "Connect your Trai account to use server-backed Trai AI."
+            "Connect your Trai account to use cloud AI features like food photo analysis, chat, and plan help."
         }
     }
 
     var secondaryMessage: String {
         switch self {
         case .secureExistingData:
-            "Your existing logs and profile stay on this device."
+            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
         case .billing:
-            "Your existing logs and profile stay on this device."
+            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
         case .restorePurchases:
-            "Your existing logs and profile stay on this device."
+            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
         case .aiFeatures:
-            "Your existing logs and profile stay on this device."
+            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
         }
     }
 }

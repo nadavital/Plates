@@ -291,7 +291,7 @@ struct ProfileView: View {
             Text("Finish setting up your Trai account")
                 .font(.traiHeadline(20))
 
-            Text("Your local profile and history stay on this device. Adding an account now gives billing, restore behavior, and future multi-device support a stable home.")
+            Text("Your health, profile, and logs remain stored locally on this device. Adding an account supports billing and cloud Trai AI; when you use AI features, only selected context and photos needed for the request are sent.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

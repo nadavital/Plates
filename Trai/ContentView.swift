@@ -223,6 +223,7 @@ struct MainTabView: View {
 
     // Capture the workout when opening sheet to avoid nil issues when workout completes
     @State private var presentedWorkout: LiveWorkout?
+    @State private var workoutIDToFinishOnPresentation: UUID?
     @State private var showingEndConfirmation = false
     @State private var showingReminders = false
 
@@ -281,7 +282,10 @@ struct MainTabView: View {
                 showRemindersFromNotification.wrappedValue = false
             }
             .sheet(item: $presentedWorkout) { workout in
-                LiveWorkoutView(workout: workout)
+                LiveWorkoutView(
+                    workout: workout,
+                    finishOnPresentation: workoutIDToFinishOnPresentation == workout.id
+                )
                     .traiSheetBranding()
             }
             .confirmationDialog(
@@ -291,7 +295,8 @@ struct MainTabView: View {
             ) {
                 Button("End Workout", role: .destructive) {
                     if let workout = activeWorkout {
-                        workout.completedAt = Date()
+                        workoutIDToFinishOnPresentation = workout.id
+                        presentedWorkout = workout
                     }
                 }
                 Button("Cancel", role: .cancel) {}

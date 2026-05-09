@@ -63,7 +63,8 @@ export function createConfig(env = process.env) {
       .map((value) => value.trim())
       .filter(Boolean),
     adminAPIKey: env.TRAI_ADMIN_API_KEY ?? env.ADMIN_API_KEY ?? '',
-    aiProxyMaxRequestBytes: Number.parseInt(env.AI_PROXY_MAX_REQUEST_BYTES ?? '6291456', 10),
+    jsonBodyMaxRequestBytes: parseNonNegativeInteger(env.JSON_BODY_MAX_REQUEST_BYTES, 1048576),
+    aiProxyMaxRequestBytes: parseNonNegativeInteger(env.AI_PROXY_MAX_REQUEST_BYTES, 6291456),
     aiProxyMaxOutputTokens: Number.parseInt(env.AI_PROXY_MAX_OUTPUT_TOKENS ?? '8192', 10),
     aiProxyMaxContents: Number.parseInt(env.AI_PROXY_MAX_CONTENTS ?? '32', 10),
     aiProxyMaxPartsPerContent: Number.parseInt(env.AI_PROXY_MAX_PARTS_PER_CONTENT ?? '24', 10),
@@ -123,6 +124,15 @@ function parseOptionalNumber(value) {
 
   const parsed = Number.parseFloat(String(value));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseNonNegativeInteger(value, fallback) {
+  if (value == null || String(value).trim() === '') {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function defaultTokenPricingForProvider(provider, model) {

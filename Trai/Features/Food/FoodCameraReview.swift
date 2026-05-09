@@ -18,6 +18,7 @@ struct FoodCameraReviewView: View {
     let refinementErrorMessage: String?
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
     let isLoadingRefinement: Bool
+    let isSaving: Bool
     let onAnalyze: () -> Void
     let onSave: (SuggestedFoodEntry, Bool) -> Void
     let onRefine: (String) -> Void
@@ -100,6 +101,7 @@ struct FoodCameraReviewView: View {
                         suggestion: suggestion,
                         isRefining: isRefining,
                         enabledMacros: enabledMacros,
+                        isSaving: isSaving,
                         onSave: {
                             onSave(suggestion, refinedSuggestion != nil)
                         },
@@ -223,6 +225,7 @@ struct FoodCameraSuggestionCard: View {
     let suggestion: SuggestedFoodEntry
     let isRefining: Bool
     var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
+    let isSaving: Bool
     let onSave: () -> Void
     let onStartRefine: () -> Void
 
@@ -308,19 +311,26 @@ struct FoodCameraSuggestionCard: View {
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.traiTertiary())
+                    .disabled(isSaving)
                     .accessibilityIdentifier("foodCameraReviewRefineButton")
 
                     Button(action: onSave) {
                         HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.subheadline)
-                            Text("Save")
+                            if isSaving {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.subheadline)
+                            }
+                            Text(isSaving ? "Saving" : "Save")
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.traiPrimary())
+                    .disabled(isSaving)
                     .accessibilityIdentifier("foodCameraReviewSaveButton")
                 }
             }
