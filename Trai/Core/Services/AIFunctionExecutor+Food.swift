@@ -733,9 +733,10 @@ extension AIFunctionExecutor {
         let today = Date()
         let includeComponents = args["include_components"] as? Bool ?? false
 
-        // Log the args for debugging
+        #if DEBUG
         let argsDescription = args.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
         print("📊 get_food_log args: [\(argsDescription)]")
+        #endif
 
         // Convert period to days_back/range_days if provided
         var effectiveArgs = args
@@ -752,7 +753,9 @@ extension AIFunctionExecutor {
             today: today
         )
 
+        #if DEBUG
         print("📊 Date range: \(startDate) to \(endDate) (\(dateDescription))")
+        #endif
 
         // Fetch entries for the date range
         let descriptor = FetchDescriptor<FoodEntry>(
@@ -761,7 +764,9 @@ extension AIFunctionExecutor {
         )
 
         let entries = (try? modelContext.fetch(descriptor)) ?? []
+        #if DEBUG
         print("📊 Found \(entries.count) entries")
+        #endif
 
         // Calculate totals
         let totalCalories = entries.reduce(0) { $0 + $1.calories }

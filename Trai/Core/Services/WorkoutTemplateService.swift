@@ -19,6 +19,11 @@ struct WorkoutTemplateService {
         let isNewRecord: Bool
     }
 
+    struct SuggestedSetDefaults {
+        let reps: Int
+        let weight: CleanWeight
+    }
+
     // MARK: - Workout Start Surface
 
     /// Create a startable custom workout matching current app defaults.
@@ -173,6 +178,44 @@ struct WorkoutTemplateService {
             for: exerciseName,
             modelContext: modelContext
         )?.weightPR
+    }
+
+    func suggestedSetDefaults(
+        exerciseName: String,
+        requestedReps: Int,
+        requestedWeightKg: Double?,
+        progressionStrategy: WorkoutPlan.ProgressionStrategy = .defaultStrategy,
+        modelContext: ModelContext
+    ) -> SuggestedSetDefaults {
+        if let requestedWeightKg, requestedWeightKg > 0 {
+            return SuggestedSetDefaults(
+                reps: max(requestedReps, 1),
+                weight: WeightUtility.cleanWeightFromKg(requestedWeightKg)
+            )
+        }
+
+        let lastPerformance = getLastPerformance(
+            exerciseName: exerciseName,
+            modelContext: modelContext
+        )
+        let patternReps = lastPerformance?.repPatternArray.first
+        let patternWeight = lastPerformance?.weightPatternArray.first
+        let progressionWeight = lastPerformance.flatMap {
+            suggestProgression(
+                exerciseName: exerciseName,
+                lastPerformance: $0,
+                progressionStrategy: progressionStrategy,
+                targetReps: requestedReps
+            )?.suggestedWeight
+        }
+
+        let reps = patternReps ?? lastPerformance?.bestSetReps ?? requestedReps
+        let weightKg = progressionWeight ?? patternWeight ?? lastPerformance?.bestSetWeightKg ?? 0
+
+        return SuggestedSetDefaults(
+            reps: max(reps, 1),
+            weight: WeightUtility.cleanWeightFromKg(weightKg)
+        )
     }
 
     // MARK: - Progressive Overload

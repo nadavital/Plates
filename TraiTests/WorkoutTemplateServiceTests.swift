@@ -18,7 +18,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
 
     private func makeInMemoryContext() throws -> ModelContext {
         let container = try ModelContainer(
-            for: UserProfile.self,
+            for: UserProfile.self, ExerciseHistory.self,
             configurations: ModelConfiguration(
                 isStoredInMemoryOnly: true,
                 cloudKitDatabase: .none
@@ -110,6 +110,46 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.name, "Custom Workout")
         XCTAssertEqual(workout.type, .strength)
         XCTAssertEqual(workout.muscleGroups, [])
+    }
+
+    func testSuggestedSetDefaultsUsesExplicitAIWeightWhenProvided() throws {
+        let context = try makeInMemoryContext()
+
+        let defaults = service.suggestedSetDefaults(
+            exerciseName: "Bench Press",
+            requestedReps: 8,
+            requestedWeightKg: 72.4,
+            modelContext: context
+        )
+
+        XCTAssertEqual(defaults.reps, 8)
+        XCTAssertEqual(defaults.weight.kg, 72.5)
+    }
+
+    func testSuggestedSetDefaultsFallsBackToProgressedHistoryWeight() throws {
+        let context = try makeInMemoryContext()
+        let history = ExerciseHistory()
+        history.exerciseName = "Bench Press"
+        history.performedAt = Date()
+        history.bestSetWeightKg = 60
+        history.bestSetWeightLbs = 132.5
+        history.bestSetReps = 12
+        history.totalSets = 3
+        history.repPattern = "12,12,12"
+        history.weightPattern = "60,60,60"
+        context.insert(history)
+        try context.save()
+
+        let defaults = service.suggestedSetDefaults(
+            exerciseName: "Bench Press",
+            requestedReps: 10,
+            requestedWeightKg: nil,
+            progressionStrategy: .defaultStrategy,
+            modelContext: context
+        )
+
+        XCTAssertEqual(defaults.reps, 12)
+        XCTAssertEqual(defaults.weight.kg, 62.5)
     }
 }
 

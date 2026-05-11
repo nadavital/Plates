@@ -456,22 +456,24 @@ extension ChatView {
             focusAreas: focusAreas
         )
 
-        // Add suggested exercises as entries
+        // Start with one ready exercise. The live workout view will continue
+        // surfacing Trai suggestions instead of dumping the whole plan at once.
         var entries: [LiveWorkoutEntry] = []
-        for (index, exercise) in workout.exercises.enumerated() {
-            let entry = LiveWorkoutEntry(exerciseName: exercise.name, orderIndex: index)
-
-            // Pre-populate sets
-            let cleanWeight = WeightUtility.cleanWeightFromKg(exercise.weightKg ?? 0)
-            for _ in 0..<exercise.sets {
-                entry.addSet(LiveWorkoutEntry.SetData(
-                    reps: exercise.reps,
-                    weight: cleanWeight,
-                    completed: false,
-                    isWarmup: false
-                ))
-            }
-
+        if let exercise = workout.exercises.first {
+            let entry = LiveWorkoutEntry(exerciseName: exercise.name, orderIndex: 0)
+            let setDefaults = WorkoutTemplateService().suggestedSetDefaults(
+                exerciseName: exercise.name,
+                requestedReps: exercise.reps,
+                requestedWeightKg: exercise.weightKg,
+                progressionStrategy: profile?.workoutPlan?.progressionStrategy ?? .defaultStrategy,
+                modelContext: modelContext
+            )
+            entry.addSet(LiveWorkoutEntry.SetData(
+                reps: setDefaults.reps,
+                weight: setDefaults.weight,
+                completed: false,
+                isWarmup: false
+            ))
             entries.append(entry)
         }
         liveWorkout.entries = entries

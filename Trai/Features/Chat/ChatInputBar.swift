@@ -21,6 +21,7 @@ struct ChatInputBar: View {
     @State private var showingPhotoPicker = false
     @State private var draftText = ""
     @State private var inputBarHeight: CGFloat = 52
+    @State private var renderedDictationText = ""
     @StateObject private var dictation = ChatDictationController()
 
     private var canSend: Bool {
@@ -34,35 +35,57 @@ struct ChatInputBar: View {
     var body: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
-                // Add button with menu
-                Menu {
-                    Button("Take Photo", systemImage: "camera") {
-                        onTakePhoto()
-                    }
-
-                    Button("Choose from Library", systemImage: "photo.on.rectangle") {
-                        showingPhotoPicker = true
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                }
-                .glassEffect(.regular.tint(.red).interactive(), in: .circle)
-                .opacity(isLoading ? 0.5 : 1)
-                .disabled(isLoading)
-                .accessibilityLabel("Add attachment")
+                attachmentOrDictationStopButton
 
                 composerField
             }
             .animation(.snappy(duration: 0.2), value: isLoading)
+            .animation(.snappy(duration: 0.18), value: dictation.isRecording)
             .padding(.horizontal)
             .padding(.vertical, 8)
         }
         .photosPicker(isPresented: $showingPhotoPicker, selection: $selectedPhotoItem, matching: .images)
         .onDisappear {
             dictation.stop()
+            renderedDictationText = ""
+        }
+    }
+
+    @ViewBuilder
+    private var attachmentOrDictationStopButton: some View {
+        if dictation.isRecording || dictation.isPreparing {
+            Button {
+                Task {
+                    await dictation.finish()
+                    renderedDictationText = ""
+                }
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+            }
+            .glassEffect(.regular.tint(.red).interactive(), in: .circle)
+            .accessibilityLabel("Stop dictation")
+        } else {
+            Menu {
+                Button("Take Photo", systemImage: "camera") {
+                    onTakePhoto()
+                }
+
+                Button("Choose from Library", systemImage: "photo.on.rectangle") {
+                    showingPhotoPicker = true
+                }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+            }
+            .glassEffect(.regular.tint(.red).interactive(), in: .circle)
+            .opacity(isLoading ? 0.5 : 1)
+            .disabled(isLoading)
+            .accessibilityLabel("Add attachment")
         }
     }
 
@@ -106,7 +129,10 @@ struct ChatInputBar: View {
             }
 
             if !isLoading {
-                dictationButton(text: $draftText, isDisabled: false)
+                if !dictation.isRecording {
+                    dictationButton(text: $draftText, isDisabled: false)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
 
             sendOrStopButton
@@ -145,10 +171,14 @@ struct ChatInputBar: View {
             .accessibilityLabel("Stop response")
         } else {
             Button {
-                let outgoingText = draftText
-                draftText = ""
-                onSend(outgoingText)
-                isFocused.wrappedValue = false
+                Task {
+                    await dictation.finish()
+                    let outgoingText = draftText
+                    renderedDictationText = ""
+                    draftText = ""
+                    onSend(outgoingText)
+                    isFocused.wrappedValue = false
+                }
             } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 16, weight: .bold))
@@ -170,11 +200,19 @@ struct ChatInputBar: View {
             isDisabled: isDisabled
         ) {
             if dictation.isRecording {
-                dictation.stop()
+                Task {
+                    await dictation.finish()
+                    renderedDictationText = ""
+                }
             } else {
                 isFocused.wrappedValue = true
-                dictation.start { spokenText in
-                    text.wrappedValue = text.wrappedValue.appendingDictationText(spokenText)
+                renderedDictationText = ""
+                dictation.start { transcript in
+                    text.wrappedValue = text.wrappedValue.replacingDictationTranscript(
+                        previous: renderedDictationText,
+                        with: transcript
+                    )
+                    renderedDictationText = transcript
                 }
             }
         }
@@ -192,6 +230,7 @@ struct SimpleChatInputBar: View {
     let onSend: () -> Void
     var isFocused: FocusState<Bool>.Binding
     @State private var inputBarHeight: CGFloat = 52
+    @State private var renderedDictationText = ""
     @StateObject private var dictation = ChatDictationController()
 
     private var canSend: Bool {
@@ -213,8 +252,12 @@ struct SimpleChatInputBar: View {
                 dictationButton
 
                 Button {
-                    onSend()
-                    isFocused.wrappedValue = false
+                    Task {
+                        await dictation.finish()
+                        renderedDictationText = ""
+                        onSend()
+                        isFocused.wrappedValue = false
+                    }
                 } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 16, weight: .bold))
@@ -247,6 +290,7 @@ struct SimpleChatInputBar: View {
         }
         .onDisappear {
             dictation.stop()
+            renderedDictationText = ""
         }
     }
 
@@ -257,11 +301,19 @@ struct SimpleChatInputBar: View {
             isDisabled: isLoading
         ) {
             if dictation.isRecording {
-                dictation.stop()
+                Task {
+                    await dictation.finish()
+                    renderedDictationText = ""
+                }
             } else {
                 isFocused.wrappedValue = true
-                dictation.start { spokenText in
-                    text = text.appendingDictationText(spokenText)
+                renderedDictationText = ""
+                dictation.start { transcript in
+                    text = text.replacingDictationTranscript(
+                        previous: renderedDictationText,
+                        with: transcript
+                    )
+                    renderedDictationText = transcript
                 }
             }
         }
@@ -276,43 +328,31 @@ private struct ChatDictationButton: View {
 
     var body: some View {
         Button(action: action) {
-            if isPreparing {
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(width: 32, height: 32)
-            } else if isRecording {
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 7, height: 7)
-
-                    Text("Listening")
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 10, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .frame(height: 32)
-            } else {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-            }
+            dictationIcon
+                .frame(width: 36, height: 36)
+                .contentShape(.rect)
         }
-        .glassEffect(
-            .regular
-                .tint(isRecording ? Color.red.opacity(0.28) : .accentColor)
-                .interactive(),
-            in: .rect(cornerRadius: 16)
-        )
+        .buttonStyle(.plain)
         .disabled(isDisabled || isPreparing)
         .opacity(isDisabled || isPreparing ? 0.55 : 1)
         .animation(.snappy(duration: 0.18), value: isRecording)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var dictationIcon: some View {
+        if isPreparing {
+            ProgressView()
+                .controlSize(.mini)
+        } else if isRecording {
+            Image(systemName: "stop.fill")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.red)
+        } else {
+            Image(systemName: "mic")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(.red)
+        }
     }
 
     private var accessibilityLabel: String {
@@ -327,6 +367,23 @@ private struct ChatDictationButton: View {
 }
 
 private extension String {
+    func replacingDictationTranscript(previous: String, with transcript: String) -> String {
+        let previous = previous.trimmingCharacters(in: .whitespacesAndNewlines)
+        let transcript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !previous.isEmpty else {
+            return appendingDictationText(transcript)
+        }
+
+        if hasSuffix(previous) {
+            let base = String(dropLast(previous.count))
+            return base.appendingDictationText(transcript)
+        }
+
+        let delta = previous.incrementalText(to: transcript)
+        return appendingDictationText(delta)
+    }
+
     func appendingDictationText(_ spokenText: String) -> String {
         let spokenText = spokenText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !spokenText.isEmpty else { return self }
@@ -342,5 +399,29 @@ private extension String {
         return last.unicodeScalars.allSatisfy {
             CharacterSet.whitespacesAndNewlines.contains($0)
         }
+    }
+
+    private func incrementalText(to currentText: String) -> String {
+        let previous = trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !current.isEmpty else { return "" }
+        guard !previous.isEmpty else { return current }
+
+        if current.hasPrefix(previous) {
+            return String(current.dropFirst(previous.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var previousIndex = previous.startIndex
+        var currentIndex = current.startIndex
+        while previousIndex < previous.endIndex,
+              currentIndex < current.endIndex,
+              previous[previousIndex] == current[currentIndex] {
+            previousIndex = previous.index(after: previousIndex)
+            currentIndex = current.index(after: currentIndex)
+        }
+
+        return String(current[currentIndex...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

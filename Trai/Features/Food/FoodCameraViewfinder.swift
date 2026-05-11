@@ -151,6 +151,7 @@ struct FoodCameraSuggestionRail: View {
                 onDismissKeyboard()
             }
         )
+        .frame(height: 116, alignment: .topLeading)
         .scrollClipDisabled()
         .padding(.horizontal)
     }
@@ -312,17 +313,15 @@ struct FoodCameraSuggestionChip: View {
                         .foregroundStyle(TraiColors.brandAccent)
                 }
 
-                Spacer(minLength: 0)
-
                 Text(suggestion.detail)
                     .font(.traiLabel(11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .padding(.top, 2)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .frame(width: 220, alignment: .leading)
-            .frame(minHeight: 108, alignment: .topLeading)
+            .frame(width: 220, height: 108, alignment: .topLeading)
             .glassEffect(
                 .regular.interactive(),
                 in: .rect(cornerRadius: 22)

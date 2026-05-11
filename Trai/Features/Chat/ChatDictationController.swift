@@ -20,7 +20,6 @@ final class ChatDictationController: ObservableObject {
     private var resultsTask: Task<Void, Never>?
     private var finalizedTranscript = ""
     private var volatileTranscript = ""
-    private var emittedTranscript = ""
     private var updateText: ((String) -> Void)?
 
     func start(updateText: @escaping (String) -> Void) {
@@ -28,7 +27,6 @@ final class ChatDictationController: ObservableObject {
 
         self.finalizedTranscript = ""
         self.volatileTranscript = ""
-        self.emittedTranscript = ""
         self.updateText = updateText
         isPreparing = true
 
@@ -47,12 +45,7 @@ final class ChatDictationController: ObservableObject {
     func stop() {
         guard isRecording || isPreparing || audioEngine != nil else { return }
 
-        inputContinuation?.finish()
-        inputContinuation = nil
-
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
+        stopAudioInput()
 
         let analyzer = analyzer
         Task {
@@ -62,12 +55,42 @@ final class ChatDictationController: ObservableObject {
 
         analysisTask?.cancel()
         resultsTask?.cancel()
+        resetSession()
+    }
+
+    func finish() async {
+        guard isRecording || isPreparing || audioEngine != nil else { return }
+
+        stopAudioInput()
+
+        let analyzer = analyzer
+        let resultsTask = resultsTask
+        isRecording = false
+        isPreparing = false
+
+        try? await analyzer?.finalizeAndFinishThroughEndOfInput()
+        await resultsTask?.value
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        analysisTask?.cancel()
+        resetSession()
+    }
+
+    private func stopAudioInput() {
+        inputContinuation?.finish()
+        inputContinuation = nil
+
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+    }
+
+    private func resetSession() {
         analysisTask = nil
         resultsTask = nil
         self.analyzer = nil
         finalizedTranscript = ""
         volatileTranscript = ""
-        emittedTranscript = ""
         updateText = nil
         isRecording = false
         isPreparing = false
@@ -76,9 +99,13 @@ final class ChatDictationController: ObservableObject {
     private func startRecording() async throws {
         try await requestPermissions()
 
-        let locale = await DictationTranscriber.supportedLocale(equivalentTo: Locale.current)
+        guard SpeechTranscriber.isAvailable else {
+            throw ChatDictationError.unsupportedLocale
+        }
+
+        let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale.current)
             ?? Locale(identifier: "en_US")
-        let transcriber = DictationTranscriber(locale: locale, preset: .progressiveShortDictation)
+        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
         let modules: [any SpeechModule] = [transcriber]
 
         try await installAssetsIfNeeded(for: modules)
@@ -181,7 +208,7 @@ final class ChatDictationController: ObservableObject {
         }
     }
 
-    private func apply(_ result: DictationTranscriber.Result) {
+    private func apply(_ result: SpeechTranscriber.Result) {
         let text = String(result.text.characters)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -194,40 +221,13 @@ final class ChatDictationController: ObservableObject {
         }
 
         let spokenText = append(finalizedTranscript, volatileTranscript)
-        let delta = incrementalText(from: emittedTranscript, to: spokenText)
-        emittedTranscript = spokenText
-
-        guard !delta.isEmpty else { return }
-        updateText?(delta)
+        updateText?(spokenText)
     }
 
     private func append(_ lhs: String, _ rhs: String) -> String {
         guard !lhs.isEmpty else { return rhs }
         guard !rhs.isEmpty else { return lhs }
         return lhs + " " + rhs
-    }
-
-    private func incrementalText(from previous: String, to current: String) -> String {
-        let current = current.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !current.isEmpty else { return "" }
-        guard !previous.isEmpty else { return current }
-
-        if current.hasPrefix(previous) {
-            return String(current.dropFirst(previous.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        var previousIndex = previous.startIndex
-        var currentIndex = current.startIndex
-        while previousIndex < previous.endIndex,
-              currentIndex < current.endIndex,
-              previous[previousIndex] == current[currentIndex] {
-            previousIndex = previous.index(after: previousIndex)
-            currentIndex = current.index(after: currentIndex)
-        }
-
-        return String(current[currentIndex...])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func makeAnalyzerBuffer(
