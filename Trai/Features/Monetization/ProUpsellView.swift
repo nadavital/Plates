@@ -261,6 +261,11 @@ struct ProUpsellBenefitRow: View {
 }
 
 struct ProUpsellPurchaseCard: View {
+    private enum LegalURL {
+        static let privacyPolicy = URL(string: "https://nadavavital.com/trai/privacy-policy")!
+        static let termsOfUse = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    }
+
     let product: SubscriptionProductDefinition
     let primaryButtonTitle: String
     let isPurchaseDisabled: Bool
@@ -277,9 +282,10 @@ struct ProUpsellPurchaseCard: View {
                     Text("Trai Pro")
                         .font(.traiBold(30))
 
-                    Text("\(product.priceDisplay) / month · Cancel anytime")
+                    Text("Monthly auto-renewing subscription · \(product.priceDisplay) / month")
                         .font(.traiHeadline(15))
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -300,6 +306,8 @@ struct ProUpsellPurchaseCard: View {
                     .disabled(isRestoreDisabled)
                 }
 
+                subscriptionLegalLinks
+
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.footnote)
@@ -319,6 +327,27 @@ struct ProUpsellPurchaseCard: View {
             .padding(20)
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
+    }
+
+    private var subscriptionLegalLinks: some View {
+        VStack(spacing: 6) {
+            Text("Cancel anytime in App Store subscription settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 12) {
+                Link("Privacy Policy", destination: LegalURL.privacyPolicy)
+                Text("•")
+                    .foregroundStyle(.tertiary)
+                Link("Terms of Use", destination: LegalURL.termsOfUse)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(TraiColors.brandAccent)
+            .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
     }
 }
 
