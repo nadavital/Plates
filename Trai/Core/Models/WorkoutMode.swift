@@ -97,6 +97,50 @@ nonisolated enum WorkoutMode: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    static func normalized(from rawValue: String?) -> WorkoutMode? {
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let lowercased = trimmed.lowercased()
+        if let mode = WorkoutMode(rawValue: lowercased) {
+            return mode
+        }
+
+        let compact = lowercased
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+
+        switch compact {
+        case "strength", "strengthtraining", "weighttraining", "weightlifting", "weights", "lifting", "resistancetraining", "gym":
+            return .strength
+        case "cardio", "run", "running", "jog", "jogging", "cycle", "cycling", "bike", "biking", "swim", "swimming", "row", "rowing", "walk", "walking", "hike", "hiking", "zone2", "zone2cardio", "elliptical", "stairs", "stairmaster":
+            return .cardio
+        case "hiit", "interval", "intervals", "sprints", "circuit", "metcon", "conditioning":
+            return .hiit
+        case "climb", "climbing", "boulder", "bouldering", "rockclimbing":
+            return .climbing
+        case "yoga":
+            return .yoga
+        case "pilates", "reformerpilates", "matpilates":
+            return .pilates
+        case "flexibility", "stretch", "stretching", "rangeofmotion":
+            return .flexibility
+        case "mobility", "mobilitywork":
+            return .mobility
+        case "recovery", "restorative", "cooldown", "easycardio", "activerecovery":
+            return .recovery
+        case "mixed", "hybrid", "crossfit", "crossfitstyle", "sport", "sports":
+            return .mixed
+        case "custom", "other":
+            return .custom
+        default:
+            let inferred = infer(from: trimmed, focusAreas: [], targetMuscleGroups: [])
+            return inferred == .custom ? nil : inferred
+        }
+    }
+
     static func infer(from sessionName: String, focusAreas: [String], targetMuscleGroups: [String]) -> WorkoutMode {
         let tokens = ([sessionName] + focusAreas + targetMuscleGroups)
             .joined(separator: " ")

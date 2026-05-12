@@ -115,7 +115,7 @@ nonisolated struct FoodSnapshotBuilder {
             emoji: entry.emoji,
             normalizedDisplayName: normalizedName,
             nameAliases: normalizationService.aliasCandidates(for: entry.name),
-            mealLabel: entry.mealType,
+            mealLabel: entry.semanticMeal.rawValue,
             servingText: entry.servingSize,
             servingQuantity: serving.quantity,
             servingUnit: serving.unit,

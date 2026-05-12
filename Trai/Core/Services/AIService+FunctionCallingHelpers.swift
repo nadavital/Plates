@@ -247,6 +247,7 @@ extension AIService {
         - When a food or drink is primarily sugar or contains clearly inferable sugar, include sugar_grams explicitly. Sugar is a subset of carbs, so for plain sugar, honey, syrup, soda, juice, candy, or sweetened drinks, sugar_grams should not be omitted or set to 0 when carbs are present. For something like pure table sugar, sugar_grams should match carbs_grams.
         - When a meal has multiple meaningful parts, include components in suggest_food_log with per-component macros and stable IDs when possible.
         - For corrections to existing meals: ALWAYS call get_food_log first to find the correct entry ID, then call edit_food_entry or edit_food_components depending on whether the user is changing the whole meal or just one part of it.
+        - Treat meal words like breakfast, lunch, dinner, and snack as semantic time/context hints, not exact storage labels. Prefer entry IDs, names, timestamps, and time_context from get_food_log when choosing what to edit.
         - For corrections to PART of an existing meal (for example "remove the toast", "half the rice", "add avocado", "I didn't eat the sauce"), call get_food_log with include_components=true and then call edit_food_components.
         - Prefer edit_food_components over edit_food_entry when the user is clearly changing one component or part of a meal rather than renaming or replacing the whole entry.
         - Do not rely on the injected food snapshot for edits; it does not include entry IDs.

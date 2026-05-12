@@ -29,9 +29,7 @@ extension AIFunctionExecutor {
 
         // Get workout preferences from args
         let workoutTypeString = args["workout_type"] as? String
-        let workoutType = workoutTypeString
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .flatMap { LiveWorkout.WorkoutType(rawValue: $0) } ?? .strength
+        let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutTypeString) ?? .strength
         let durationMinutes = args["duration_minutes"] as? Int ?? 45
 
         // Get target muscles - either from args or from recovery recommendations
@@ -239,12 +237,13 @@ extension AIFunctionExecutor {
     /// Returns a workout suggestion for user approval (not auto-started)
     func executeStartLiveWorkout(_ args: [String: Any]) -> ExecutionResult {
         guard let name = args["name"] as? String,
-              let workoutTypeString = args["workout_type"] as? String else {
+              let rawWorkoutType = args["workout_type"] as? String else {
             return .dataResponse(FunctionResult(
                 name: "start_live_workout",
                 response: ["error": "Missing required parameters: name and workout_type"]
             ))
         }
+        let workoutType = LiveWorkout.WorkoutType.normalized(from: rawWorkoutType) ?? .strength
 
         // Parse target muscle groups
         let muscleStrings = args["target_muscle_groups"] as? [String] ?? []
@@ -273,13 +272,13 @@ extension AIFunctionExecutor {
         if !muscleStrings.isEmpty {
             rationale = "Targeting \(muscleNames) based on your recovery status and preferences."
         } else {
-            rationale = "A \(workoutTypeString) workout ready for you to customize."
+            rationale = "A \(workoutType.displayName.lowercased()) workout ready for you to customize."
         }
 
         // Return suggestion for user approval
         let suggestion = SuggestedWorkoutEntry(
             name: name,
-            workoutType: workoutTypeString,
+            workoutType: workoutType.rawValue,
             targetMuscleGroups: muscleStrings,
             exercises: exercises,
             durationMinutes: args["duration_minutes"] as? Int ?? 45,

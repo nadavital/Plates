@@ -153,6 +153,32 @@ extension FoodEntry {
         get { MealType(rawValue: mealType) ?? .snack }
         set { mealType = newValue.rawValue }
     }
+
+    var semanticMeal: MealType {
+        let storedMeal = MealType(rawValue: mealType)
+        if let storedMeal, storedMeal != .snack {
+            return storedMeal
+        }
+
+        if input == .manual || input == .appIntent {
+            return storedMeal ?? .snack
+        }
+
+        return Self.mealType(for: loggedAt)
+    }
+
+    static func mealType(for date: Date) -> MealType {
+        switch FoodNormalizationService().mealTimeBucket(for: date) {
+        case .breakfast:
+            return .breakfast
+        case .lunch:
+            return .lunch
+        case .dinner:
+            return .dinner
+        case .lateNight, .snack:
+            return .snack
+        }
+    }
 }
 
 // MARK: - Input Method Helper

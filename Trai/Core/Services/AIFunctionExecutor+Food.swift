@@ -554,25 +554,13 @@ extension AIFunctionExecutor {
             return directEditErrorForMissingEntries(targetDateString: targetDateString)
         }
 
-        let mealTypeFiltered: [FoodEntry]
-        if let targetMealType,
-           let requestedMealType = FoodEntry.MealType(rawValue: targetMealType) {
-            mealTypeFiltered = allEntries.filter { $0.meal == requestedMealType }
-        } else {
-            mealTypeFiltered = allEntries
-        }
-
-        guard !mealTypeFiltered.isEmpty else {
-            return .clarification("I couldn't find a matching logged meal with that meal type. Tell me the meal name or time and I'll update it.")
-        }
-
-        let strictNameMatches = filterEntriesByName(mealTypeFiltered, targetName: targetName)
+        let strictNameMatches = filterEntriesByName(allEntries, targetName: targetName)
         let hasAdditionalDisambiguator =
             (targetDateString?.isEmpty == false) ||
             (targetTimeString?.isEmpty == false) ||
             (targetMealType?.isEmpty == false)
         let nameFiltered = strictNameMatches.isEmpty && hasAdditionalDisambiguator
-            ? mealTypeFiltered
+            ? allEntries
             : strictNameMatches
         let timeFiltered = filterEntriesByTime(nameFiltered, targetTimeString: targetTimeString)
 
@@ -660,9 +648,8 @@ extension AIFunctionExecutor {
             }
 
             if let targetMealType,
-               let requestedMealType = FoodEntry.MealType(rawValue: targetMealType),
-               entry.meal == requestedMealType {
-                score += 2
+               mealReferenceMatches(entry, targetMealType: targetMealType) {
+                score += 3
             }
 
             if let targetMinutes {
@@ -697,6 +684,18 @@ extension AIFunctionExecutor {
             .replacingOccurrences(of: "[^a-zA-Z0-9 ]", with: " ", options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func mealReferenceMatches(_ entry: FoodEntry, targetMealType: String) -> Bool {
+        guard let requestedMealType = FoodEntry.MealType(rawValue: targetMealType) else {
+            return false
+        }
+
+        if entry.meal == requestedMealType {
+            return true
+        }
+
+        return FoodEntry.mealType(for: entry.loggedAt) == requestedMealType
     }
 
     private func minutesSinceMidnight(from timeString: String) -> Int? {
@@ -798,7 +797,9 @@ extension AIFunctionExecutor {
                 "fiber": entry.fiberGrams as Any,
                 "sugar": entry.sugarGrams as Any,
                 "serving_size": entry.servingSize as Any,
-                "meal_type": entry.mealType,
+                "meal_type": entry.semanticMeal.rawValue,
+                "stored_meal_type": entry.mealType,
+                "time_context": FoodEntry.mealType(for: entry.loggedAt).rawValue,
                 "date": dateFormatter.string(from: entry.loggedAt),
                 "time": timeFormatter.string(from: entry.loggedAt)
             ]

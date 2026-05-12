@@ -646,6 +646,7 @@ private struct FoodLogReviewStepView: View {
         }
         entry.input = draft.inputSource.foodEntryInputMethod
         entry.loggedAt = resolvedFoodLogDate(targetDate: targetDate, sessionId: draft.sessionId, modelContext: modelContext)
+        entry.meal = FoodEntry.mealType(for: entry.loggedAt)
         entry.ensureDisplayMetadata()
         let acceptedSnapshot = snapshotBuilder.buildAcceptedSnapshot(
             from: suggestion,

@@ -170,7 +170,7 @@ enum AIFunctionDeclarations {
                     ],
                     "target_meal_type": [
                         "type": "string",
-                        "description": "Meal type of the already-logged entry you want to edit. Use this to identify the existing entry when entry_id is not available.",
+                        "description": "Semantic meal context of the already-logged entry you want to edit, such as breakfast, lunch, dinner, or snack. Use as a hint with name/time/date when entry_id is not available; it may not match the stored label exactly.",
                         "enum": ["breakfast", "lunch", "dinner", "snack"]
                     ],
                     "name": [
@@ -254,7 +254,7 @@ enum AIFunctionDeclarations {
                     ],
                     "target_meal_type": [
                         "type": "string",
-                        "description": "Meal type of the already-logged entry you want to edit.",
+                        "description": "Semantic meal context of the already-logged entry you want to edit, such as breakfast, lunch, dinner, or snack. Use as a hint with name/time/date; it may not match the stored label exactly.",
                         "enum": ["breakfast", "lunch", "dinner", "snack"]
                     ],
                     "operations": [
@@ -487,7 +487,7 @@ enum AIFunctionDeclarations {
                     ],
                     "workout_type": [
                         "type": "string",
-                        "description": "Optional broad workout type scope",
+                        "description": "Optional broad workout type scope. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this.",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
                     ],
                     "activity_name": [
@@ -554,6 +554,7 @@ enum AIFunctionDeclarations {
                     ],
                     "workout_type": [
                         "type": "string",
+                        "description": "Updated broad workout type. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this; pass empty string to clear it.",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom", ""]
                     ],
                     "activity_name": [
@@ -634,7 +635,7 @@ enum AIFunctionDeclarations {
                     ],
                     "type": [
                         "type": "string",
-                        "description": "Type of workout",
+                        "description": "Type of workout or semantic activity phrase. The app normalizes activities like running, cycling, weight lifting, stretching, and bouldering to the closest supported workout type.",
                         "enum": ["strength", "cardio", "hiit", "yoga", "running", "cycling", "swimming", "walking", "sports", "other"]
                     ],
                     "duration_minutes": [
@@ -700,7 +701,7 @@ enum AIFunctionDeclarations {
                 "properties": [
                     "workout_type": [
                         "type": "string",
-                        "description": "Preferred workout type (optional - will auto-select if not specified)",
+                        "description": "Preferred workout type. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this (optional - will auto-select if not specified)",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
                     ],
                     "target_muscle_groups": [
@@ -737,7 +738,7 @@ enum AIFunctionDeclarations {
                     ],
                     "workout_type": [
                         "type": "string",
-                        "description": "Type of workout",
+                        "description": "Type of workout. Map user phrases like running, weight lifting, stretching, or bouldering to the closest supported enum value before passing this.",
                         "enum": ["strength", "cardio", "hiit", "climbing", "yoga", "pilates", "flexibility", "mobility", "mixed", "recovery", "custom"]
                     ],
                     "target_muscle_groups": [

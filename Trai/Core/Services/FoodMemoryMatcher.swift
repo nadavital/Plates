@@ -487,7 +487,7 @@ nonisolated struct FoodMemoryMatcher {
                 emoji: entry.emoji,
                 normalizedDisplayName: normalizedName,
                 nameAliases: normalizationService.aliasCandidates(for: entry.name),
-                mealLabel: entry.mealType,
+                mealLabel: entry.semanticMeal.rawValue,
                 servingText: entry.servingSize,
                 servingQuantity: entry.servingQuantity > 0 ? entry.servingQuantity : nil,
                 servingUnit: nil,

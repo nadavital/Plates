@@ -154,6 +154,7 @@ struct ManualFoodEntrySheet: View {
         entry.inputMethod = "manual"
         entry.emoji = FoodEmojiResolver.resolve(preferred: nil, foodName: name)
         entry.loggedAt = resolvedFoodLogDate(targetDate: targetDate, sessionId: sessionId, modelContext: modelContext)
+        entry.meal = FoodEntry.mealType(for: entry.loggedAt)
         entry.ensureDisplayMetadata()
 
         // Assign session if adding to existing session

@@ -71,6 +71,7 @@ extension ChatView {
         if let loggedAt = meal.loggedAtDate {
             entry.loggedAt = loggedAt
         }
+        entry.meal = FoodEntry.mealType(for: entry.loggedAt)
         let acceptedSnapshot = FoodSnapshotBuilder().buildAcceptedSnapshot(
             from: meal,
             source: .chat,
@@ -347,7 +348,7 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutLogSuggestion(_ workoutLog: SuggestedWorkoutLog, for message: ChatMessage) {
         // Create a LiveWorkout with proper exercise details
-        let workoutType = LiveWorkout.WorkoutType(rawValue: workoutLog.workoutType.lowercased())
+        let workoutType = LiveWorkout.WorkoutType.normalized(from: workoutLog.workoutType)
             ?? (workoutLog.isStrength ? .strength : .cardio)
         let workout = LiveWorkout(
             name: workoutLog.displayName,
@@ -440,11 +441,11 @@ extension ChatView {
 extension ChatView {
     func acceptWorkoutSuggestion(_ workout: SuggestedWorkoutEntry, for message: ChatMessage) {
         // Map workout type string to enum
-        let workoutType = LiveWorkout.WorkoutType(rawValue: workout.workoutType.lowercased()) ?? .strength
+        let workoutType = LiveWorkout.WorkoutType.normalized(from: workout.workoutType) ?? .strength
 
         // Map target muscle groups
         let targetMuscles = workoutType.supportsMuscleTargets
-            ? workout.targetMuscleGroups.compactMap { LiveWorkout.MuscleGroup(rawValue: $0.lowercased()) }
+            ? LiveWorkout.MuscleGroup.fromTargetStrings(workout.targetMuscleGroups)
             : []
         let focusAreas = workoutType.supportsMuscleTargets ? [] : workout.targetMuscleGroups
 

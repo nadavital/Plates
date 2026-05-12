@@ -22,7 +22,7 @@ struct FoodTrackingView: View {
     }
 
     private var entriesByMeal: [FoodEntry.MealType: [FoodEntry]] {
-        Dictionary(grouping: todaysEntries) { $0.meal }
+        Dictionary(grouping: todaysEntries) { $0.semanticMeal }
     }
 
     var body: some View {

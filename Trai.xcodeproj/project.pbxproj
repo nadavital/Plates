@@ -35,6 +35,8 @@
 		F20000112A00000100F20001 /* PendingFoodLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000122A00000100F20001 /* PendingFoodLogTests.swift */; };
 		F3A100012E00000100A10001 /* FoodRecommendationTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */; };
 		F3A100032E00000100A10001 /* FoodRecommendationEvaluatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */; };
+		F3A100042E00000100A10001 /* AIFunctionExecutorFoodSugarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100052E00000100A10001 /* AIFunctionExecutorFoodSugarTests.swift */; };
+		F3A100062E00000100A10001 /* WorkoutSemanticParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A100072E00000100A10001 /* WorkoutSemanticParsingTests.swift */; };
 		F3A1000B2E00000100A10001 /* FoodSuggestionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */; };
 		F3A1000D2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000C2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift */; };
 		F3A1000F2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */; };
@@ -111,6 +113,8 @@
 		F20000122A00000100F20001 /* PendingFoodLogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PendingFoodLogTests.swift; sourceTree = "<group>"; };
 		F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationTestSupport.swift; sourceTree = "<group>"; };
 		F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationEvaluatorTests.swift; sourceTree = "<group>"; };
+		F3A100052E00000100A10001 /* AIFunctionExecutorFoodSugarTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIFunctionExecutorFoodSugarTests.swift; sourceTree = "<group>"; };
+		F3A100072E00000100A10001 /* WorkoutSemanticParsingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutSemanticParsingTests.swift; sourceTree = "<group>"; };
 		F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodSuggestionIntegrationTests.swift; sourceTree = "<group>"; };
 		F3A1000C2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationDeviceDebugTests.swift; sourceTree = "<group>"; };
 		F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodRecommendationLegacyCleanupTests.swift; sourceTree = "<group>"; };
@@ -239,6 +243,8 @@
 				B1F0A0063D00000100B1F001 /* FoodMemoryServiceTests.swift */,
 				F3A100002E00000100A10001 /* FoodRecommendationTestSupport.swift */,
 				F3A100022E00000100A10001 /* FoodRecommendationEvaluatorTests.swift */,
+				F3A100052E00000100A10001 /* AIFunctionExecutorFoodSugarTests.swift */,
+				F3A100072E00000100A10001 /* WorkoutSemanticParsingTests.swift */,
 				F3A1000A2E00000100A10001 /* FoodSuggestionIntegrationTests.swift */,
 				F3A1000C2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift */,
 				F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */,
@@ -489,6 +495,8 @@
 				A30000052B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift in Sources */,
 				F3A100012E00000100A10001 /* FoodRecommendationTestSupport.swift in Sources */,
 				F3A100032E00000100A10001 /* FoodRecommendationEvaluatorTests.swift in Sources */,
+				F3A100042E00000100A10001 /* AIFunctionExecutorFoodSugarTests.swift in Sources */,
+				F3A100062E00000100A10001 /* WorkoutSemanticParsingTests.swift in Sources */,
 				F3A1000B2E00000100A10001 /* FoodSuggestionIntegrationTests.swift in Sources */,
 				F3A1000D2E00000100A10001 /* FoodRecommendationDeviceDebugTests.swift in Sources */,
 				F3A1000F2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift in Sources */,

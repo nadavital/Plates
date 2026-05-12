@@ -342,7 +342,7 @@ extension AIFunctionExecutor {
             ))
         }
 
-        let workoutType = (args["workout_type"] as? String).flatMap(WorkoutMode.init(rawValue:))
+        let workoutType = WorkoutMode.normalized(from: args["workout_type"] as? String)
         let activityName = (args["activity_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let notes = (args["notes"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let targetValue = numericDouble(from: args["target_value"])
@@ -439,7 +439,7 @@ extension AIFunctionExecutor {
 
         if let rawWorkoutType = args["workout_type"] as? String {
             let trimmedType = rawWorkoutType.trimmingCharacters(in: .whitespacesAndNewlines)
-            goal.linkedWorkoutType = trimmedType.isEmpty ? nil : WorkoutMode(rawValue: trimmedType)
+            goal.linkedWorkoutType = trimmedType.isEmpty ? nil : WorkoutMode.normalized(from: trimmedType)
         }
 
         if let rawActivityName = args["activity_name"] as? String {
@@ -703,6 +703,8 @@ extension AIFunctionExecutor {
                 response: ["error": "Missing workout type"]
             ))
         }
+        let workoutType = WorkoutMode.normalized(from: type)?.rawValue
+            ?? type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         let workoutName = args["name"] as? String  // Trai-generated name
         let durationMinutes = args["duration_minutes"] as? Int
@@ -751,7 +753,7 @@ extension AIFunctionExecutor {
         // Return suggestion for user approval (don't save yet)
         let suggestion = SuggestedWorkoutLog(
             name: workoutName,
-            workoutType: type,
+            workoutType: workoutType,
             durationMinutes: durationMinutes,
             exercises: exercises,
             notes: notes
