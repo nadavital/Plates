@@ -64,7 +64,10 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if hasCompletedOnboardingFromQuery || startupResolutionState == .ready {
+            if AppLaunchArguments.shouldUseAppStoreScreenshotSeed,
+               AppLaunchArguments.shouldShowAppStoreScreenshotPlanReview {
+                AppStoreScreenshotPlanReviewView()
+            } else if hasCompletedOnboardingFromQuery || startupResolutionState == .ready {
                 MainTabView(deepLinkDestination: $deepLinkDestination)
             } else if startupResolutionState == .determining
                         || startupResolutionState == .waitingForCloudProfile {
@@ -162,6 +165,58 @@ struct ContentView: View {
             cachedOnboardingReady = true
         }
         return isReady
+    }
+}
+
+private struct AppStoreScreenshotPlanReviewView: View {
+    @State private var plan: NutritionPlan? = NutritionPlan(
+        dailyTargets: .init(calories: 2100, protein: 165, carbs: 210, fat: 70, fiber: 30),
+        rationale: "Based on your goal of building muscle while maintaining a moderate activity level.",
+        macroSplit: .init(proteinPercent: 30, carbsPercent: 40, fatPercent: 30),
+        nutritionGuidelines: ["Aim for 30-40g protein per meal", "Time carbs around workouts"],
+        mealTimingSuggestion: "4 meals, evenly spaced",
+        weeklyAdjustments: nil,
+        warnings: ["Monitor weight weekly"],
+        progressInsights: .init(
+            estimatedWeeklyChange: "+0.2 kg",
+            estimatedTimeToGoal: nil,
+            calorieDeficitOrSurplus: 300,
+            shortTermMilestone: "Focus on progressive overload",
+            longTermOutlook: "Gradual strength and muscle gains"
+        )
+    )
+    @State private var adjustedCalories = "2100"
+    @State private var adjustedProtein = "165"
+    @State private var adjustedCarbs = "210"
+    @State private var adjustedFat = "70"
+
+    private let request = PlanGenerationRequest(
+        name: "Nadav",
+        age: 25,
+        gender: .male,
+        heightCm: 180,
+        weightKg: 80,
+        targetWeightKg: 75,
+        activityLevel: .moderate,
+        activityNotes: "",
+        goal: .buildMuscle,
+        additionalNotes: "",
+        enabledMacros: MacroType.defaultEnabled
+    )
+
+    var body: some View {
+        PlanReviewStepView(
+            plan: $plan,
+            planRequest: request,
+            isLoading: false,
+            error: nil,
+            adjustedCalories: $adjustedCalories,
+            adjustedProtein: $adjustedProtein,
+            adjustedCarbs: $adjustedCarbs,
+            adjustedFat: $adjustedFat,
+            onRetry: {}
+        )
+        .traiBackground(intensity: 0.45)
     }
 }
 

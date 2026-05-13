@@ -17,6 +17,7 @@ enum AppLaunchArguments {
     static let appStoreScreenshotMode = "--app-store-screenshot-mode"
     static let appStoreScreenshotInitialTab = "--app-store-screenshot-tab"
     static let appStoreScreenshotFoodReview = "--app-store-screenshot-food-review"
+    static let appStoreScreenshotPlanReview = "--app-store-screenshot-plan-review"
     static let appStoreScreenshotWatchConnected = "--app-store-screenshot-watch-connected"
     static let appStoreScreenshotChatScenario = "--app-store-screenshot-chat-scenario"
     static let enableTabPrewarm = "--enable-tab-prewarm"
@@ -99,6 +100,10 @@ enum AppLaunchArguments {
 
     static var shouldShowAppStoreScreenshotFoodReview: Bool {
         ProcessInfo.processInfo.arguments.contains(appStoreScreenshotFoodReview)
+    }
+
+    static var shouldShowAppStoreScreenshotPlanReview: Bool {
+        ProcessInfo.processInfo.arguments.contains(appStoreScreenshotPlanReview)
     }
 
     static var shouldShowAppStoreScreenshotWatchConnected: Bool {

@@ -256,6 +256,11 @@ struct FoodCameraSuggestionCard: View {
                 .foregroundStyle(.green)
 
                 Spacer()
+
+                NutritionSourcesLink(
+                    context: .foodAnalysis,
+                    title: "Sources"
+                )
             }
 
             // Meal name and calories
@@ -418,6 +423,144 @@ struct FoodRefinementInput: View {
             }
         }
         .traiCard()
+    }
+}
+
+struct NutritionSourcesLink: View {
+    let context: NutritionSourcesSheet.Context
+    var title: String = "Sources & limitations"
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "info.circle")
+                    .font(.caption2)
+                Text(title)
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+            .opacity(0.88)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("nutritionSourcesLink")
+        .sheet(isPresented: $isPresented) {
+            NutritionSourcesSheet(context: context)
+                .traiSheetBranding()
+        }
+    }
+}
+
+struct NutritionSourcesSheet: View {
+    enum Context {
+        case foodAnalysis
+        case nutritionPlan
+    }
+
+    private enum SourceURL {
+        static let fdaCalories = URL(string: "https://www.fda.gov/food/nutrition-facts-label/calories-nutrition-facts-label")!
+        static let foodDataCentral = URL(string: "https://fdc.nal.usda.gov/")!
+        static let mifflinStJeor = URL(string: "https://www.ncbi.nlm.nih.gov/books/NBK278991/table/diet-treatment-obes.table12est/")!
+    }
+
+    let context: Context
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(primaryCopy)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(3)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        switch context {
+                        case .foodAnalysis:
+                            sourceLink(
+                                title: "USDA FoodData Central",
+                                subtitle: "Reference database for checking foods, ingredients, and nutrient values.",
+                                destination: SourceURL.foodDataCentral
+                            )
+
+                            sourceLink(
+                                title: "FDA Nutrition Facts: calories",
+                                subtitle: "Label guidance for calories and packaged-food nutrition context.",
+                                destination: SourceURL.fdaCalories
+                            )
+                        case .nutritionPlan:
+                            sourceLink(
+                                title: "Mifflin-St Jeor equation",
+                                subtitle: "Reference equation for estimating resting metabolic rate from profile inputs.",
+                                destination: SourceURL.mifflinStJeor
+                            )
+
+                            sourceLink(
+                                title: "FDA Nutrition Facts: calories",
+                                subtitle: "General calorie and nutrition-label context for interpreting targets.",
+                                destination: SourceURL.fdaCalories
+                            )
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var primaryCopy: String {
+        switch context {
+        case .foodAnalysis:
+            "Trai's food analysis is an AI estimate based on the photo, description, and saved context. Portion size, hidden ingredients, cooking method, and labels can change the result, so verify packaged or restaurant food against official nutrition information. These estimates are for general nutrition tracking only and are not medical advice."
+        case .nutritionPlan:
+            "Trai's plan targets are generated from your profile, goal, and activity level using standard nutrition-estimation methods. They are planning estimates, not medical advice, and should not replace guidance from a qualified medical or nutrition professional."
+        }
+    }
+
+    private var navigationTitle: String {
+        switch context {
+        case .foodAnalysis:
+            "Food Estimate"
+        case .nutritionPlan:
+            "Plan Sources"
+        }
+    }
+
+    private func sourceLink(title: String, subtitle: String, destination: URL) -> some View {
+        Link(destination: destination) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "link")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TraiColors.brandAccent)
+                    .frame(width: 18, height: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 

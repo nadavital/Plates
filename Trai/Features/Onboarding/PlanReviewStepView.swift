@@ -296,7 +296,7 @@ struct PlanReviewStepView: View {
             .buttonStyle(.traiPrimary(color: .accentColor, fullWidth: true))
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 70)
+        .padding(.bottom, 24)
     }
 
     // MARK: - Plan Content

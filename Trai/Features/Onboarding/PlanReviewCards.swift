@@ -30,14 +30,20 @@ struct DailyTargetsCard: View {
 
                 Spacer()
 
+                NutritionSourcesLink(
+                    context: .nutritionPlan,
+                    title: "Sources"
+                )
+
                 Button {
                     focusedField = .calories
                 } label: {
-                    Text("Tap to edit")
-                        .font(.caption)
+                    Image(systemName: "pencil.circle")
+                        .font(.subheadline)
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Edit daily calories")
             }
 
             // Calories - big and prominent
