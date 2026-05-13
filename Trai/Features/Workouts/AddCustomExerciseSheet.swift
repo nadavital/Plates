@@ -131,7 +131,7 @@ struct AddCustomExerciseSheet: View {
                     proUpsellCoordinator?.present(source: .exerciseAnalysis)
                 }
             } else if isAnalyzing {
-                sectionHeader("Trai Analysis", icon: "sparkles")
+                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
 
                 HStack(spacing: 10) {
                     ProgressView()
@@ -143,7 +143,7 @@ struct AddCustomExerciseSheet: View {
                 .padding(12)
                 .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else if let analysis = analysisResult {
-                sectionHeader("Trai Analysis", icon: "sparkles")
+                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text(analysis.description)
@@ -169,12 +169,12 @@ struct AddCustomExerciseSheet: View {
                 .padding(12)
                 .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
             } else {
-                sectionHeader("Trai Analysis", icon: "sparkles")
+                sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
 
                 Button {
                     Task { await analyzeExercise() }
                 } label: {
-                    Label("Analyze with AI", systemImage: "sparkles")
+                    Label("Analyze with Trai", systemImage: "circle.hexagongrid.circle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true))

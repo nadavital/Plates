@@ -156,7 +156,7 @@ struct FoodCameraReviewView: View {
                             }
                             .frame(maxWidth: .infinity)
                         } else {
-                            Label("Analyze with AI", systemImage: "sparkles")
+                            Label("Analyze with Trai", systemImage: "circle.hexagongrid.circle")
                                 .frame(maxWidth: .infinity)
                         }
                     }

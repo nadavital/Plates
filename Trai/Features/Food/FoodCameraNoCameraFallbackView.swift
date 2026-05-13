@@ -47,7 +47,7 @@ struct FoodCameraNoCameraFallbackView: View {
                 VStack(alignment: .leading, spacing: TraiSpacing.sm) {
                     TraiSectionHeader("Describe it", icon: "text.alignleft")
 
-                    TextField("Describe your meal for AI analysis...", text: $description, axis: .vertical)
+                    TextField("Describe your meal for Trai analysis...", text: $description, axis: .vertical)
                         .lineLimit(3...6)
                         .padding(12)
                         .background(
@@ -61,7 +61,7 @@ struct FoodCameraNoCameraFallbackView: View {
                     Button {
                         submitDescription()
                     } label: {
-                        Label("Analyze Description", systemImage: "sparkles")
+                        Label("Analyze with Trai", systemImage: "circle.hexagongrid.circle")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.traiPrimary(fullWidth: true))

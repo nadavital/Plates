@@ -139,7 +139,7 @@ struct AddFoodView: View {
                 .padding(12)
                 .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
 
-            Text("Describe your food for more accurate AI analysis")
+            Text("Describe your food for more accurate Trai analysis")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -177,7 +177,7 @@ struct AddFoodView: View {
 
     private var analyzeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("AI Analysis", icon: "sparkles")
+            sectionTitle("Trai Analysis", icon: "circle.hexagongrid.circle")
 
             Button {
                 Task {
@@ -188,9 +188,9 @@ struct AddFoodView: View {
                     if isAnalyzing {
                         ProgressView()
                     } else {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "circle.hexagongrid.circle")
                     }
-                    Text(isAnalyzing ? "Analyzing..." : "Analyze with AI")
+                    Text(isAnalyzing ? "Analyzing..." : "Analyze with Trai")
                 }
                 .frame(maxWidth: .infinity)
             }

@@ -149,7 +149,7 @@ extension ProUpsellSource {
         case .chat:
             "Unlock coach chat"
         case .foodAnalysis:
-            "Unlock AI food logging"
+            "Unlock Trai food logging"
         case .nutritionPlan:
             "Unlock Trai plan coaching"
         case .workoutPlan:

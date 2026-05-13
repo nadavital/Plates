@@ -71,7 +71,7 @@ final class MonetizationService {
         if canAccessAIFeatures {
             return "Included with your \(currentPlan.displayName) plan"
         }
-        return "Upgrade to Trai Pro to unlock AI coaching, food analysis, and personalized plans."
+        return "Upgrade to Trai Pro to unlock coach chat, food analysis, and personalized plans."
     }
 
     var quotaSummaryText: String {

@@ -8,7 +8,7 @@
 import AppIntents
 import SwiftData
 
-/// Intent for logging food by text description using AI analysis
+/// Intent for logging food by text description using Trai analysis
 struct LogFoodTextIntent: AppIntent {
     static var title: LocalizedStringResource = "Log Food"
     static var description = IntentDescription("Log food by describing what you ate")
@@ -36,7 +36,7 @@ struct LogFoodTextIntent: AppIntent {
         await BillingService.shared.refreshAccessStateForImmediateUse()
 
         guard MonetizationService.shared.canAccessAIFeatures else {
-            return .result(dialog: "AI food logging is available with Trai Pro. Open the app to subscribe or log food manually.")
+            return .result(dialog: "Trai food logging is available with Trai Pro. Open the app to subscribe or log food manually.")
         }
 
         guard let container = TraiApp.sharedModelContainer else {
