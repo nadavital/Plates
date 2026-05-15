@@ -106,12 +106,18 @@ final class LiveWorkoutViewModel {
         }
     }
 
-    private struct WorkoutMetrics {
+    private struct WorkoutMetrics: Equatable {
         var totalSets: Int
         var completedSets: Int
         var totalVolume: Double
 
         static let zero = WorkoutMetrics(totalSets: 0, completedSets: 0, totalVolume: 0)
+    }
+
+    private struct EntryListSignature: Equatable {
+        let id: UUID
+        let orderIndex: Int
+        let exerciseName: String
     }
 
     private var cachedEntries: [LiveWorkoutEntry] = []
@@ -377,6 +383,19 @@ final class LiveWorkoutViewModel {
         // elapsedTime is now computed from workout.startedAt
         self.exerciseSuggestions = suggestions
         refreshEntriesAndMetrics(forceSuggestionRefresh: true)
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            liveActivityUpdateTimer?.invalidate()
+            liveActivityIntentTimer?.invalidate()
+            pendingLiveActivityUpdateTask?.cancel()
+            deferredPerformanceHydrationTask?.cancel()
+            deferredSuggestionHydrationTask?.cancel()
+            if let backgroundFlushObserver {
+                NotificationCenter.default.removeObserver(backgroundFlushObserver)
+            }
+        }
     }
 
     /// Initialize with an existing workout and optional template for suggestions
@@ -1176,7 +1195,7 @@ final class LiveWorkoutViewModel {
             completed: false,
             isWarmup: false
         ))
-        refreshEntriesAndMetrics()
+        refreshCachedMetrics()
         saveDebounced(updateLiveActivity: true)
     }
 
@@ -1192,7 +1211,8 @@ final class LiveWorkoutViewModel {
         let sets = entry.sets
         guard index < sets.count else { return }
 
-        var set = sets[index]
+        let originalSet = sets[index]
+        var set = originalSet
         var didChange = false
         if let reps, reps != set.reps {
             set.reps = reps
@@ -1216,13 +1236,15 @@ final class LiveWorkoutViewModel {
         }
         guard didChange else { return }
         entry.updateSet(at: index, with: set)
-        refreshEntriesAndMetrics()
+        if metricsImpactChanged(from: originalSet, to: set) {
+            refreshCachedMetrics()
+        }
         saveDebounced(updateLiveActivity: false)
     }
 
     func removeSet(at index: Int, from entry: LiveWorkoutEntry) {
         entry.removeSet(at: index)
-        refreshEntriesAndMetrics()
+        refreshCachedMetrics()
         saveImmediately()
     }
 
@@ -1233,7 +1255,7 @@ final class LiveWorkoutViewModel {
         var set = sets[index]
         set.isWarmup.toggle()
         entry.updateSet(at: index, with: set)
-        refreshEntriesAndMetrics()
+        refreshCachedMetrics()
         saveImmediately()
     }
 
@@ -1449,8 +1471,10 @@ final class LiveWorkoutViewModel {
 
     private func refreshEntriesAndMetrics(forceSuggestionRefresh: Bool = false) {
         let sortedEntries = (workout.entries ?? []).sorted { $0.orderIndex < $1.orderIndex }
-        cachedEntries = sortedEntries
-        cachedMetrics = calculateMetrics(for: sortedEntries)
+        if entryListSignature(for: sortedEntries) != entryListSignature(for: cachedEntries) {
+            cachedEntries = sortedEntries
+        }
+        updateCachedMetrics(calculateMetrics(for: sortedEntries))
         let updatedExerciseNameSet = Set(sortedEntries.map { $0.exerciseName.lowercased() })
         let exerciseListChanged = updatedExerciseNameSet != cachedCurrentExerciseNameSet
         cachedCurrentExerciseNameSet = updatedExerciseNameSet
@@ -1458,6 +1482,38 @@ final class LiveWorkoutViewModel {
         if forceSuggestionRefresh || exerciseListChanged {
             recomputeSuggestionRankings()
         }
+    }
+
+    private func refreshCachedMetrics() {
+        updateCachedMetrics(calculateMetrics(for: cachedEntries))
+    }
+
+    private func updateCachedMetrics(_ metrics: WorkoutMetrics) {
+        guard metrics != cachedMetrics else { return }
+        cachedMetrics = metrics
+    }
+
+    private func entryListSignature(for entries: [LiveWorkoutEntry]) -> [EntryListSignature] {
+        entries.map {
+            EntryListSignature(
+                id: $0.id,
+                orderIndex: $0.orderIndex,
+                exerciseName: $0.exerciseName
+            )
+        }
+    }
+
+    private func metricsImpactChanged(
+        from originalSet: LiveWorkoutEntry.SetData,
+        to updatedSet: LiveWorkoutEntry.SetData
+    ) -> Bool {
+        let originalHasData = originalSet.reps > 0 && !originalSet.isWarmup
+        let updatedHasData = updatedSet.reps > 0 && !updatedSet.isWarmup
+        guard originalHasData == updatedHasData else { return true }
+
+        let originalVolume = originalSet.completed && !originalSet.isWarmup ? originalSet.volume : 0
+        let updatedVolume = updatedSet.completed && !updatedSet.isWarmup ? updatedSet.volume : 0
+        return originalVolume != updatedVolume
     }
 
     private func calculateMetrics(for entries: [LiveWorkoutEntry]) -> WorkoutMetrics {

@@ -25,6 +25,7 @@
 		A30000052B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */; };
 		A30000072B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */; };
 		A30000092B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */; };
+		A300000B2B00000100A30001 /* LiveWorkoutViewModelInvalidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A300000C2B00000100A30001 /* LiveWorkoutViewModelInvalidationTests.swift */; };
 		D10000012A00000100D10001 /* TraiUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000052A00000100D10001 /* TraiUITests.swift */; };
 		D10000022A00000100D10001 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21244ABFE007089D0AC73493 /* XCTest.framework */; };
 		F20000012A00000100F20001 /* AppRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000022A00000100F20001 /* AppRouteTests.swift */; };
@@ -102,6 +103,7 @@
 		A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutUpdatePolicyTests.swift; sourceTree = "<group>"; };
 		A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPersistenceCoordinatorTests.swift; sourceTree = "<group>"; };
 		A300000A2B00000100A30001 /* LiveWorkoutPerformanceGuardrailsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutPerformanceGuardrailsTests.swift; sourceTree = "<group>"; };
+		A300000C2B00000100A30001 /* LiveWorkoutViewModelInvalidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveWorkoutViewModelInvalidationTests.swift; sourceTree = "<group>"; };
 		C60829DC4A73FC429F2BCAC0 /* TraiCoachContextAssemblerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiCoachContextAssemblerTests.swift; sourceTree = "<group>"; };
 		D10000042A00000100D10001 /* TraiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraiUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D10000052A00000100D10001 /* TraiUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraiUITests.swift; sourceTree = "<group>"; };
@@ -261,6 +263,7 @@
 				A30000022B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift */,
 				A30000082B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift */,
 				A30000062B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift */,
+				A300000C2B00000100A30001 /* LiveWorkoutViewModelInvalidationTests.swift */,
 				C60829DC4A73FC429F2BCAC0 /* TraiCoachContextAssemblerTests.swift */,
 				F200000C2A00000100F20001 /* TraiCoachPatternServiceTests.swift */,
 				F20000102A00000100F20001 /* WorkoutTemplateServiceTests.swift */,
@@ -493,6 +496,7 @@
 				A30000012B00000100A30001 /* LiveWorkoutPerformanceDataSeederTests.swift in Sources */,
 				A30000072B00000100A30001 /* LiveWorkoutPersistenceCoordinatorTests.swift in Sources */,
 				A30000052B00000100A30001 /* LiveWorkoutUpdatePolicyTests.swift in Sources */,
+				A300000B2B00000100A30001 /* LiveWorkoutViewModelInvalidationTests.swift in Sources */,
 				F3A100012E00000100A10001 /* FoodRecommendationTestSupport.swift in Sources */,
 				F3A100032E00000100A10001 /* FoodRecommendationEvaluatorTests.swift in Sources */,
 				F3A100042E00000100A10001 /* AIFunctionExecutorFoodSugarTests.swift in Sources */,
