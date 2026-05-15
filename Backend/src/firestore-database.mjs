@@ -62,6 +62,10 @@ function createFirestoreStatement(firestore, sql) {
 }
 
 async function readRows(firestore, sql, params) {
+  if (sql.includes('admin_user_list')) {
+    return await readAdminUserList(firestore, params[0]);
+  }
+
   if (sql.includes('from users') && sql.includes('where id = ?')) {
     return one(await getByID(firestore, 'users', params[0]));
   }
@@ -190,6 +194,95 @@ async function readRows(firestore, sql, params) {
   }
 
   throw new Error(`Unsupported Firestore read SQL: ${sql}`);
+}
+
+async function readAdminUserList(firestore, usageWindowStart) {
+  const [
+    users,
+    identities,
+    subscriptions,
+    sessions,
+    usageRows
+  ] = await Promise.all([
+    allRows(firestore, 'users'),
+    allRows(firestore, 'auth_identities'),
+    allRows(firestore, 'subscriptions'),
+    allRows(firestore, 'sessions'),
+    allRows(firestore, 'usage_ledger')
+  ]);
+
+  const firstIdentityByUser = new Map();
+  for (const identity of identities.sort(asc('created_at'))) {
+    if (!firstIdentityByUser.has(identity.user_id)) {
+      firstIdentityByUser.set(identity.user_id, identity);
+    }
+  }
+
+  const subscriptionByUser = new Map();
+  for (const subscription of subscriptions) {
+    subscriptionByUser.set(subscription.user_id, subscription);
+  }
+
+  const lastSessionByUser = new Map();
+  for (const session of sessions) {
+    const previous = lastSessionByUser.get(session.user_id);
+    if (!previous || String(session.updated_at ?? '') > String(previous.last_session_at ?? '')) {
+      lastSessionByUser.set(session.user_id, {
+        last_session_at: session.updated_at ?? null
+      });
+    }
+  }
+
+  const usageSummaryByUser = new Map();
+  for (const usageRow of usageRows) {
+    if (String(usageRow.created_at ?? '') < String(usageWindowStart ?? '')) {
+      continue;
+    }
+
+    const summary = usageSummaryByUser.get(usageRow.user_id) ?? {
+      request_count_30d: 0,
+      units_used_30d: 0,
+      last_used_at: null
+    };
+    summary.request_count_30d += 1;
+    summary.units_used_30d += Number(usageRow.unit_cost) || 0;
+    if (!summary.last_used_at || String(usageRow.created_at ?? '') > String(summary.last_used_at)) {
+      summary.last_used_at = usageRow.created_at ?? null;
+    }
+    usageSummaryByUser.set(usageRow.user_id, summary);
+  }
+
+  return users.map((user) => {
+    const identity = firstIdentityByUser.get(user.id) ?? {};
+    const subscription = subscriptionByUser.get(user.id) ?? {};
+    const sessionSummary = lastSessionByUser.get(user.id) ?? {};
+    const usageSummary = usageSummaryByUser.get(user.id) ?? {};
+
+    return {
+      user_id: user.id,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      user_status: user.status,
+      identity_provider: identity.provider ?? null,
+      email: identity.email ?? null,
+      display_name: identity.display_name ?? null,
+      identity_updated_at: identity.updated_at ?? null,
+      subscription_plan: subscription.plan ?? null,
+      subscription_status: subscription.status ?? null,
+      subscription_source: subscription.source ?? null,
+      renews_at: subscription.renews_at ?? null,
+      expires_at: subscription.expires_at ?? null,
+      last_session_at: sessionSummary.last_session_at ?? null,
+      request_count_30d: usageSummary.request_count_30d ?? null,
+      units_used_30d: usageSummary.units_used_30d ?? null,
+      last_used_at: usageSummary.last_used_at ?? null
+    };
+  })
+    .sort((left, right) => compareDesc(
+      left.last_session_at ?? left.updated_at ?? left.created_at,
+      right.last_session_at ?? right.updated_at ?? right.created_at
+    ))
+    .slice(0, 5000);
 }
 
 async function writeRows(firestore, sql, params) {

@@ -128,6 +128,60 @@ assert.deepEqual(topUsers, [{
   last_used_at: '2026-05-02T00:00:00.000Z'
 }]);
 
+const adminUsers = await db.prepare(`
+  /* admin_user_list */
+  SELECT
+    users.id AS user_id,
+    users.created_at,
+    users.updated_at,
+    users.status AS user_status,
+    auth_identities.provider AS identity_provider,
+    auth_identities.email,
+    auth_identities.display_name,
+    auth_identities.updated_at AS identity_updated_at,
+    subscriptions.plan AS subscription_plan,
+    subscriptions.status AS subscription_status,
+    subscriptions.source AS subscription_source,
+    subscriptions.renews_at,
+    subscriptions.expires_at,
+    session_summary.last_session_at,
+    usage_summary.request_count_30d,
+    usage_summary.units_used_30d,
+    usage_summary.last_used_at
+  FROM users
+  LEFT JOIN auth_identities ON auth_identities.id = (
+    SELECT id
+    FROM auth_identities
+    WHERE user_id = users.id
+    ORDER BY created_at ASC
+    LIMIT 1
+  )
+  LEFT JOIN subscriptions ON subscriptions.user_id = users.id
+  LEFT JOIN (
+    SELECT user_id, MAX(updated_at) AS last_session_at
+    FROM sessions
+    GROUP BY user_id
+  ) AS session_summary ON session_summary.user_id = users.id
+  LEFT JOIN (
+    SELECT
+      user_id,
+      COUNT(*) AS request_count_30d,
+      COALESCE(SUM(unit_cost), 0) AS units_used_30d,
+      MAX(created_at) AS last_used_at
+    FROM usage_ledger
+    WHERE created_at >= ?
+    GROUP BY user_id
+  ) AS usage_summary ON usage_summary.user_id = users.id
+  ORDER BY COALESCE(session_summary.last_session_at, users.updated_at, users.created_at) DESC, users.created_at DESC
+  LIMIT 5000
+`).all('2026-05-01T00:00:00.000Z');
+assert.equal(adminUsers[0].user_id, 'usr_1');
+assert.equal(adminUsers[0].email, 'one@example.com');
+assert.equal(adminUsers[0].subscription_plan, 'pro');
+assert.equal(adminUsers[0].last_session_at, '2026-05-01T00:00:00.000Z');
+assert.equal(adminUsers[0].request_count_30d, 1);
+assert.equal(adminUsers[0].units_used_30d, 3);
+
 await db.prepare(`
   INSERT INTO pending_subscription_grants (
     id, normalized_email, plan, status, source, renews_at, expires_at, reason,

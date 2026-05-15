@@ -384,6 +384,20 @@ try {
   assert.equal(usageSummaryPayload.usageAnalytics?.byPlan?.[0]?.source, 'adminGrant');
   assert.equal(usageSummaryPayload.usageAnalytics?.telemetry?.telemetryCoverageRatio, 1);
 
+  const adminUsersResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/users?query=tester&plan=pro&limit=10`, {
+    headers: {
+      Authorization: `Bearer ${adminToken}`
+    }
+  });
+  assert.equal(adminUsersResponse.status, 200, 'expected admin users search to succeed');
+  const adminUsersPayload = await adminUsersResponse.json();
+  assert.equal(adminUsersPayload.pagination?.totalMatching, 1);
+  assert.equal(adminUsersPayload.users?.[0]?.userID, successPayload.session.userID);
+  assert.equal(adminUsersPayload.users?.[0]?.email, sharedBody.email);
+  assert.equal(adminUsersPayload.users?.[0]?.subscription?.plan, 'pro');
+  assert.equal(adminUsersPayload.users?.[0]?.subscription?.source, 'adminGrant');
+  assert.equal(adminUsersPayload.users?.[0]?.usageLast30Days?.unitsUsed, 9);
+
   const rangedUsageSummaryResponse = await fetch(`http://127.0.0.1:${port}/v1/admin/usage-summary?start=2000-01-01T00%3A00%3A00.000Z&end=2000-01-02T00%3A00%3A00.000Z`, {
     headers: {
       Authorization: `Bearer ${adminToken}`

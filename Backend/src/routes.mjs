@@ -16,6 +16,7 @@ export function createRouteHandlers({
   sendJson,
   buildSessionSnapshot,
   buildAdminUserInspection,
+  buildAdminUsers,
   buildAdminUsageSummary,
   assertRequired,
   hashToken,
@@ -133,6 +134,10 @@ export function createRouteHandlers({
 
     if (req.method === 'GET' && url.pathname === '/v1/admin/user-inspect') {
       return handleAdminUserInspect(req, res, url);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/v1/admin/users') {
+      return handleAdminUsers(req, res, url);
     }
 
     if (req.method === 'GET' && url.pathname === '/v1/admin/usage-summary') {
@@ -479,6 +484,19 @@ export function createRouteHandlers({
     }
 
     sendJson(res, 200, await buildAdminUserInspection(userID));
+  }
+
+  async function handleAdminUsers(req, res, url) {
+    requireAdmin(req);
+
+    sendJson(res, 200, await buildAdminUsers({
+      query: url.searchParams.get('query') ?? url.searchParams.get('q'),
+      email: url.searchParams.get('email'),
+      plan: url.searchParams.get('plan'),
+      status: url.searchParams.get('status'),
+      limit: parseOptionalInteger(url.searchParams.get('limit')),
+      offset: parseOptionalInteger(url.searchParams.get('offset'))
+    }));
   }
 
   async function handleAdminUsageSummary(req, res, url) {

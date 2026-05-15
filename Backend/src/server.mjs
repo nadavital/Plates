@@ -152,6 +152,182 @@ async function buildAdminUsageSummary(options = 30) {
   };
 }
 
+async function buildAdminUsers(options = {}) {
+  const now = isoNow();
+  const limit = normalizeAdminUsersLimit(options.limit);
+  const offset = normalizeAdminUsersOffset(options.offset);
+  const emailFilter = normalizeSearchText(options.email);
+  const queryFilter = normalizeSearchText(options.query);
+  const planFilter = normalizeSearchText(options.plan);
+  const statusFilter = normalizeSearchText(options.status);
+  const usageWindowStart = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)).toISOString();
+
+  const rows = await db.prepare(`
+    /* admin_user_list */
+    SELECT
+      users.id AS user_id,
+      users.created_at,
+      users.updated_at,
+      users.status AS user_status,
+      auth_identities.provider AS identity_provider,
+      auth_identities.email,
+      auth_identities.display_name,
+      auth_identities.updated_at AS identity_updated_at,
+      subscriptions.plan AS subscription_plan,
+      subscriptions.status AS subscription_status,
+      subscriptions.source AS subscription_source,
+      subscriptions.renews_at,
+      subscriptions.expires_at,
+      session_summary.last_session_at,
+      usage_summary.request_count_30d,
+      usage_summary.units_used_30d,
+      usage_summary.last_used_at
+    FROM users
+    LEFT JOIN auth_identities ON auth_identities.id = (
+      SELECT id
+      FROM auth_identities
+      WHERE user_id = users.id
+      ORDER BY created_at ASC
+      LIMIT 1
+    )
+    LEFT JOIN subscriptions ON subscriptions.user_id = users.id
+    LEFT JOIN (
+      SELECT user_id, MAX(updated_at) AS last_session_at
+      FROM sessions
+      GROUP BY user_id
+    ) AS session_summary ON session_summary.user_id = users.id
+    LEFT JOIN (
+      SELECT
+        user_id,
+        COUNT(*) AS request_count_30d,
+        COALESCE(SUM(unit_cost), 0) AS units_used_30d,
+        MAX(created_at) AS last_used_at
+      FROM usage_ledger
+      WHERE created_at >= ?
+      GROUP BY user_id
+    ) AS usage_summary ON usage_summary.user_id = users.id
+    ORDER BY COALESCE(session_summary.last_session_at, users.updated_at, users.created_at) DESC, users.created_at DESC
+    LIMIT 5000
+  `).all(usageWindowStart);
+
+  const enrichedRows = [];
+  const seenUserIDs = new Set();
+  for (const row of rows) {
+    if (seenUserIDs.has(row.user_id)) {
+      continue;
+    }
+    seenUserIDs.add(row.user_id);
+
+    const rawSubscription = fallbackAdminSubscription(row);
+    const subscriptionOverride = await getActiveSubscriptionOverride(row.user_id, now);
+    const effectiveSubscription = resolveEffectiveSubscription(rawSubscription, subscriptionOverride);
+    const user = adminUserRowToResponse(row, rawSubscription, effectiveSubscription);
+
+    if (emailFilter && !String(user.email ?? '').toLowerCase().includes(emailFilter)) {
+      continue;
+    }
+    if (queryFilter && !adminUserMatchesQuery(user, queryFilter)) {
+      continue;
+    }
+    if (planFilter && String(user.subscription.plan ?? '').toLowerCase() !== planFilter) {
+      continue;
+    }
+    if (statusFilter && String(user.userStatus ?? '').toLowerCase() !== statusFilter) {
+      continue;
+    }
+
+    enrichedRows.push(user);
+  }
+
+  return {
+    generatedAt: now,
+    filters: {
+      query: options.query ?? null,
+      email: options.email ?? null,
+      plan: options.plan ?? null,
+      status: options.status ?? null
+    },
+    pagination: {
+      limit,
+      offset,
+      totalMatching: enrichedRows.length,
+      hasMore: offset + limit < enrichedRows.length
+    },
+    users: enrichedRows.slice(offset, offset + limit)
+  };
+}
+
+function adminUserRowToResponse(row, rawSubscription, effectiveSubscription) {
+  return {
+    userID: row.user_id,
+    userStatus: row.user_status,
+    email: row.email ?? null,
+    displayName: row.display_name ?? null,
+    identityProvider: row.identity_provider ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+    identityUpdatedAt: row.identity_updated_at ?? null,
+    lastSessionAt: row.last_session_at ?? null,
+    lastUsedAt: row.last_used_at ?? null,
+    subscription: {
+      plan: effectiveSubscription?.plan ?? 'free',
+      status: effectiveSubscription?.status ?? 'unknown',
+      source: effectiveSubscription?.source ?? 'system',
+      renewsAt: effectiveSubscription?.renews_at ?? null,
+      expiresAt: effectiveSubscription?.expires_at ?? null,
+      rawPlan: rawSubscription.plan,
+      rawStatus: rawSubscription.status,
+      rawSource: rawSubscription.source
+    },
+    usageLast30Days: {
+      requestCount: row.request_count_30d ?? 0,
+      unitsUsed: row.units_used_30d ?? 0
+    }
+  };
+}
+
+function fallbackAdminSubscription(row) {
+  return {
+    user_id: row.user_id,
+    plan: row.subscription_plan ?? 'free',
+    status: row.subscription_status ?? 'unknown',
+    source: row.subscription_source ?? 'system',
+    source_transaction_id: null,
+    renews_at: row.renews_at ?? null,
+    expires_at: row.expires_at ?? null
+  };
+}
+
+function adminUserMatchesQuery(user, query) {
+  return [
+    user.userID,
+    user.email,
+    user.displayName,
+    user.identityProvider,
+    user.subscription.plan,
+    user.subscription.source
+  ].some((value) => String(value ?? '').toLowerCase().includes(query));
+}
+
+function normalizeSearchText(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeAdminUsersLimit(limit) {
+  if (!Number.isFinite(limit)) {
+    return 25;
+  }
+  return Math.min(Math.max(Math.round(limit), 1), 100);
+}
+
+function normalizeAdminUsersOffset(offset) {
+  if (!Number.isFinite(offset)) {
+    return 0;
+  }
+  return Math.max(Math.round(offset), 0);
+}
+
 function buildSessionSnapshot(session, user, now, accessTokenOverride = session.accessToken) {
   return {
     userID: user.id,
@@ -523,6 +699,7 @@ const { routeRequest, handleServerError } = createRouteHandlers({
   sendJson,
   buildSessionSnapshot,
   buildAdminUserInspection,
+  buildAdminUsers,
   buildAdminUsageSummary,
   assertRequired,
   hashToken,

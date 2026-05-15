@@ -191,6 +191,7 @@ Admin-authenticated inspection endpoint for support and drift debugging.
 Query params:
 
 - `userID`
+- `email`
 - `appAccountToken`
 - `originalTransactionId`
 
@@ -208,6 +209,24 @@ Response:
 - recent App Store notifications
 - recent admin adjustments
 - current monetization policy summary
+
+### `GET /v1/admin/users`
+
+Admin-authenticated user search endpoint for support and subscription-grant workflows.
+
+Query params:
+
+- `query` or `q`: searches user ID, email, display name, identity provider, plan, and subscription source
+- `email`: filters by email fragment
+- `plan`: filters by effective subscription plan, for example `free` or `pro`
+- `status`: filters by backend user status, for example `active`
+- `limit`: number of users to return, clamped from `1` to `100`; defaults to `25`
+- `offset`: pagination offset; defaults to `0`
+
+Response:
+
+- `users`, including `userID`, email/display name when available, creation and activity timestamps, effective and raw subscription state, and trailing 30-day usage
+- `pagination`, including `limit`, `offset`, `totalMatching`, and `hasMore`
 
 ### `GET /v1/admin/usage-summary`
 
