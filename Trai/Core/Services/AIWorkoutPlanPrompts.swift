@@ -86,6 +86,14 @@ extension AIPromptBuilder {
             }
         }
 
+        let directives = request.generationDirectives
+        if !directives.isEmpty {
+            prompt += "\n\nGENERATION DIRECTIVES (override generic training type labels):"
+            for directive in directives {
+                prompt += "\n- \(directive)"
+            }
+        }
+
         prompt += """
 
 
@@ -93,16 +101,30 @@ extension AIPromptBuilder {
         Create a personalized \(request.workoutType.displayName.lowercased()) plan with:
         1. You have full control over the structure. Do NOT force a standard gym split unless it genuinely fits the user.
         2. Custom, activity-first, hybrid, skill-based, and nontraditional weekly structures are all valid.
-        3. Choose the split, session count, and session durations that best fit the user. If duration is unspecified, decide what makes each session realistic.
+        3. Respect the user's selected weekly schedule. If Available Days Per Week is a number, return exactly that many workout templates and set daysPerWeek to that same number. Only choose a different session count when Available Days Per Week is Flexible.
         4. Design workout templates with exercises OR activities that match the user's actual preferences, equipment, and constraints.
-        5. Include 4-8 exercises per template when it is an exercise-based session. For activity-based sessions, structure the session in the most natural way for that modality.
-        6. Specify sets, reps, intervals, pace guidance, or effort targets appropriate for the training type.
-        7. Include a progression strategy appropriate for their experience level and goals.
-        8. Add practical guidelines for warm-up, rest periods, recovery, and any important safety considerations.
-        9. Address any specific goals, weak points, injuries, and conversation notes mentioned.
-        10. For EVERY workout template, set:
+        5. Build every template from ordered blocks. Blocks can be warmup, strength, cardio, cardioFinisher, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
+        6. Include 4-8 exercises inside strength blocks when it is an exercise-based session. For activity-based sessions, use blocks with duration, intensity, target, and detail instead of forcing fake sets/reps.
+        7. Specify sets, reps, intervals, pace guidance, duration, intensity, or effort targets appropriate for each block.
+        8. Include a modalityProgression that matches the plan. Do not force a lifting progression for cardio, mobility, climbing, sport, or hybrid plans.
+        9. Add practical guidelines for warm-up, rest periods, recovery, and any important safety considerations.
+        10. Address any specific goals, weak points, injuries, and conversation notes mentioned.
+        11. Use nutrition targets, onboarding notes, existing workout goals, and remembered context when they are provided. For example, match volume and conditioning to calorie goals, protein targets, recovery constraints, and the user's stated training history.
+        12. If Intake Notes include "Personalization brief (highest priority)", treat that as the main customization input. If it contains labels like "Split direction", "Training outcome", or "Workout details", use them directly: the split direction should determine the weekly structure, the training outcome should drive exercise selection/progression/goals, and workout details should determine priority muscles, included movements, avoided movements, and recovery spacing. Do not merely mention these notes in the rationale.
+        13. If the personalization brief says one modality should only support another modality, honor that exactly. For example, if the user asks for cardio only at the end of one strength session each week, create strength-focused templates and add a short cardio finisher block to one of them. Do NOT create a dedicated cardio day in that case.
+        14. If the personalization brief includes a strength split direction, follow it. Do not return a full-body split when the user asked for upper/lower, push/pull/legs, body-part focus, or a named priority-muscle structure.
+        15. If the user selected strength but did not give a split direction, choose the simplest structure that fits the schedule and goal. A 2-3 day full-body plan is valid only when it is genuinely the best fit or the user chose it.
+        16. If the user says supportive cardio should happen once, on one day, or on a named day only, include exactly one cardio/cardioFinisher/conditioning support block in the entire plan and place it there. Do not duplicate it on a second day.
+        17. Make mixed/support work visible in the template name or focusAreas when it materially changes the day, e.g. "Legs + Finisher" or focusAreas including "Cardio Finisher".
+        18. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided.
+        19. Write rationale, notes, and planIntent text as Trai speaking directly to the person using the app. Use "you" and "your"; do not refer to them as "the user".
+        20. For EVERY workout template, set:
            - sessionType: one of strength, cardio, hiit, climbing, yoga, pilates, flexibility, mobility, mixed, recovery, custom
            - focusAreas: short labels describing the session focus (e.g. ["Push", "Chest"], ["Yoga Flow", "Recovery"], ["Climbing", "Technique"])
+           - notes: one short explanation of why this day belongs in your week
+           - blocks: ordered training blocks that describe the actual session
+           - exercises belong inside the relevant blocks only; do not duplicate block exercises at the template level
+        21. Keep the JSON compact. Use short one-sentence notes/detail fields and avoid repeating the same coaching text in multiple places.
 
         EXERCISE SELECTION RULES:
         - For full gym: Use barbells, dumbbells, cables, and machines
@@ -112,10 +134,17 @@ extension AIPromptBuilder {
 
         TRAINING TYPE CONSIDERATIONS:
         - Strength: Focus on appropriate strength or hypertrophy work for their goal, not just generic powerlifting templates
-        - Cardio: Include dedicated endurance or conditioning sessions when cardio is part of the request
+        - Cardio: Include cardio according to the user's stated role: dedicated sessions only when cardio is a leading goal; finishers/accessory work when it supports another focus
         - HIIT: Design high-intensity interval circuits only if they fit the user's goal and recovery capacity
         - Flexibility: Include yoga, mobility, or recovery-focused sessions when requested
         - Mixed: Blend the requested modalities in a sustainable week, but do not assume it must look like a classic gym split
+
+        FINAL SELF-CHECK BEFORE RETURNING JSON:
+        - Does the plan follow every answer in the personalization brief?
+        - Does the session allocation match the user's requested days and modality balance?
+        - Are supportive modalities integrated as support rather than promoted to standalone days?
+        - Are blocks specific enough that the app can show and start the plan without losing the user's intent?
+        If any answer is no, revise the plan before returning it.
         """
 
         // Add specific cardio instruction when user selected cardio
@@ -128,14 +157,15 @@ extension AIPromptBuilder {
             }
             prompt += """
 
-        CRITICAL - CARDIO IS REQUIRED:
-        The user explicitly wants cardio in their plan. You MUST:
-        1. Include at least 1-2 DEDICATED cardio workout templates (not just "add cardio after lifting")
-        2. Name these templates clearly (e.g., "Cardio Day", "HIIT Session", "Running Day")
-        3. Include cardio-specific exercises like: Running, Cycling, Rowing, Jump Rope, Burpees, Mountain Climbers
-        4. For mixed plans, balance strength days with cardio days
+        CARDIO INTEGRATION:
+        The user selected cardio, but the personalization brief and intake notes decide how cardio belongs in the week.
+        1. If the user asked for cardio as a finisher, accessory, warmup, or conditioning add-on, include it inside the requested strength/mixed template instead of creating a standalone cardio day.
+        2. If the user asked for dedicated endurance, running, cycling, race prep, or cardio as the leading focus, include dedicated cardio templates.
+        3. If the user's answer gives a specific frequency or placement, follow that placement exactly.
+        4. For mixed plans, balance strength and cardio according to the user's stated priority, not by automatically splitting the week into separate modality days.
+        5. If the user asks for one cardio finisher or says "only" for a day, return exactly one cardio finisher/accessory block in the whole plan.
         Preferred cardio activities: \(cardioInfo)
-        DO NOT create a plan with only strength training - cardio sessions are REQUIRED.
+        Do not ignore cardio, but do not turn supportive cardio into a full cardio day.
         """
         }
 
@@ -148,7 +178,46 @@ extension AIPromptBuilder {
     }
 
     static var workoutPlanSchema: [String: Any] {
-        [
+        let exerciseSchema: [String: Any] = [
+            "type": "object",
+            "properties": [
+                "id": ["type": "string"],
+                "exerciseName": ["type": "string"],
+                "muscleGroup": ["type": "string"],
+                "defaultSets": ["type": "integer"],
+                "defaultReps": ["type": "integer"],
+                "repRange": ["type": "string", "nullable": true],
+                "restSeconds": ["type": "integer", "nullable": true],
+                "notes": ["type": "string", "nullable": true],
+                "order": ["type": "integer"]
+            ],
+            "required": ["id", "exerciseName", "muscleGroup", "defaultSets", "defaultReps", "order"]
+        ]
+
+        let blockSchema: [String: Any] = [
+            "type": "object",
+            "properties": [
+                "id": ["type": "string"],
+                "kind": [
+                    "type": "string",
+                    "enum": ["warmup", "strength", "cardio", "cardioFinisher", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                ],
+                "title": ["type": "string"],
+                "detail": ["type": "string"],
+                "exercises": [
+                    "type": "array",
+                    "items": exerciseSchema
+                ],
+                "durationMinutes": ["type": "integer", "nullable": true],
+                "intensity": ["type": "string", "nullable": true],
+                "target": ["type": "string", "nullable": true],
+                "order": ["type": "integer"],
+                "notes": ["type": "string", "nullable": true]
+            ],
+            "required": ["id", "kind", "title", "detail", "exercises", "order"]
+        ]
+
+        return [
             "type": "object",
             "properties": [
                 "splitType": [
@@ -175,30 +244,37 @@ extension AIPromptBuilder {
                                 "type": "array",
                                 "items": ["type": "string"]
                             ],
-                            "exercises": [
+                            "blocks": [
                                 "type": "array",
-                                "items": [
-                                    "type": "object",
-                                    "properties": [
-                                        "id": ["type": "string"],
-                                        "exerciseName": ["type": "string"],
-                                        "muscleGroup": ["type": "string"],
-                                        "defaultSets": ["type": "integer"],
-                                        "defaultReps": ["type": "integer"],
-                                        "repRange": ["type": "string", "nullable": true],
-                                        "restSeconds": ["type": "integer", "nullable": true],
-                                        "notes": ["type": "string", "nullable": true],
-                                        "order": ["type": "integer"]
-                                    ],
-                                    "required": ["id", "exerciseName", "muscleGroup", "defaultSets", "defaultReps", "order"]
-                                ]
+                                "items": blockSchema
                             ],
                             "estimatedDurationMinutes": ["type": "integer"],
                             "order": ["type": "integer"],
                             "notes": ["type": "string", "nullable": true]
                         ],
-                        "required": ["id", "name", "targetMuscleGroups", "exercises", "estimatedDurationMinutes", "order"]
+                        "required": ["id", "name", "sessionType", "focusAreas", "targetMuscleGroups", "blocks", "estimatedDurationMinutes", "order", "notes"]
                     ]
+                ],
+                "planIntent": [
+                    "type": "object",
+                    "properties": [
+                        "primaryFocus": ["type": "string"],
+                        "supportingFocuses": [
+                            "type": "array",
+                            "items": ["type": "string"]
+                        ],
+                        "sessionAllocation": ["type": "string"],
+                        "honoredInputs": [
+                            "type": "array",
+                            "items": ["type": "string"]
+                        ],
+                        "avoided": [
+                            "type": "array",
+                            "items": ["type": "string"]
+                        ],
+                        "summary": ["type": "string"]
+                    ],
+                    "required": ["primaryFocus", "supportingFocuses", "sessionAllocation", "honoredInputs", "avoided", "summary"]
                 ],
                 "rationale": ["type": "string"],
                 "guidelines": [
@@ -218,13 +294,108 @@ extension AIPromptBuilder {
                     ],
                     "required": ["type", "weightIncrementKg", "description"]
                 ],
+                "modalityProgression": [
+                    "type": "object",
+                    "properties": [
+                        "focus": [
+                            "type": "string",
+                            "enum": ["strength", "volume", "endurance", "skill", "mobility", "consistency", "mixed"]
+                        ],
+                        "weeklyProgression": ["type": "string"],
+                        "targets": [
+                            "type": "array",
+                            "items": [
+                                "type": "object",
+                                "properties": [
+                                    "id": ["type": "string"],
+                                    "label": ["type": "string"],
+                                    "metric": ["type": "string"],
+                                    "direction": ["type": "string"]
+                                ],
+                                "required": ["id", "label", "metric", "direction"]
+                            ]
+                        ]
+                    ],
+                    "required": ["focus", "weeklyProgression", "targets"]
+                ],
                 "warnings": [
                     "type": "array",
                     "items": ["type": "string"],
                     "nullable": true
                 ]
             ],
-            "required": ["splitType", "daysPerWeek", "templates", "rationale", "guidelines", "progressionStrategy"]
+            "required": ["splitType", "daysPerWeek", "templates", "planIntent", "rationale", "guidelines", "progressionStrategy", "modalityProgression"]
+        ]
+    }
+
+    static var workoutGoalSuggestionSchema: [String: Any] {
+        [
+            "type": "object",
+            "properties": [
+                "title": ["type": "string"],
+                "rationale": ["type": "string"],
+                "goalKindRaw": [
+                    "type": "string",
+                    "enum": WorkoutGoal.GoalKind.allCases.map(\.rawValue)
+                ],
+                "linkedWorkoutTypeRaw": [
+                    "type": "string",
+                    "enum": WorkoutMode.allCases.map(\.rawValue),
+                    "nullable": true
+                ],
+                "linkedActivityName": [
+                    "type": "string",
+                    "nullable": true
+                ],
+                "targetValue": [
+                    "type": "number",
+                    "nullable": true
+                ],
+                "targetUnit": [
+                    "type": "string",
+                    "nullable": true
+                ],
+                "periodUnitRaw": [
+                    "type": "string",
+                    "enum": WorkoutGoal.PeriodUnit.allCases.map(\.rawValue),
+                    "nullable": true
+                ],
+                "periodCount": [
+                    "type": "integer",
+                    "nullable": true
+                ],
+                "successCriteria": [
+                    "type": "string"
+                ],
+                "notes": [
+                    "type": "string",
+                    "nullable": true
+                ],
+                "targetDateISO8601": [
+                    "type": "string",
+                    "nullable": true
+                ],
+                "checkInCadenceDays": [
+                    "type": "integer",
+                    "nullable": true
+                ]
+            ],
+            "required": ["title", "rationale", "goalKindRaw", "targetValue", "targetUnit", "periodUnitRaw", "periodCount", "successCriteria"]
+        ]
+    }
+
+    static var workoutPlanWithGoalSuggestionsSchema: [String: Any] {
+        [
+            "type": "object",
+            "properties": [
+                "plan": workoutPlanSchema,
+                "goalSuggestions": [
+                    "type": "array",
+                    "maxItems": 2,
+                    "items": workoutGoalSuggestionSchema
+                ]
+            ],
+            "required": ["plan", "goalSuggestions"]
         ]
     }
 }
@@ -272,6 +443,12 @@ extension AIPromptBuilder {
         if let prefs = request.preferences, !prefs.isEmpty {
             prompt += "\n- Preferences: \(prefs)"
         }
+        if let context = request.conversationContext, !context.isEmpty {
+            prompt += "\n- Relevant context:"
+            for entry in context {
+                prompt += "\n  - \(entry)"
+            }
+        }
         if let cardio = request.cardioTypes, !cardio.isEmpty {
             prompt += "\n- Cardio Preferences: \(cardio.map { $0.displayName }.joined(separator: ", "))"
         }
@@ -285,6 +462,14 @@ extension AIPromptBuilder {
         - Split: \(currentPlan.splitType.displayName)
         - Days/Week: \(currentPlan.daysPerWeek)
         - Workouts: \(currentPlan.templates.map { $0.name }.joined(separator: ", "))
+        \(currentPlan.planIntent.map { "- Intent: \($0.summary)\n- Session allocation: \($0.sessionAllocation)" } ?? "")
+        - Session details:
+        \(currentPlan.templates.map { template in
+            let blocks = template.displayBlocks.map { block in
+                "\(block.kind.displayName): \(block.title)\(block.durationMinutes.map { " \($0)m" } ?? "")"
+            }.joined(separator: " | ")
+            return "  - \(template.name): \(blocks)"
+        }.joined(separator: "\n"))
 
         """
 
@@ -307,6 +492,10 @@ extension AIPromptBuilder {
         - Use "proposePlan" whenever they clearly want a change, even if they did not specify every detail
         - Ask AT MOST one short follow-up only when missing information would materially change the plan
         - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
+        - Preserve and update planIntent, modalityProgression, and template blocks whenever a plan changes
+        - Use blocks for modality-specific work: cardio finishers, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises
+        - If the user says a support modality should happen once, only once, or on a named day only, include exactly one matching support block and place it on that day. Do not duplicate it elsewhere.
+        - Make support work visible in the changed template name or focusAreas when it materially changes the day, so the plan card can show it without requiring a details sheet.
         - Keep the selected coach tone consistent with the rest of the app
         """
 
@@ -314,6 +503,45 @@ extension AIPromptBuilder {
     }
 
     static var workoutPlanRefinementSchema: [String: Any] {
+        let exerciseSchema: [String: Any] = [
+            "type": "object",
+            "properties": [
+                "id": ["type": "string"],
+                "exerciseName": ["type": "string"],
+                "muscleGroup": ["type": "string"],
+                "defaultSets": ["type": "integer"],
+                "defaultReps": ["type": "integer"],
+                "repRange": ["type": "string", "nullable": true],
+                "restSeconds": ["type": "integer", "nullable": true],
+                "notes": ["type": "string", "nullable": true],
+                "order": ["type": "integer"]
+            ],
+            "required": ["id", "exerciseName", "muscleGroup", "defaultSets", "defaultReps", "order"]
+        ]
+
+        let blockSchema: [String: Any] = [
+            "type": "object",
+            "properties": [
+                "id": ["type": "string"],
+                "kind": [
+                    "type": "string",
+                    "enum": ["warmup", "strength", "cardio", "cardioFinisher", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                ],
+                "title": ["type": "string"],
+                "detail": ["type": "string"],
+                "exercises": [
+                    "type": "array",
+                    "items": exerciseSchema
+                ],
+                "durationMinutes": ["type": "integer", "nullable": true],
+                "intensity": ["type": "string", "nullable": true],
+                "target": ["type": "string", "nullable": true],
+                "order": ["type": "integer"],
+                "notes": ["type": "string", "nullable": true]
+            ],
+            "required": ["id", "kind", "title", "detail", "exercises", "order"]
+        ]
+
         let templateSchema: [String: Any] = [
             "type": "object",
             "properties": [
@@ -331,29 +559,15 @@ extension AIPromptBuilder {
                     "type": "array",
                     "items": ["type": "string"]
                 ],
-                "exercises": [
+                "blocks": [
                     "type": "array",
-                    "items": [
-                        "type": "object",
-                        "properties": [
-                            "id": ["type": "string"],
-                            "exerciseName": ["type": "string"],
-                            "muscleGroup": ["type": "string"],
-                            "defaultSets": ["type": "integer"],
-                            "defaultReps": ["type": "integer"],
-                            "repRange": ["type": "string", "nullable": true],
-                            "restSeconds": ["type": "integer", "nullable": true],
-                            "notes": ["type": "string", "nullable": true],
-                            "order": ["type": "integer"]
-                        ],
-                        "required": ["id", "exerciseName", "muscleGroup", "defaultSets", "defaultReps", "order"]
-                    ]
+                    "items": blockSchema
                 ],
                 "estimatedDurationMinutes": ["type": "integer"],
                 "order": ["type": "integer"],
                 "notes": ["type": "string", "nullable": true]
             ],
-            "required": ["id", "name", "targetMuscleGroups", "exercises", "estimatedDurationMinutes", "order"]
+            "required": ["id", "name", "sessionType", "focusAreas", "targetMuscleGroups", "blocks", "estimatedDurationMinutes", "order", "notes"]
         ]
 
         let planSchema: [String: Any] = [
@@ -367,6 +581,27 @@ extension AIPromptBuilder {
                 "templates": [
                     "type": "array",
                     "items": templateSchema
+                ],
+                "planIntent": [
+                    "type": "object",
+                    "properties": [
+                        "primaryFocus": ["type": "string"],
+                        "supportingFocuses": [
+                            "type": "array",
+                            "items": ["type": "string"]
+                        ],
+                        "sessionAllocation": ["type": "string"],
+                        "honoredInputs": [
+                            "type": "array",
+                            "items": ["type": "string"]
+                        ],
+                        "avoided": [
+                            "type": "array",
+                            "items": ["type": "string"]
+                        ],
+                        "summary": ["type": "string"]
+                    ],
+                    "required": ["primaryFocus", "supportingFocuses", "sessionAllocation", "honoredInputs", "avoided", "summary"]
                 ],
                 "rationale": ["type": "string"],
                 "guidelines": [
@@ -386,13 +621,37 @@ extension AIPromptBuilder {
                     ],
                     "required": ["type", "weightIncrementKg", "description"]
                 ],
+                "modalityProgression": [
+                    "type": "object",
+                    "properties": [
+                        "focus": [
+                            "type": "string",
+                            "enum": ["strength", "volume", "endurance", "skill", "mobility", "consistency", "mixed"]
+                        ],
+                        "weeklyProgression": ["type": "string"],
+                        "targets": [
+                            "type": "array",
+                            "items": [
+                                "type": "object",
+                                "properties": [
+                                    "id": ["type": "string"],
+                                    "label": ["type": "string"],
+                                    "metric": ["type": "string"],
+                                    "direction": ["type": "string"]
+                                ],
+                                "required": ["id", "label", "metric", "direction"]
+                            ]
+                        ]
+                    ],
+                    "required": ["focus", "weeklyProgression", "targets"]
+                ],
                 "warnings": [
                     "type": "array",
                     "items": ["type": "string"],
                     "nullable": true
                 ]
             ],
-            "required": ["splitType", "daysPerWeek", "templates", "rationale", "guidelines", "progressionStrategy"]
+            "required": ["splitType", "daysPerWeek", "templates", "planIntent", "rationale", "guidelines", "progressionStrategy", "modalityProgression"]
         ]
 
         return [

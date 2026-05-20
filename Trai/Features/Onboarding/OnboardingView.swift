@@ -10,43 +10,53 @@ import SwiftData
 
 struct OnboardingView: View {
     @Environment(\.modelContext) var modelContext
-    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
-    @Environment(HealthKitService.self) private var healthKitService: HealthKitService?
+    @Environment(AccountSessionService.self) var accountSessionService: AccountSessionService?
+    @Environment(HealthKitService.self) var healthKitService: HealthKitService?
     @Environment(MonetizationService.self) var monetizationService: MonetizationService?
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @State var currentStep = 0
     @State var navigationDirection: NavigationDirection = .forward
     @State var hasRestoredDraft = false
 
-    // Step 0: Welcome
+    // Step 0: Splash / account
     @State var userName = ""
 
-    // Step 1: Biometrics
+    // Goal and body setup
+    @State var selectedGoal: UserProfile.GoalType?
+    @State var additionalGoalNotes = ""
+
+    // Biometrics
     // Default: August 4, 2002
     @State var dateOfBirth = Calendar.current.date(from: DateComponents(year: 2002, month: 8, day: 4)) ?? Date()
     @State var gender: UserProfile.Gender?
-    @State var heightValue = ""
-    @State var weightValue = ""
+    @State var heightValue = {
+        #if DEBUG
+        AppLaunchArguments.shouldRunOnboardingFlowUITest ? "170" : ""
+        #else
+        ""
+        #endif
+    }()
+    @State var weightValue = {
+        #if DEBUG
+        AppLaunchArguments.shouldRunOnboardingFlowUITest ? "155" : ""
+        #else
+        ""
+        #endif
+    }()
     @State var targetWeightValue = ""
     @State var usesMetricHeight = true
     @State var usesMetricWeight = false
 
-    // Step 2: Activity Level
+    // Activity Level
     @State var activityLevel: UserProfile.ActivityLevel?
     @State var activityNotes = ""
 
-    // Step 3: Goals
-    @State var selectedGoal: UserProfile.GoalType?
-    @State var additionalGoalNotes = ""
-
-    // Step 4: Macro Preferences
+    // Nutrition setup. First-run onboarding always creates a starter target plan.
     @State var enabledMacros: Set<MacroType> = MacroType.defaultEnabled
 
-    // Step 5: Account Setup
-
-    // Step 6: Apple Health
-    @State var syncFoodToHealthKit = true
-    @State var syncWeightToHealthKit = true
+    // Post-onboarding setup can still opt into Apple Health.
+    @State var syncFoodToHealthKit = false
+    @State var syncWeightToHealthKit = false
     @State var isRequestingHealthAccess = false
     @State var healthSyncError: String?
 
@@ -68,28 +78,92 @@ struct OnboardingView: View {
 
     // Step 9: Workout Plan (optional)
     @State var generatedWorkoutPlan: WorkoutPlan?
+    @State var generatedWorkoutGoals: [WorkoutGoal] = []
     @State var showingWorkoutSetup = false
+    @State var workoutPlanDraft = OnboardingWorkoutPlanDraft()
 
     @State var aiService = AIService()
 
-    let totalSteps = 10
+    var onboardingSteps: [OnboardingStepID] {
+        OnboardingFlowPlanner.steps()
+    }
+
+    var totalSteps: Int {
+        onboardingSteps.count
+    }
+
+    var currentStepID: OnboardingStepID {
+        onboardingSteps[min(currentStep, max(totalSteps - 1, 0))]
+    }
+
+    var shouldCollectTargetWeight: Bool {
+        selectedGoal?.shouldCollectTargetWeight ?? false
+    }
+
+    var workoutPlanUserContext: OnboardingWorkoutPlanUserContext {
+        OnboardingWorkoutPlanUserContext(
+            name: resolvedProfileName,
+            age: calculateAge() ?? 30,
+            gender: gender ?? .notSpecified,
+            goal: selectedGoal ?? .health,
+            activityLevel: activityLevel ?? .moderate,
+            nutritionContext: workoutPlanNutritionContext
+        )
+    }
+
+    var workoutPlanNutritionContext: [String] {
+        var context = [
+            "Nutrition goal: \((selectedGoal ?? .health).displayName)"
+        ]
+
+        let calories = Int(adjustedCalories) ?? generatedPlan?.dailyTargets.calories
+        let protein = Int(adjustedProtein) ?? generatedPlan?.dailyTargets.protein
+        let carbs = Int(adjustedCarbs) ?? generatedPlan?.dailyTargets.carbs
+        let fat = Int(adjustedFat) ?? generatedPlan?.dailyTargets.fat
+        if let calories, let protein, let carbs, let fat {
+            context.append("Daily targets: \(calories) calories, \(protein)g protein, \(carbs)g carbs, \(fat)g fat")
+        }
+
+        let trimmedActivityNotes = activityNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedActivityNotes.isEmpty {
+            context.append("Activity notes: \(trimmedActivityNotes)")
+        }
+
+        let trimmedGoalNotes = additionalGoalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedGoalNotes.isEmpty {
+            context.append("Goal notes from onboarding: \(trimmedGoalNotes)")
+        }
+
+        if let generatedPlan {
+            context.append("Nutrition plan rationale: \(generatedPlan.rationale)")
+            if let adjustment = generatedPlan.weeklyAdjustments?.recommendation, !adjustment.isEmpty {
+                context.append("Nutrition weekly adjustment: \(adjustment)")
+            }
+            if let milestone = generatedPlan.progressInsights?.shortTermMilestone, !milestone.isEmpty {
+                context.append("Nutrition milestone: \(milestone)")
+            }
+        }
+
+        return context
+    }
 
     var body: some View {
         ZStack {
-            Color.clear
+            OnboardingAmbientBackground()
 
             if showingWorkoutSetup {
-                // Embedded workout plan chat flow
-                WorkoutPlanChatFlow(
-                    isOnboarding: true,
-                    embedded: true,
-                    onComplete: { plan in
+                OnboardingWorkoutPlanSetupView(
+                    draft: $workoutPlanDraft,
+                    context: workoutPlanUserContext,
+                    aiService: aiService,
+                    onComplete: { plan, goals in
                         generatedWorkoutPlan = plan
+                        generatedWorkoutGoals = goals
                         withAnimation(.smooth(duration: 0.4)) {
                             showingWorkoutSetup = false
                         }
                     },
-                    onSkip: {
+                    onBack: {
                         withAnimation(.smooth(duration: 0.4)) {
                             showingWorkoutSetup = false
                         }
@@ -102,16 +176,18 @@ struct OnboardingView: View {
             } else {
                 // Normal onboarding content
                 VStack(spacing: 0) {
-                    // Top navigation bar
-                    topNavigationBar
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
+                    if currentStepID != .welcome {
+                        // Top navigation bar
+                        topNavigationBar
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
 
-                    // Progress indicator
-                    progressIndicator
-                        .padding(.horizontal, 24)
-                        .padding(.top, 12)
-                        .padding(.bottom, 8)
+                        // Progress indicator
+                        progressIndicator
+                            .padding(.horizontal, 24)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+                    }
 
                     // Step content with smooth transitions
                     ZStack {
@@ -123,7 +199,9 @@ struct OnboardingView: View {
                 // Floating navigation button at bottom
                 VStack {
                     Spacer()
-                    floatingNavigationSection
+                    if currentStepID != .welcome {
+                        floatingNavigationSection
+                    }
                 }
             }
         }
@@ -137,21 +215,25 @@ struct OnboardingView: View {
         .onChange(of: currentPlanInputSignature, initial: false) { oldValue, newValue in
             handlePlanInputChange(from: oldValue, to: newValue)
         }
+        .onChange(of: selectedGoal, initial: false) { _, goal in
+            if !(goal?.shouldCollectTargetWeight ?? false) {
+                targetWeightValue = ""
+            }
+        }
         .onChange(of: monetizationService?.canAccessAIFeatures ?? false, initial: false) { _, hasAccess in
-            guard hasAccess, showingPlanGenerationChoice, currentStep == 7 else { return }
+            guard hasAccess, showingPlanGenerationChoice, isWaitingToEnterNutritionPlan else { return }
             showingPlanGenerationChoice = false
-            advanceFromSummaryToPlanReview()
+            advanceToNutritionPlan()
         }
         .sheet(isPresented: $showingPlanGenerationChoice) {
             PlanGenerationChoiceSheet(
                 onContinueStandard: {
                     showingPlanGenerationChoice = false
-                    advanceFromSummaryToPlanReview()
+                    advanceToNutritionPlan()
                 }
             )
             .traiSheetBranding()
         }
-        .traiBackground()
     }
 
     // MARK: - Top Navigation Bar
@@ -186,10 +268,15 @@ struct OnboardingView: View {
     @ViewBuilder
     private var stepContent: some View {
         Group {
-            switch currentStep {
-            case 0:
-                WelcomeStepView(userName: $userName)
-            case 1:
+            switch currentStepID {
+            case .welcome:
+                WelcomeStepView(onContinue: advanceToNextStep)
+            case .goals:
+                GoalsStepView(
+                    selectedGoal: $selectedGoal,
+                    additionalNotes: $additionalGoalNotes
+                )
+            case .biometrics:
                 BiometricsStepView(
                     dateOfBirth: $dateOfBirth,
                     gender: $gender,
@@ -197,31 +284,15 @@ struct OnboardingView: View {
                     weightValue: $weightValue,
                     targetWeightValue: $targetWeightValue,
                     usesMetricHeight: $usesMetricHeight,
-                    usesMetricWeight: $usesMetricWeight
+                    usesMetricWeight: $usesMetricWeight,
+                    showsTargetWeight: shouldCollectTargetWeight
                 )
-            case 2:
+            case .activity:
                 ActivityLevelStepView(
                     activityLevel: $activityLevel,
                     activityNotes: $activityNotes
                 )
-            case 3:
-                GoalsStepView(
-                    selectedGoal: $selectedGoal,
-                    additionalNotes: $additionalGoalNotes
-                )
-            case 4:
-                MacroPreferencesStepView(enabledMacros: $enabledMacros)
-            case 5:
-                AccountOnboardingStepView()
-            case 6:
-                HealthSyncStepView(
-                    syncFoodToHealthKit: $syncFoodToHealthKit,
-                    syncWeightToHealthKit: $syncWeightToHealthKit,
-                    isRequestingHealthAccess: $isRequestingHealthAccess,
-                    healthSyncError: $healthSyncError,
-                    onConnect: requestHealthAuthorization
-                )
-            case 7:
+            case .summary:
                 SummaryStepView(
                     userName: userName,
                     dateOfBirth: dateOfBirth,
@@ -236,7 +307,7 @@ struct OnboardingView: View {
                     selectedGoal: selectedGoal,
                     additionalNotes: additionalGoalNotes
                 )
-            case 8:
+            case .nutritionPlan:
                 PlanReviewStepView(
                     plan: $generatedPlan,
                     planRequest: buildPlanRequest(),
@@ -248,22 +319,7 @@ struct OnboardingView: View {
                     adjustedFat: $adjustedFat,
                     onRetry: generatePlan
                 )
-            case 9:
-                WorkoutPlanDecisionView(
-                    hasWorkoutPlan: generatedWorkoutPlan != nil,
-                    workoutPlan: generatedWorkoutPlan,
-                    onCreatePlan: {
-                        guard monetizationService?.canAccessAIFeatures ?? true else {
-                            proUpsellCoordinator?.present(source: .workoutPlan, style: .fullScreenCover)
-                            return
-                        }
-                        navigationDirection = .forward
-                        withAnimation(.smooth(duration: 0.4)) {
-                            showingWorkoutSetup = true
-                        }
-                    }
-                )
-            default:
+            case .macroPreferences, .account, .health, .workoutSetup:
                 EmptyView()
             }
         }
@@ -278,7 +334,7 @@ struct OnboardingView: View {
 
     private var progressIndicator: some View {
         HStack(spacing: 8) {
-            ForEach(0..<totalSteps, id: \.self) { step in
+            ForEach(onboardingSteps.indices, id: \.self) { step in
                 if step == currentStep {
                     Capsule()
                         .fill(Color.accentColor)
@@ -311,7 +367,7 @@ struct OnboardingView: View {
                 Text(primaryButtonText)
                     .fontWeight(.semibold)
 
-                if currentStep < totalSteps - 1 && currentStep != 7 {
+                if currentStep < totalSteps - 1 && currentStepID != .summary {
                     Image(systemName: "arrow.right")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -321,6 +377,7 @@ struct OnboardingView: View {
             .padding(.vertical, 6)
         }
         .buttonStyle(.traiPrimary(color: canProceed ? .accentColor : .gray, size: .large, fullWidth: true))
+        .accessibilityIdentifier("onboardingPrimaryButton")
         .disabled(!canProceed)
         .animation(.easeInOut(duration: 0.2), value: canProceed)
         .padding(.horizontal, 24)
@@ -328,11 +385,14 @@ struct OnboardingView: View {
     }
 
     private var primaryButtonText: String {
-        switch currentStep {
-        case 0: return "Let's Go"
-        case 7: return (monetizationService?.canAccessAIFeatures ?? true) ? "Generate My Plan" : "Choose Plan Type"
-        case 8: return "Continue"
-        case 9: return "Start Your Journey"
+        switch currentStepID {
+        case .welcome: return "Continue"
+        case .summary:
+            return (monetizationService?.canAccessAIFeatures ?? true) ? "Build My Plan" : "See Trai Pro"
+        case .activity:
+            return "Build My Plan"
+        case .nutritionPlan: return "Start Using Trai"
+        case .workoutSetup: return "Start Using Trai"
         default: return "Continue"
         }
     }
@@ -340,28 +400,31 @@ struct OnboardingView: View {
     // MARK: - Validation
 
     private var canProceed: Bool {
-        switch currentStep {
-        case 0:
-            return !userName.trimmingCharacters(in: .whitespaces).isEmpty
-        case 1:
-            return !weightValue.isEmpty && !heightValue.isEmpty
-        case 2:
-            return activityLevel != nil
-        case 3:
+        switch currentStepID {
+        case .welcome:
+            #if DEBUG
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                return true
+            }
+            #endif
+            return accountSessionService?.isAuthenticated == true
+        case .goals:
             return selectedGoal != nil
-        case 4:
-            return true // Macro preferences step (always valid)
-        case 5:
-            return true // Account step is optional
-        case 6:
-            return true // Health step is optional
-        case 7:
-            return true // Summary step
-        case 8:
+        case .biometrics:
+            return !weightValue.isEmpty && !heightValue.isEmpty
+        case .activity:
+            return activityLevel != nil
+        case .macroPreferences:
+            return true
+        case .account:
+            return true
+        case .health:
+            return true
+        case .summary:
+            return true
+        case .nutritionPlan:
             return canCompleteNutritionPlan
-        case 9:
-            return true  // Workout plan is optional
-        default:
+        case .workoutSetup:
             return true
         }
     }
@@ -376,9 +439,19 @@ struct OnboardingView: View {
     // MARK: - Navigation
 
     private func advanceToNextStep() {
-        if currentStep == 7 {
+        if nextStepID == .nutritionPlan {
             if monetizationService?.canAccessAIFeatures ?? true {
-                advanceFromSummaryToPlanReview()
+                advanceToNutritionPlan()
+            } else {
+                HapticManager.lightTap()
+                showingPlanGenerationChoice = true
+            }
+            return
+        }
+
+        if currentStepID == .summary {
+            if monetizationService?.canAccessAIFeatures ?? true {
+                advanceToNutritionPlan()
             } else {
                 HapticManager.lightTap()
                 showingPlanGenerationChoice = true
@@ -390,26 +463,43 @@ struct OnboardingView: View {
         navigationDirection = .forward
 
         withAnimation(.smooth(duration: 0.4)) {
-            currentStep += 1
+            currentStep = min(currentStep + 1, totalSteps - 1)
         }
 
-        // Trigger plan generation when entering the plan review step
-        if currentStep == 8 && (generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature) {
+        if currentStepID == .nutritionPlan && (generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature) {
             generatePlan()
         }
     }
 
-    private func advanceFromSummaryToPlanReview() {
+    private var nextStepID: OnboardingStepID? {
+        let nextIndex = currentStep + 1
+        guard onboardingSteps.indices.contains(nextIndex) else { return nil }
+        return onboardingSteps[nextIndex]
+    }
+
+    private var isWaitingToEnterNutritionPlan: Bool {
+        nextStepID == .nutritionPlan || currentStepID == .summary
+    }
+
+    private func advanceToNutritionPlan() {
         HapticManager.stepCompleted()
         navigationDirection = .forward
 
         withAnimation(.smooth(duration: 0.4)) {
-            currentStep = 8
+            currentStep = stepIndex(for: .nutritionPlan) ?? min(currentStep + 1, totalSteps - 1)
         }
 
         if generatedPlan == nil || lastGeneratedPlanInputSignature != currentPlanInputSignature {
             generatePlan()
         }
+    }
+
+    private func stepIndex(for step: OnboardingStepID) -> Int? {
+        onboardingSteps.firstIndex(of: step)
+    }
+
+    private func clampCurrentStepToAvailableFlow() {
+        currentStep = min(currentStep, max(totalSteps - 1, 0))
     }
 
     private func requestHealthAuthorization() {
@@ -441,4 +531,29 @@ struct OnboardingView: View {
 #Preview {
     OnboardingView()
         .modelContainer(for: UserProfile.self, inMemory: true)
+}
+
+enum OnboardingStepID: Equatable {
+    case welcome
+    case goals
+    case biometrics
+    case activity
+    case macroPreferences
+    case account
+    case health
+    case summary
+    case nutritionPlan
+    case workoutSetup
+}
+
+enum OnboardingFlowPlanner {
+    static func steps() -> [OnboardingStepID] {
+        [
+            .welcome,
+            .goals,
+            .biometrics,
+            .activity,
+            .nutritionPlan
+        ]
+    }
 }

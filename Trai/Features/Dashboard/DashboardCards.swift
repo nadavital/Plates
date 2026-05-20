@@ -46,16 +46,13 @@ struct CalorieProgressCard: View {
     let goal: Int
     var onTap: (() -> Void)?
 
-    private var progress: Double {
-        min(Double(consumed) / Double(goal), 1.0)
-    }
-
-    private var remaining: Int {
-        max(goal - consumed, 0)
+    private var state: NutritionDisplayPolicy.CalorieState {
+        NutritionDisplayPolicy.calorieState(consumed: consumed, target: goal)
     }
 
     private var progressColor: Color {
-        progress < 0.8 ? .green : progress < 1.0 ? .teal : .blue
+        let progress = state.progress
+        return progress < 0.8 ? .green : progress < 1.0 ? .teal : .blue
     }
 
     var body: some View {
@@ -69,7 +66,7 @@ struct CalorieProgressCard: View {
                         .font(.traiHeadline())
                     Spacer()
                     HStack(spacing: TraiSpacing.xs) {
-                        Text("\(consumed) / \(goal)")
+                        Text(state.primaryValueText)
                             .font(.traiLabel())
                             .foregroundStyle(.secondary)
                         if onTap != nil {
@@ -80,7 +77,6 @@ struct CalorieProgressCard: View {
                     }
                 }
 
-                // Gradient progress bar
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         Capsule()
@@ -88,7 +84,7 @@ struct CalorieProgressCard: View {
 
                         Capsule()
                             .fill(TraiGradient.progress(progressColor))
-                            .frame(width: max(geometry.size.width * progress, 4))
+                            .frame(width: max(geometry.size.width * state.progress, 4))
                             .shadow(color: progressColor.opacity(0.3), radius: 4, y: 1)
                     }
                 }
@@ -105,7 +101,7 @@ struct CalorieProgressCard: View {
                     Spacer()
 
                     VStack(alignment: .trailing) {
-                        TraiAnimatedNumber(value: remaining, font: .traiBold(28), color: progressColor)
+                        TraiAnimatedNumber(value: state.remaining, font: .traiBold(28), color: progressColor)
                         Text("remaining")
                             .font(.traiLabel(11))
                             .foregroundStyle(.secondary)
@@ -149,13 +145,15 @@ struct MacroBreakdownCard: View {
             .fiber: fiber,
             .sugar: sugar
         ]
-        self.macroGoals = [
-            .protein: proteinGoal,
-            .carbs: carbsGoal,
-            .fat: fatGoal,
-            .fiber: fiberGoal,
-            .sugar: sugarGoal
-        ]
+        self.macroGoals = Dictionary(
+            uniqueKeysWithValues: [
+                (.protein, proteinGoal),
+                (.carbs, carbsGoal),
+                (.fat, fatGoal),
+                (.fiber, fiberGoal),
+                (.sugar, sugarGoal)
+            ]
+        )
         self.enabledMacros = enabledMacros
         self.onTap = onTap
     }
@@ -188,13 +186,13 @@ struct MacroBreakdownCard: View {
                         let layout = macroLayout(in: geometry.size.width)
 
                         HStack(spacing: layout.spacing) {
-                            ForEach(orderedEnabledMacros) { macro in
+                            ForEach(macroStates) { state in
                                 MacroRingItem(
-                                    name: macro.displayName,
-                                    compactLabel: macro.shortName,
-                                    current: macroValues[macro] ?? 0,
-                                    goal: Double(macroGoals[macro] ?? 100),
-                                    color: macro.color,
+                                    name: state.macro.displayName,
+                                    compactLabel: state.macro.shortName,
+                                    current: state.current,
+                                    goal: Double(state.target),
+                                    color: state.macro.color,
                                     diameter: layout.diameter,
                                     prefersCompactLabel: layout.useCompactLabels
                                 )
@@ -208,6 +206,14 @@ struct MacroBreakdownCard: View {
             .traiCard()
         }
         .buttonStyle(TraiPressStyle())
+    }
+
+    private var macroStates: [NutritionDisplayPolicy.MacroState] {
+        NutritionDisplayPolicy.macroStates(
+            values: macroValues,
+            targets: macroGoals,
+            enabledMacros: enabledMacros
+        )
     }
 
     private var emptyStateView: some View {

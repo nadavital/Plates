@@ -773,8 +773,15 @@ extension AIFunctionExecutor {
         let totalCarbs = entries.reduce(0.0) { $0 + $1.carbsGrams }
         let totalFat = entries.reduce(0.0) { $0 + $1.fatGrams }
 
-        // Get targets from profile
-        let targetCalories = userProfile?.dailyCalorieGoal ?? 2000
+        // Calculate number of days in range
+        let dayCount = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 1
+
+        // Get targets from the user's nutrition plan and local workout context.
+        let hasWorkoutForTarget = dayCount == 1 && WorkoutDayTargetContext.hasWorkout(
+            in: DateInterval(start: startDate, end: endDate),
+            modelContext: modelContext
+        )
+        let targetCalories = userProfile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutForTarget) ?? 2_000
         let targetProtein = userProfile?.dailyProteinGoal ?? 150
         let targetCarbs = userProfile?.dailyCarbsGoal ?? 200
         let targetFat = userProfile?.dailyFatGoal ?? 65
@@ -831,9 +838,6 @@ extension AIFunctionExecutor {
 
             return payload
         }
-
-        // Calculate number of days in range
-        let dayCount = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 1
 
         return .dataResponse(FunctionResult(
             name: "get_food_log",

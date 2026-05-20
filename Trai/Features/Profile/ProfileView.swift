@@ -14,6 +14,7 @@ struct ProfileView: View {
     @Query private var loggedFoodEntries: [FoodEntry]
     @Query private var loggedChatMessages: [ChatMessage]
     @Query private var todaysWorkouts: [WorkoutSession]
+    @Query private var todaysLiveWorkouts: [LiveWorkout]
 
     @Environment(\.appTabSelection) private var appTabSelection
     @Environment(\.modelContext) var modelContext
@@ -23,6 +24,8 @@ struct ProfileView: View {
     @State var showPlanSheet = false
     @State var showSettingsSheet = false
     @State var customRemindersCount = 0
+    @State var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State var standardWorkoutPlanAIService = AIService()
 
     // Workout plan management sheets
     @State var showPlanSetupSheet = false
@@ -70,6 +73,7 @@ struct ProfileView: View {
         self.onSelectTab = onSelectTab
         let now = Date()
         let startOfToday = Calendar.current.startOfDay(for: now)
+        let endOfToday = Calendar.current.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
 
         var profileDescriptor = FetchDescriptor<UserProfile>()
         profileDescriptor.fetchLimit = 1
@@ -109,12 +113,27 @@ struct ProfileView: View {
         )
         todaysWorkoutDescriptor.fetchLimit = 1
         _todaysWorkouts = Query(todaysWorkoutDescriptor)
+
+        var todaysLiveWorkoutDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate<LiveWorkout> { workout in
+                (workout.startedAt >= startOfToday && workout.startedAt < endOfToday)
+                    || (workout.completedAt != nil && workout.completedAt! >= startOfToday && workout.completedAt! < endOfToday)
+            },
+            sortBy: [SortDescriptor(\LiveWorkout.startedAt, order: .reverse)]
+        )
+        todaysLiveWorkoutDescriptor.fetchLimit = 1
+        _todaysLiveWorkouts = Query(todaysLiveWorkoutDescriptor)
     }
 
     var profile: UserProfile? { profiles.first }
 
     var hasWorkoutToday: Bool {
-        !todaysWorkouts.isEmpty
+        let interval = WorkoutDayTargetContext.dayInterval()
+        return WorkoutDayTargetContext.hasWorkout(
+            in: interval,
+            workoutSessions: todaysWorkouts,
+            liveWorkouts: todaysLiveWorkouts
+        ) || isActiveWorkoutInProgress
     }
 
     private var isProfileTabActive: Bool {
@@ -133,6 +152,19 @@ struct ProfileView: View {
     var memoryCount: Int { activeMemoriesCount }
     var conversationCount: Int { chatConversationCount }
     var canAccessAIFeatures: Bool { monetizationService?.canAccessAIFeatures ?? true }
+    var standardWorkoutPlanSetupContext: OnboardingWorkoutPlanUserContext {
+        let profile = self.profile
+        return OnboardingWorkoutPlanUserContext(
+            name: profile?.name ?? "User",
+            age: profile?.age ?? 30,
+            gender: profile?.genderValue ?? .notSpecified,
+            goal: profile?.goal ?? .maintenance,
+            activityLevel: profile?.activityLevelValue ?? .moderate,
+            nutritionContext: OnboardingWorkoutPlanUserContext.nutritionContext(from: profile),
+            memoryContext: workoutPlanMemoryContext(),
+            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoalsForPlanSetup())
+        )
+    }
     private var hasClaimableLocalProgress: Bool {
         guard let profile else { return false }
         return profile.hasWorkoutPlan
@@ -206,7 +238,14 @@ struct ProfileView: View {
                 }
             }
             .sheet(isPresented: $showPlanSetupSheet) {
-                WorkoutPlanChatFlow()
+                WorkoutPlanSetupChoiceFlow(
+                    draft: $standardWorkoutPlanDraft,
+                    context: standardWorkoutPlanSetupContext,
+                    aiService: standardWorkoutPlanAIService,
+                    canAccessAIFeatures: canAccessAIFeatures,
+                    onComplete: saveStandardWorkoutPlan,
+                    onBack: { showPlanSetupSheet = false }
+                )
                     .traiSheetBranding()
             }
             .sheet(isPresented: $showPlanEditSheet) {
@@ -290,11 +329,6 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Finish setting up your Trai account")
                 .font(.traiHeadline(20))
-
-            Text("Your health, profile, and logs remain stored locally on this device. Adding an account supports billing and cloud Trai AI; when you use AI features, only selected context and photos needed for the request are sent.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 12) {
                 Button {
@@ -747,6 +781,82 @@ struct ProfileView: View {
         .shadow(color: TraiColors.ember.opacity(0.24), radius: 8, y: 3)
     }
 
+    func saveStandardWorkoutPlan(
+        _ plan: WorkoutPlan,
+        generatedGoals: [WorkoutGoal],
+        mode: WorkoutPlanSetupMode,
+        draftSnapshot: OnboardingWorkoutPlanDraft
+    ) {
+        guard let profile else { return }
+        let hadExistingPlan = profile.workoutPlan != nil
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: plan
+        )
+
+        profile.workoutPlan = plan
+        draftSnapshot.applyPreferences(to: profile, generatedPlan: plan)
+
+        if mode == .proAI {
+            insertGeneratedWorkoutGoals(generatedGoals)
+        }
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                plan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        try? modelContext.save()
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        showPlanSetupSheet = false
+        HapticManager.success()
+    }
+
+    private func workoutPlanMemoryContext() -> [String] {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { memory in
+                memory.isActive
+            },
+            sortBy: [
+                SortDescriptor(\CoachMemory.importance, order: .reverse),
+                SortDescriptor(\CoachMemory.createdAt, order: .reverse)
+            ]
+        )
+        let memories = (try? modelContext.fetch(descriptor)) ?? []
+        return memories
+            .filter {
+                $0.topic == .workout || $0.topic == .general || $0.category == .goal || $0.category == .context || $0.category == .restriction
+            }
+            .prefix(8)
+            .map(\.promptFormat)
+    }
+
+    private func activeWorkoutGoalsForPlanSetup() -> [WorkoutGoal] {
+        let descriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { goal in
+                goal.statusRaw == "active"
+            },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal]) {
+        var existingTitles = Set(activeWorkoutGoalsForPlanSetup().map { $0.trimmedTitle.lowercased() })
+        for goal in goals {
+            let titleKey = goal.trimmedTitle.lowercased()
+            guard !titleKey.isEmpty, !existingTitles.contains(titleKey) else { continue }
+            modelContext.insert(goal)
+            existingTitles.insert(titleKey)
+        }
+    }
 }
 
 #Preview {

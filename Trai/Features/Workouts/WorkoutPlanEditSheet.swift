@@ -274,7 +274,7 @@ struct WorkoutPlanEditSheet: View {
         editorDayName = template.name
         editorSessionType = template.sessionType
         editorFocusAreasText = template.focusAreas.joined(separator: ", ")
-        let selected = Set(template.targetMuscleGroups.compactMap(normalizeMuscleGroup))
+        let selected = Set(template.resolvedTargetMuscleGroups.compactMap(normalizeMuscleGroup))
         editorSelectedMuscles = selected.isEmpty ? [.fullBody] : selected
         showingDayEditor = true
     }
@@ -334,15 +334,31 @@ struct WorkoutPlanEditSheet: View {
                 selectedMuscles: muscles
             )
             let resolvedFocusAreas = sanitizeFocusAreas(focusAreas.isEmpty ? targetGroups : focusAreas)
+            let finalName = trimmedName.isEmpty
+                ? defaultDayName(
+                    for: sessionType,
+                    focusAreas: resolvedFocusAreas.isEmpty ? targetGroups : resolvedFocusAreas,
+                    dayIndex: template.order + 1
+                )
+                : trimmedName
+
+            guard sessionType == template.sessionType else {
+                return WorkoutPlan.WorkoutTemplate(
+                    id: template.id,
+                    name: finalName,
+                    sessionType: sessionType,
+                    focusAreas: resolvedFocusAreas,
+                    targetMuscleGroups: targetGroups,
+                    exercises: [],
+                    estimatedDurationMinutes: template.estimatedDurationMinutes,
+                    order: template.order,
+                    notes: template.notes
+                )
+            }
+
             return copyTemplate(
                 template,
-                name: trimmedName.isEmpty
-                    ? defaultDayName(
-                        for: sessionType,
-                        focusAreas: resolvedFocusAreas.isEmpty ? targetGroups : resolvedFocusAreas,
-                        dayIndex: template.order + 1
-                    )
-                    : trimmedName,
+                name: finalName,
                 sessionType: sessionType,
                 focusAreas: resolvedFocusAreas,
                 targetMuscleGroups: targetGroups
@@ -376,9 +392,11 @@ struct WorkoutPlanEditSheet: View {
             splitType: splitType ?? editedPlan.splitType,
             daysPerWeek: daysPerWeek ?? editedPlan.daysPerWeek,
             templates: templates ?? editedPlan.templates,
+            planIntent: editedPlan.planIntent,
             rationale: editedPlan.rationale,
             guidelines: editedPlan.guidelines,
             progressionStrategy: editedPlan.progressionStrategy,
+            modalityProgression: editedPlan.modalityProgression,
             warnings: editedPlan.warnings
         )
         hasPendingChanges = editedPlan != currentPlan
@@ -411,7 +429,7 @@ struct WorkoutPlanEditSheet: View {
     private func normalizeTemplates(_ templates: [WorkoutPlan.WorkoutTemplate]) -> [WorkoutPlan.WorkoutTemplate] {
         templates.enumerated().map { index, template in
             let targetGroups = template.sessionType.supportsMuscleTargets
-                ? sanitizeTargetGroups(template.targetMuscleGroups)
+                ? sanitizeTargetGroups(template.resolvedTargetMuscleGroups)
                 : []
             let focusAreas = sanitizeFocusAreas(template.focusAreas.isEmpty ? targetGroups : template.focusAreas)
             return copyTemplate(
@@ -419,7 +437,8 @@ struct WorkoutPlanEditSheet: View {
                 sessionType: template.sessionType,
                 focusAreas: focusAreas,
                 targetMuscleGroups: targetGroups,
-                exercises: [],
+                exercises: template.exercises,
+                blocks: template.blocks,
                 order: index
             )
         }
@@ -553,8 +572,10 @@ struct WorkoutPlanEditSheet: View {
         focusAreas: [String]? = nil,
         targetMuscleGroups: [String]? = nil,
         exercises: [WorkoutPlan.ExerciseTemplate]? = nil,
+        blocks: [WorkoutPlan.TrainingBlock]? = nil,
         estimatedDurationMinutes: Int? = nil,
-        order: Int? = nil
+        order: Int? = nil,
+        notes: String? = nil
     ) -> WorkoutPlan.WorkoutTemplate {
         WorkoutPlan.WorkoutTemplate(
             id: template.id,
@@ -563,9 +584,10 @@ struct WorkoutPlanEditSheet: View {
             focusAreas: focusAreas ?? template.focusAreas,
             targetMuscleGroups: targetMuscleGroups ?? template.targetMuscleGroups,
             exercises: exercises ?? template.exercises,
+            blocks: blocks ?? template.blocks,
             estimatedDurationMinutes: estimatedDurationMinutes ?? template.estimatedDurationMinutes,
             order: order ?? template.order,
-            notes: nil
+            notes: notes ?? template.notes
         )
     }
 
@@ -575,20 +597,22 @@ struct WorkoutPlanEditSheet: View {
             let finalName = trimmedName.isEmpty
                 ? defaultDayName(
                     for: template.sessionType,
-                    focusAreas: template.focusAreas.isEmpty ? template.targetMuscleGroups : template.focusAreas,
+                    focusAreas: template.focusAreas.isEmpty ? template.resolvedTargetMuscleGroups : template.focusAreas,
                     dayIndex: index + 1
                 )
                 : trimmedName
-            return copyTemplate(template, name: finalName, exercises: [], order: index)
+            return copyTemplate(template, name: finalName, order: index)
         }
 
         return WorkoutPlan(
             splitType: plan.splitType,
             daysPerWeek: max(plan.daysPerWeek, templates.count),
             templates: templates,
+            planIntent: plan.planIntent,
             rationale: plan.rationale,
             guidelines: plan.guidelines,
             progressionStrategy: plan.progressionStrategy,
+            modalityProgression: plan.modalityProgression,
             warnings: plan.warnings
         )
     }
@@ -645,7 +669,7 @@ private struct WorkoutDayRow: View {
     }
 }
 
-private struct WorkoutDayEditorSheet: View {
+struct WorkoutDayEditorSheet: View {
     private enum Field: Hashable {
         case dayName
         case focusAreas
@@ -985,7 +1009,7 @@ private struct WorkoutDayEditorSheet: View {
     }
 }
 
-private struct DayMuscleTile: View {
+struct DayMuscleTile: View {
     let muscle: LiveWorkout.MuscleGroup
     let isSelected: Bool
     let action: () -> Void
@@ -1014,7 +1038,7 @@ private struct DayMuscleTile: View {
     }
 }
 
-private struct DayPresetChip: View {
+struct DayPresetChip: View {
     let title: String
     var isSelected: Bool = false
     let action: () -> Void
@@ -1034,7 +1058,7 @@ private struct DayPresetChip: View {
     }
 }
 
-private struct SessionTypeTile: View {
+struct SessionTypeTile: View {
     let mode: WorkoutMode
     let isSelected: Bool
     let action: () -> Void

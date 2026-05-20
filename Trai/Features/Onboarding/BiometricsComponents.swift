@@ -21,12 +21,12 @@ struct GenderSelectionButton: View {
             HapticManager.cardSelected()
             action()
         } label: {
-            VStack(spacing: 10) {
+            VStack(spacing: 7) {
                 ZStack {
                     if isSelected {
                         Circle()
                             .fill(Color.accentColor.opacity(0.3))
-                            .frame(width: 64, height: 64)
+                            .frame(width: 52, height: 52)
                             .blur(radius: 8)
                     }
 
@@ -44,7 +44,7 @@ struct GenderSelectionButton: View {
                                     endPoint: .bottomTrailing
                                 )
                         )
-                        .frame(width: 58, height: 58)
+                        .frame(width: 48, height: 48)
                         .shadow(
                             color: isSelected ? Color.accentColor.opacity(0.3) : Color.clear,
                             radius: 8,
@@ -52,16 +52,18 @@ struct GenderSelectionButton: View {
                         )
 
                     Image(systemName: iconName)
-                        .font(.title2)
+                        .font(.system(size: 19))
                         .fontWeight(.medium)
                         .foregroundStyle(isSelected ? .white : .secondary)
                         .scaleEffect(isSelected ? 1.1 : 1)
                 }
 
                 Text(gender.displayName)
-                    .font(.caption)
+                    .font(.caption2)
                     .fontWeight(isSelected ? .semibold : .medium)
                     .foregroundStyle(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
             .frame(maxWidth: .infinity)
             .scaleEffect(isPressed ? 0.95 : 1)
@@ -128,8 +130,8 @@ struct UnitToggle: View {
             Text(label)
                 .font(.caption)
                 .fontWeight(.semibold)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
                 .background(
                     isSelected
                         ? AnyShapeStyle(
@@ -155,6 +157,7 @@ struct MeasurementInput: View {
     let placeholder: String
     @Binding var value: String
     let unit: String
+    var accessibilityIdentifier: String?
     var onFocus: (() -> Void)?
 
     @FocusState private var isFocused: Bool
@@ -163,15 +166,16 @@ struct MeasurementInput: View {
         HStack(spacing: 10) {
             TextField(placeholder, text: $value)
                 .keyboardType(.decimalPad)
-                .font(.title3)
+                .font(.body)
                 .fontWeight(.semibold)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color(.tertiarySystemBackground))
                 )
+                .accessibilityIdentifier(accessibilityIdentifier ?? "measurementInput-\(unit)-\(placeholder)")
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(

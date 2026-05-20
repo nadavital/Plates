@@ -46,8 +46,12 @@ struct AddCustomExerciseSheet: View {
                     nameInputCard
                         .traiCard(cornerRadius: 16)
 
-                    aiAnalysisCard
-                        .traiCard(cornerRadius: 16)
+                    if !canAccessExerciseAI {
+                        lockedExerciseAnalysisCard
+                    } else {
+                        aiAnalysisCard
+                            .traiCard(cornerRadius: 16)
+                    }
 
                     categorySelector
                         .traiCard(cornerRadius: 16)
@@ -123,14 +127,7 @@ struct AddCustomExerciseSheet: View {
 
     private var aiAnalysisCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !canAccessExerciseAI {
-                ProUpsellInlineCard(
-                    source: .exerciseAnalysis,
-                    actionTitle: "Unlock Trai Pro"
-                ) {
-                    proUpsellCoordinator?.present(source: .exerciseAnalysis)
-                }
-            } else if isAnalyzing {
+            if isAnalyzing {
                 sectionHeader("Trai Analysis", icon: "circle.hexagongrid.circle")
 
                 HStack(spacing: 10) {
@@ -180,6 +177,15 @@ struct AddCustomExerciseSheet: View {
                 .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true))
                 .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+        }
+    }
+
+    private var lockedExerciseAnalysisCard: some View {
+        ProUpsellInlineCard(
+            source: .exerciseAnalysis,
+            actionTitle: "Unlock Trai Pro"
+        ) {
+            proUpsellCoordinator?.present(source: .exerciseAnalysis)
         }
     }
 

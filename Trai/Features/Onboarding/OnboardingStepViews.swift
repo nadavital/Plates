@@ -5,268 +5,372 @@
 //  Created by Nadav Avital on 12/25/25.
 //
 
+import AuthenticationServices
 import SwiftUI
 
 // MARK: - Welcome Step
 
 struct WelcomeStepView: View {
-    @Binding var userName: String
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
+    @Environment(AppAccountService.self) private var appAccountService: AppAccountService?
+    @Environment(BillingService.self) private var billingService: BillingService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+
     @State private var heroVisible = false
     @State private var titleVisible = false
-    @State private var feature1Visible = false
-    @State private var feature2Visible = false
-    @State private var feature3Visible = false
-    @State private var inputSectionVisible = false
-    @FocusState private var isNameFocused: Bool
+    @State private var actionVisible = false
+    @State private var didRefreshAccess = false
+    @State private var demoIndex = 0
+
+    let onContinue: () -> Void
 
     var body: some View {
         ZStack {
-            // Decorative floating elements with parallax
             floatingDecorations
 
-            // Single scroll view with all content
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 0) {
-                        heroSection
-                            .padding(.top, 20)
-                            .padding(.bottom, 24)
+            VStack(spacing: 22) {
+                Spacer(minLength: 30)
+                heroSection
+                AnimatedTraiDemo(index: demoIndex)
+                    .opacity(titleVisible ? 1 : 0)
+                    .offset(y: titleVisible ? 0 : 16)
+                Spacer(minLength: 150)
+            }
+            .padding(.horizontal, 24)
 
-                        featuresSection
-                            .padding(.bottom, 28)
-
-                        nameInputSection
-                            .id("nameInput")
-                            .padding(.bottom, 140) // Space for floating button
-                    }
+            VStack {
+                Spacer()
+                accountSection
+                    .opacity(actionVisible ? 1 : 0)
+                    .offset(y: actionVisible ? 0 : 24)
                     .padding(.horizontal, 24)
-                }
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .onChange(of: isNameFocused, initial: false) { _, focused in
-                    if focused {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            proxy.scrollTo("nameInput", anchor: .bottom)
-                        }
-                    }
-                }
+                    .padding(.bottom, 8)
             }
         }
         .onAppear {
             startEntranceAnimations()
         }
+        .task {
+            await cycleDemoMoments()
+        }
+        .task {
+            guard !didRefreshAccess else { return }
+            didRefreshAccess = true
+            #if DEBUG
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                return
+            }
+            #endif
+            await billingService?.refreshAccessStateForImmediateUse()
+        }
     }
 
     private func startEntranceAnimations() {
-        // Hero fade in
         withAnimation(.easeOut(duration: 0.5)) {
             heroVisible = true
         }
-
-        // Title fade in
         withAnimation(.easeOut(duration: 0.4).delay(0.15)) {
             titleVisible = true
         }
-
-        // Staggered feature cards
         withAnimation(.easeOut(duration: 0.4).delay(0.3)) {
-            feature1Visible = true
+            actionVisible = true
         }
-        withAnimation(.easeOut(duration: 0.4).delay(0.4)) {
-            feature2Visible = true
-        }
-        withAnimation(.easeOut(duration: 0.4).delay(0.5)) {
-            feature3Visible = true
-        }
-
-        // Input section
-        withAnimation(.easeOut(duration: 0.4).delay(0.6)) {
-            inputSectionVisible = true
-        }
-
     }
 
-    // MARK: - Hero Section
+    private func cycleDemoMoments() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.smooth(duration: 0.45)) {
+                    demoIndex = (demoIndex + 1) % TraiDemoMoment.moments.count
+                }
+            }
+        }
+    }
 
     private var heroSection: some View {
-        VStack(spacing: 14) {
-            // The welcome slide uses the lens as a brand mark, so keep it static.
-            TraiLensIcon(size: 64, palette: .energy)
+        VStack(spacing: 16) {
+            TraiLensView(size: 112, state: .idle, palette: .energy, breathes: false)
                 .opacity(heroVisible ? 1 : 0)
-                .scaleEffect(heroVisible ? 1 : 0.9)
+                .scaleEffect(heroVisible ? 1 : 0.86)
 
-            VStack(spacing: 6) {
-                Text("Welcome to")
-                    .font(.title3)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
+            Text("Trai")
+                .font(.traiHero(54))
+                .foregroundStyle(.primary)
+                .opacity(titleVisible ? 1 : 0)
 
-                Text("Trai")
-                    .font(.traiHero(38))
-                    .foregroundStyle(.primary)
-            }
-            .opacity(titleVisible ? 1 : 0)
-
-            Text("Meet Trai, your personal coach\nwho learns and adapts to you")
-                .font(.subheadline)
+            Text("Your AI coach for food, fitness, and progress.")
+                .font(.headline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .lineSpacing(3)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+                .fixedSize(horizontal: false, vertical: true)
                 .opacity(titleVisible ? 1 : 0)
         }
     }
 
-    // MARK: - Features Section
-
-    private var featuresSection: some View {
+    private var accountSection: some View {
         VStack(spacing: 10) {
-            FeatureRow(
-                icon: "sparkles",
-                color: TraiColors.flame,
-                title: "Personal Plan, Built Fast",
-                description: "Answer a few questions and Trai builds targets that match your body and goal."
-            )
-            .opacity(feature1Visible ? 1 : 0)
-
-            FeatureRow(
-                icon: "camera.fill",
-                color: TraiColors.blaze,
-                title: "Log Meals in Seconds",
-                description: "Snap your food, save the meal, and keep your streak moving without manual entry."
-            )
-            .opacity(feature2Visible ? 1 : 0)
-
-            FeatureRow(
-                icon: "chart.line.uptrend.xyaxis",
-                color: .accentColor,
-                title: "Coaching That Adapts",
-                description: "See clear progress trends and adjust your plan as your routine changes."
-            )
-            .opacity(feature3Visible ? 1 : 0)
-        }
-    }
-
-    // MARK: - Name Input Section
-
-    private var nameInputSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Let's get started")
-                    .font(.title3)
-                    .fontWeight(.bold)
-
-                Text("What should we call you?")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            if let lastErrorMessage = accountSessionService?.lastErrorMessage {
+                Text(lastErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(isNameFocused ? Color.accentColor : Color(.tertiarySystemBackground))
-                        .frame(width: 40, height: 40)
-
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(isNameFocused ? .white : .secondary)
+            #if DEBUG
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                Button(action: onContinue) {
+                    Text("Get Started")
+                        .frame(maxWidth: .infinity)
                 }
-                .animation(.spring(response: 0.3), value: isNameFocused)
-
-                TextField("Enter your name", text: $userName)
-                    .font(.body)
-                    .textContentType(.name)
-                    .autocorrectionDisabled()
-                    .focused($isNameFocused)
-                    .onChange(of: isNameFocused, initial: false) { _, focused in
-                        if focused {
-                            HapticManager.lightTap()
-                        }
-                    }
+                .buttonStyle(.traiPrimary(color: TraiColors.brandAccent, size: .large, fullWidth: true))
+            } else if accountSessionService?.isAuthenticated == true {
+                signedInContinueButton
+            } else if let blockedReason = appAccountService?.realAccountSignInBlockedReason {
+                BackendRequirementCard(
+                    message: blockedReason,
+                    actionTitle: backendActionTitle,
+                    action: switchToRecommendedBackend
+                )
+            } else if let accountSessionService {
+                appleSignInButton(accountSessionService)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(
-                        isNameFocused ? Color.accentColor : Color.clear,
-                        lineWidth: 2.5
-                    )
-            )
-            .shadow(
-                color: isNameFocused ? Color.accentColor.opacity(0.2) : Color.clear,
-                radius: 12,
-                y: 4
-            )
-            .animation(.spring(response: 0.3), value: isNameFocused)
+            #else
+            if accountSessionService?.isAuthenticated == true {
+                signedInContinueButton
+            } else if let blockedReason = appAccountService?.realAccountSignInBlockedReason {
+                BackendRequirementCard(
+                    message: blockedReason,
+                    actionTitle: backendActionTitle,
+                    action: switchToRecommendedBackend
+                )
+            } else if let accountSessionService {
+                appleSignInButton(accountSessionService)
+            }
+            #endif
         }
-        .offset(y: inputSectionVisible ? 0 : 30)
-        .opacity(inputSectionVisible ? 1 : 0)
     }
 
-    // MARK: - Floating Decorations
+    private var signedInContinueButton: some View {
+        VStack(spacing: 10) {
+            Label(signedInMessage, systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.green)
+
+            Button(action: onContinue) {
+                Text("Continue")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.traiPrimary(color: TraiColors.brandAccent, size: .large, fullWidth: true))
+        }
+    }
+
+    private func appleSignInButton(_ accountSessionService: AccountSessionService) -> some View {
+        SignInWithAppleButton(.signIn) { request in
+            accountSessionService.configureAppleSignInRequest(request)
+        } onCompletion: { result in
+            handleAppleSignIn(result, using: accountSessionService)
+        }
+        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+        .frame(height: 54)
+    }
+
+    private var signedInMessage: String {
+        if monetizationService?.canAccessAIFeatures == true {
+            return "Signed in. Trai Pro is active."
+        }
+        return "Signed in. Your plan will stay with your account."
+    }
+
+    private var backendActionTitle: String? {
+        guard let recommendedEnvironment = appAccountService?.recommendedBackendEnvironmentForRealAccountSignIn else {
+            return nil
+        }
+        return "Use \(recommendedEnvironment.displayName)"
+    }
+
+    private func switchToRecommendedBackend() {
+        guard let recommendedEnvironment = appAccountService?.recommendedBackendEnvironmentForRealAccountSignIn else {
+            return
+        }
+        appAccountService?.setBackendEnvironment(recommendedEnvironment)
+    }
+
+    private func handleAppleSignIn(
+        _ result: Result<ASAuthorization, any Error>,
+        using accountSessionService: AccountSessionService
+    ) {
+        switch result {
+        case .success(let authorization):
+            Task {
+                await accountSessionService.handleAppleAuthorization(authorization)
+            }
+        case .failure(let error):
+            accountSessionService.handleAuthorizationFailure(error)
+        }
+    }
 
     private var floatingDecorations: some View {
-        GeometryReader { geo in
-            // Top right blob
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Color.accentColor.opacity(0.15), Color.clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 100
-                    )
-                )
-                .frame(width: 220, height: 220)
-                .blur(radius: 50)
-                .offset(x: geo.size.width * 0.5, y: -80)
+        Color.clear
+    }
+}
 
-            // Left middle blob
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Color.purple.opacity(0.12), Color.clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 80
-                    )
-                )
-                .frame(width: 180, height: 180)
-                .blur(radius: 45)
-                .offset(x: -80, y: geo.size.height * 0.35)
+struct OnboardingTraiHeader: View {
+    let title: String
+    var lensSize: CGFloat = 54
+    var lensState: TraiLensState = .idle
+    var lensBreathes = false
 
-            // Bottom right accent
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Color.orange.opacity(0.1), Color.clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 70
-                    )
-                )
-                .frame(width: 160, height: 160)
-                .blur(radius: 40)
-                .offset(x: geo.size.width * 0.65, y: geo.size.height * 0.55)
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            TraiLensView(size: lensSize, state: lensState, palette: .energy, breathes: lensBreathes)
 
-            // Subtle bottom left
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Color.green.opacity(0.08), Color.clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 60
-                    )
-                )
-                .frame(width: 140, height: 140)
-                .blur(radius: 35)
-                .offset(x: -40, y: geo.size.height * 0.7)
+            StreamingText(text: title)
+                .font(.traiBold(26))
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .frame(minHeight: 64, alignment: .center)
+
+            Spacer(minLength: 0)
         }
-        .ignoresSafeArea()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct TraiDemoMoment {
+    let icon: String
+    let title: String
+    let userText: String
+    let traiText: String
+    let tint: Color
+
+    static let moments: [TraiDemoMoment] = [
+        TraiDemoMoment(
+            icon: "camera.fill",
+            title: "Log meals fast",
+            userText: "Chicken bowl with rice and avocado",
+            traiText: "Logged. I’ll keep your day balanced.",
+            tint: TraiColors.flame
+        ),
+        TraiDemoMoment(
+            icon: "target",
+            title: "Build targets",
+            userText: "I want to get leaner and stronger",
+            traiText: "Got it. I’ll build around recomposition.",
+            tint: .accentColor
+        ),
+        TraiDemoMoment(
+            icon: "sparkles",
+            title: "Adapt daily",
+            userText: "Dinner was heavier than planned",
+            traiText: "No problem. I’ll adjust what’s left today.",
+            tint: TraiColors.coral
+        )
+    ]
+}
+
+private struct AnimatedTraiDemo: View {
+    let index: Int
+
+    private var moment: TraiDemoMoment {
+        TraiDemoMoment.moments[index % TraiDemoMoment.moments.count]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 8) {
+                DemoBubble(text: moment.userText, alignment: .trailing, tint: Color(.systemGray5))
+                TraiDemoReply(icon: moment.icon, title: moment.title, text: moment.traiText, tint: moment.tint)
+            }
+        }
+        .padding(16)
+        .glassEffect(.regular.tint(TraiColors.brandAccent.opacity(0.12)), in: .rect(cornerRadius: 24))
+    }
+}
+
+private struct TraiDemoReply: View {
+    let icon: String
+    let title: String
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Label(title, systemImage: icon)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+
+                Text(text)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(tint.opacity(0.18), in: .rect(cornerRadius: 16))
+
+            Spacer(minLength: 30)
+        }
+    }
+}
+
+struct StreamingText: View {
+    let text: String
+    var intervalNanoseconds: UInt64 = 36_000_000
+
+    @State private var visibleCount = 0
+
+    var body: some View {
+        Text(String(text.prefix(visibleCount)))
+            .task(id: text) {
+                visibleCount = 0
+                for index in 1...text.count {
+                    guard !Task.isCancelled else { return }
+                    try? await Task.sleep(nanoseconds: intervalNanoseconds)
+                    await MainActor.run {
+                        visibleCount = index
+                    }
+                }
+            }
+    }
+}
+
+private struct DemoBubble: View {
+    enum BubbleAlignment {
+        case leading
+        case trailing
+    }
+
+    let text: String
+    let alignment: BubbleAlignment
+    let tint: Color
+
+    var body: some View {
+        HStack {
+            if alignment == .trailing {
+                Spacer(minLength: 36)
+            }
+
+            Text(text)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(tint.opacity(alignment == .trailing ? 0.72 : 0.18), in: .rect(cornerRadius: 16))
+
+            if alignment == .leading {
+                Spacer(minLength: 36)
+            }
+        }
     }
 }
 
@@ -313,5 +417,5 @@ struct FeatureRow: View {
 }
 
 #Preview {
-    WelcomeStepView(userName: .constant(""))
+    WelcomeStepView(onContinue: {})
 }

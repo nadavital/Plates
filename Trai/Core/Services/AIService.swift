@@ -251,16 +251,28 @@ final class AIService {
         )
     }
 
-    func makeRequest(request: TraiAIRequest) async throws -> String {
-        try await makeRequest(body: AIBackendPayloadBuilder.requestBody(from: request))
+    func makeRequest(
+        request: TraiAIRequest,
+        timeoutInterval: TimeInterval? = nil
+    ) async throws -> String {
+        try await makeRequest(
+            body: AIBackendPayloadBuilder.requestBody(from: request),
+            timeoutInterval: timeoutInterval
+        )
     }
 
-    func makeRequest(body: [String: Any]) async throws -> String {
+    func makeRequest(
+        body: [String: Any],
+        timeoutInterval: TimeInterval? = nil
+    ) async throws -> String {
         let url = try serviceURL(action: "generateContent", streaming: false)
 
         log("🌐 Making request to Trai AI backend...", type: .info)
 
         var request = URLRequest(url: url)
+        if let timeoutInterval {
+            request.timeoutInterval = timeoutInterval
+        }
         request.httpMethod = "POST"
         try await configureRequest(&request)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

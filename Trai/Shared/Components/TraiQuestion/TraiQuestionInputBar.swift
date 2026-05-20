@@ -17,6 +17,7 @@ struct TraiQuestionInputBar: View {
     let onSend: () -> Void
     let onContinue: () -> Void
     let onSkip: () -> Void
+    var allowsSkipping = true
     var isFocused: FocusState<Bool>.Binding
 
     private var canSend: Bool {
@@ -74,9 +75,9 @@ struct TraiQuestionInputBar: View {
 
     private var continueOrSkipButton: some View {
         Button {
-            if hasAnswers || isLastQuestion {
+            if hasAnswers || (isLastQuestion && allowsSkipping) {
                 onContinue()
-            } else {
+            } else if allowsSkipping {
                 onSkip()
             }
         } label: {
@@ -98,7 +99,7 @@ struct TraiQuestionInputBar: View {
             .regular.tint(buttonTint).interactive(),
             in: .capsule
         )
-        .disabled(isLoading)
+        .disabled(isLoading || (!allowsSkipping && !hasAnswers))
     }
 
     private var buttonText: String {
@@ -106,12 +107,17 @@ struct TraiQuestionInputBar: View {
             return "Generate Plan"
         } else if hasAnswers {
             return "Continue"
+        } else if !allowsSkipping {
+            return "Continue"
         } else {
             return "Skip"
         }
     }
 
     private var buttonTint: Color {
+        if !allowsSkipping && !hasAnswers {
+            return .gray
+        }
         if isLastQuestion || hasAnswers {
             return .accentColor
         }

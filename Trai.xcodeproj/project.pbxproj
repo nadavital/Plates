@@ -16,6 +16,10 @@
 		7C1000033C00000100C10001 /* PlanUpdateSuggestionEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1000043C00000100C10001 /* PlanUpdateSuggestionEntryTests.swift */; };
 		7C1000053C00000100C10001 /* WorkoutPlanGenerationRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1000063C00000100C10001 /* WorkoutPlanGenerationRequestTests.swift */; };
 		7C1000073C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1000083C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift */; };
+		7C1000093C00000100C10001 /* UserProfileNutritionTargetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10000A3C00000100C10001 /* UserProfileNutritionTargetsTests.swift */; };
+		7C10000B3C00000100C10001 /* NutritionDisplayPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10000C3C00000100C10001 /* NutritionDisplayPolicyTests.swift */; };
+		7C10000D3C00000100C10001 /* OnboardingFlowPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10000E3C00000100C10001 /* OnboardingFlowPlannerTests.swift */; };
+		7C10000F3C00000100C10001 /* OnboardingProAccessStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1000103C00000100C10001 /* OnboardingProAccessStateTests.swift */; };
 		B1F0A0013D00000100B1F001 /* FoodMemoryFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0A0023D00000100B1F001 /* FoodMemoryFoundationTests.swift */; };
 		B1F0A0033D00000100B1F001 /* FoodMemoryMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0A0043D00000100B1F001 /* FoodMemoryMatcherTests.swift */; };
 		B1F0A0053D00000100B1F001 /* FoodMemoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0A0063D00000100B1F001 /* FoodMemoryServiceTests.swift */; };
@@ -95,6 +99,10 @@
 		7C1000043C00000100C10001 /* PlanUpdateSuggestionEntryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanUpdateSuggestionEntryTests.swift; sourceTree = "<group>"; };
 		7C1000063C00000100C10001 /* WorkoutPlanGenerationRequestTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutPlanGenerationRequestTests.swift; sourceTree = "<group>"; };
 		7C1000083C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UserProfileWorkoutPlanRequestTests.swift; sourceTree = "<group>"; };
+		7C10000A3C00000100C10001 /* UserProfileNutritionTargetsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UserProfileNutritionTargetsTests.swift; sourceTree = "<group>"; };
+		7C10000C3C00000100C10001 /* NutritionDisplayPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NutritionDisplayPolicyTests.swift; sourceTree = "<group>"; };
+		7C10000E3C00000100C10001 /* OnboardingFlowPlannerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingFlowPlannerTests.swift; sourceTree = "<group>"; };
+		7C1000103C00000100C10001 /* OnboardingProAccessStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingProAccessStateTests.swift; sourceTree = "<group>"; };
 		B1F0A0023D00000100B1F001 /* FoodMemoryFoundationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodMemoryFoundationTests.swift; sourceTree = "<group>"; };
 		B1F0A0043D00000100B1F001 /* FoodMemoryMatcherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodMemoryMatcherTests.swift; sourceTree = "<group>"; };
 		B1F0A0063D00000100B1F001 /* FoodMemoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FoodMemoryServiceTests.swift; sourceTree = "<group>"; };
@@ -252,6 +260,10 @@
 				F3A1000E2E00000100A10001 /* FoodRecommendationLegacyCleanupTests.swift */,
 				F3A100102E00000100A10001 /* FoodPatternIdentityTests.swift */,
 				F3A100122E00000100A10001 /* FoodPatternRecommendationTests.swift */,
+				7C10000C3C00000100C10001 /* NutritionDisplayPolicyTests.swift */,
+				7C10000E3C00000100C10001 /* OnboardingFlowPlannerTests.swift */,
+				7C1000103C00000100C10001 /* OnboardingProAccessStateTests.swift */,
+				7C10000A3C00000100C10001 /* UserProfileNutritionTargetsTests.swift */,
 				7C1000083C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift */,
 				7C1000063C00000100C10001 /* WorkoutPlanGenerationRequestTests.swift */,
 				A30000042B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift */,
@@ -485,6 +497,10 @@
 				B1F0A0013D00000100B1F001 /* FoodMemoryFoundationTests.swift in Sources */,
 				B1F0A0033D00000100B1F001 /* FoodMemoryMatcherTests.swift in Sources */,
 				B1F0A0053D00000100B1F001 /* FoodMemoryServiceTests.swift in Sources */,
+				7C10000B3C00000100C10001 /* NutritionDisplayPolicyTests.swift in Sources */,
+				7C10000D3C00000100C10001 /* OnboardingFlowPlannerTests.swift in Sources */,
+				7C10000F3C00000100C10001 /* OnboardingProAccessStateTests.swift in Sources */,
+				7C1000093C00000100C10001 /* UserProfileNutritionTargetsTests.swift in Sources */,
 				7C1000073C00000100C10001 /* UserProfileWorkoutPlanRequestTests.swift in Sources */,
 				7C1000053C00000100C10001 /* WorkoutPlanGenerationRequestTests.swift in Sources */,
 				A30000032B00000100A30001 /* ActiveWorkoutRuntimeStateTests.swift in Sources */,

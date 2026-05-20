@@ -68,6 +68,23 @@ extension AIService {
         nonisolated static let empty = ActivityData(steps: 0, activeCalories: 0, exerciseMinutes: 0)
     }
 
+    // MARK: - Focused Food Entry Context
+
+    struct FocusedFoodEntryContext: Sendable {
+        let entryId: UUID
+        let name: String
+        let loggedAt: Date
+        let semanticMeal: String
+        let calories: Int
+        let proteinGrams: Double
+        let carbsGrams: Double
+        let fatGrams: Double
+        let fiberGrams: Double?
+        let sugarGrams: Double?
+        let servingSize: String?
+        let notes: String?
+    }
+
     // MARK: - Chat Context
 
     /// Context for function calling chat
@@ -84,6 +101,8 @@ extension AIService {
         let isIncognitoMode: Bool
         let activeWorkout: WorkoutContext?
         let activityData: ActivityData
+        let hasWorkoutToday: Bool
+        let focusedFoodEntry: FocusedFoodEntryContext?
 
         init(
             profile: UserProfile?,
@@ -97,7 +116,9 @@ extension AIService {
             pendingWorkoutPlanSuggestion: WorkoutPlanSuggestionEntry? = nil,
             isIncognitoMode: Bool = false,
             activeWorkout: WorkoutContext? = nil,
-            activityData: ActivityData = .empty
+            activityData: ActivityData = .empty,
+            hasWorkoutToday: Bool = false,
+            focusedFoodEntry: FocusedFoodEntryContext? = nil
         ) {
             self.profile = profile
             self.todaysFoodEntries = todaysFoodEntries
@@ -111,6 +132,8 @@ extension AIService {
             self.isIncognitoMode = isIncognitoMode
             self.activeWorkout = activeWorkout
             self.activityData = activityData
+            self.hasWorkoutToday = hasWorkoutToday
+            self.focusedFoodEntry = focusedFoodEntry
         }
     }
 

@@ -9,7 +9,7 @@ extension WorkoutPlan.WorkoutTemplate {
     var displayAccentColor: Color {
         switch sessionType {
         case .strength:
-            switch targetMuscleGroups.first {
+            switch resolvedTargetMuscleGroups.first {
             case "chest", "shoulders", "triceps":
                 return .orange
             case "back", "biceps":
@@ -48,6 +48,26 @@ extension WorkoutPlan.WorkoutTemplate {
         if !focusAreasDisplay.isEmpty {
             return focusAreasDisplay
         }
+        if !primaryBlockSummary.isEmpty {
+            return primaryBlockSummary
+        }
+        return sessionType.displayName
+    }
+
+    var displayWorkloadSummary: String {
+        if exerciseCount > 0 {
+            return "\(exerciseCount) exercise\(exerciseCount == 1 ? "" : "s")"
+        }
+
+        let blockCount = displayBlocks.count
+        if blockCount > 1 {
+            return "\(blockCount) blocks"
+        }
+
+        if let block = displayBlocks.first {
+            return block.kind.displayName
+        }
+
         return sessionType.displayName
     }
 }

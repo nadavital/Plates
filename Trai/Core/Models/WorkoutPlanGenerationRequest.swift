@@ -55,6 +55,103 @@ struct WorkoutPlanGenerationRequest {
         return bounded
     }
 
+    var requestsCardioAsAccessory: Bool {
+        let text = generationContextText
+
+        let accessorySignals = [
+            "cardio finisher",
+            "cardio at the end",
+            "cardio at end",
+            "cardio after",
+            "short finisher",
+            "as a finisher",
+            "after strength",
+            "after lifting",
+            "after one lift",
+            "after a lift",
+            "after my lift",
+            "after my strength",
+            "end of one",
+            "end of a strength",
+            "end of my strength",
+            "finish with cardio",
+            "add some cardio",
+            "some cardio at the end"
+        ]
+
+        let dedicatedSignals = [
+            "cardio leads",
+            "cardio the main",
+            "dedicated cardio",
+            "cardio day",
+            "race",
+            "5k",
+            "10k",
+            "half marathon",
+            "marathon"
+        ]
+
+        return accessorySignals.contains { text.contains($0) } &&
+            !dedicatedSignals.contains { text.contains($0) }
+    }
+
+    var limitsAccessoryCardioToOneSession: Bool {
+        guard requestsCardioAsAccessory else { return false }
+        let text = generationContextText
+        let singlePlacementSignals = [
+            "one strength",
+            "one workout",
+            "one session",
+            "one day",
+            "once",
+            "1x",
+            "only",
+            "just",
+            "legs day",
+            "leg day",
+            "lower day"
+        ]
+        return singlePlacementSignals.contains { text.contains($0) }
+    }
+
+    var generationDirectives: [String] {
+        var directives: [String] = []
+
+        if let availableDays {
+            directives.append("Return exactly \(availableDays) sessions.")
+        }
+
+        if requestsCardioAsAccessory {
+            directives.append("Primary focus is not standalone cardio; cardio should appear only as a supportive finisher/accessory block.")
+            directives.append("Dedicated cardio or HIIT templates are not allowed unless the user explicitly asks for them later.")
+        }
+
+        if limitsAccessoryCardioToOneSession {
+            directives.append("The user limited supportive cardio to one placement. Include exactly one cardio finisher/accessory block in the whole plan, on the requested day when one is named.")
+        }
+
+        if let selectedWorkoutTypes, selectedWorkoutTypes.count > 1 {
+            directives.append("Selected training styles are inputs, not equal session allocations. Use the personalization brief to decide priority and placement.")
+        }
+
+        if let preferredSplit, preferredSplit != .letTraiDecide {
+            directives.append("Use the requested split direction unless it conflicts with a higher-priority personalization answer.")
+        }
+
+        return directives
+    }
+
+    private var generationContextText: String {
+        ([
+            preferences ?? "",
+            injuries ?? "",
+            customWorkoutType ?? "",
+            customCardioType ?? ""
+        ] + (specificGoals ?? []) + (conversationContext ?? []))
+            .joined(separator: " ")
+            .lowercased()
+    }
+
     // MARK: - Workout Type
 
     enum WorkoutType: String, CaseIterable, Identifiable, Codable {

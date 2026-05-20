@@ -34,9 +34,9 @@ struct SmartStarterContext {
     let userName: String
     let todayFoodCount: Int
     let todayCalories: Int
-    let calorieGoal: Int
+    let calorieGoal: Int?
     let todayProtein: Int
-    let proteinGoal: Int
+    let proteinGoal: Int?
     let lastWorkoutDate: Date?
     let hasActiveWorkout: Bool
     let goalType: String
@@ -46,9 +46,9 @@ struct SmartStarterContext {
         userName: String = "",
         todayFoodCount: Int = 0,
         todayCalories: Int = 0,
-        calorieGoal: Int = 2000,
+        calorieGoal: Int? = nil,
         todayProtein: Int = 0,
-        proteinGoal: Int = 150,
+        proteinGoal: Int? = nil,
         lastWorkoutDate: Date? = nil,
         hasActiveWorkout: Bool = false,
         goalType: String = "maintenance"
@@ -71,11 +71,13 @@ struct SmartStarterContext {
     }
 
     var caloriesRemaining: Int {
-        max(0, calorieGoal - todayCalories)
+        guard let calorieGoal else { return 0 }
+        return max(0, calorieGoal - todayCalories)
     }
 
     var proteinRemaining: Int {
-        max(0, proteinGoal - todayProtein)
+        guard let proteinGoal else { return 0 }
+        return max(0, proteinGoal - todayProtein)
     }
 
     var mealPeriod: String {
@@ -161,7 +163,7 @@ struct SmartStarterContext {
             }
         case 17..<21:
             // Evening
-            if goalType == "lose_weight" || goalType == "cut" {
+            if (goalType == "lose_weight" || goalType == "cut"), calorieGoal != nil {
                 greetings = [
                     "\(namePrefix)staying on track! 🎯",
                     "Evening\(firstName.isEmpty ? "" : ", \(firstName)")! How's the cut going?",

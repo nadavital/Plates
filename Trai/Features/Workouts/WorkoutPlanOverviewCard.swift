@@ -78,6 +78,13 @@ struct WorkoutPlanOverviewCard: View {
                 )
             }
 
+            if let intent = plan.planIntent, !intent.summary.isEmpty {
+                Text(intent.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
             // Template chips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -182,6 +189,15 @@ struct TemplateChip: View {
             Text(template.name)
                 .font(.caption)
                 .bold()
+
+            if template.displayBlocks.count > 1 {
+                Text("\(template.displayBlocks.count)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color(.systemBackground).opacity(0.65), in: Capsule())
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

@@ -25,12 +25,8 @@ struct CalorieDetailSheet: View {
         entries.reduce(0) { $0 + $1.calories }
     }
 
-    private var remaining: Int {
-        max(goal - consumed, 0)
-    }
-
-    private var progress: Double {
-        min(Double(consumed) / Double(goal), 1.0)
+    private var calorieState: NutritionDisplayPolicy.CalorieState {
+        NutritionDisplayPolicy.calorieState(consumed: consumed, target: goal)
     }
 
     /// Entries sorted chronologically (most recent first)
@@ -47,7 +43,7 @@ struct CalorieDetailSheet: View {
             ScrollView {
                 VStack(spacing: 24) {
                     // Large progress ring
-                    CalorieRing(consumed: consumed, goal: goal, remaining: remaining)
+                    CalorieRing(state: calorieState)
                         .frame(height: 200)
                         .padding(.top)
 
@@ -56,10 +52,10 @@ struct CalorieDetailSheet: View {
                         StatItem(title: "Consumed", value: "\(consumed)", unit: "kcal", color: .primary)
                         Divider()
                             .frame(height: 40)
-                        StatItem(title: "Remaining", value: "\(remaining)", unit: "kcal", color: .green)
+                        StatItem(title: "Remaining", value: "\(calorieState.remaining)", unit: "kcal", color: .green)
                         Divider()
                             .frame(height: 40)
-                        StatItem(title: "Goal", value: "\(goal)", unit: "kcal", color: .secondary)
+                        StatItem(title: "Goal", value: "\(calorieState.target)", unit: "kcal", color: .secondary)
                     }
                     .traiCard()
 
@@ -118,15 +114,10 @@ struct CalorieDetailSheet: View {
 // MARK: - Calorie Ring
 
 private struct CalorieRing: View {
-    let consumed: Int
-    let goal: Int
-    let remaining: Int
-
-    private var progress: Double {
-        min(Double(consumed) / Double(goal), 1.0)
-    }
+    let state: NutritionDisplayPolicy.CalorieState
 
     private var progressColor: Color {
+        let progress = state.progress
         if progress < 0.8 {
             return .green
         } else if progress < 1.0 {
@@ -142,33 +133,32 @@ private struct CalorieRing: View {
             Circle()
                 .stroke(progressColor.opacity(0.2), lineWidth: 20)
 
-            // Progress ring
             Circle()
-                .trim(from: 0, to: progress)
+                .trim(from: 0, to: state.progress)
                 .stroke(
                     progressColor,
                     style: StrokeStyle(lineWidth: 20, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.spring(duration: 0.8), value: progress)
+                .animation(.spring(duration: 0.8), value: state.progress)
 
             // Center text
             VStack(spacing: 2) {
-                Text("\(consumed)")
+                Text("\(state.consumed)")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
                     .minimumScaleFactor(0.55)
                     .lineLimit(1)
                     .allowsTightening(true)
 
-                Text("of \(goal) kcal")
+                Text("of \(state.target) kcal")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .allowsTightening(true)
 
-                if remaining > 0 {
-                    Text("\(remaining) left")
+                if state.remaining > 0 {
+                    Text("\(state.remaining) left")
                         .font(.caption2)
                         .foregroundStyle(.green)
                         .padding(.top, 2)

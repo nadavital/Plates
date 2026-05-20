@@ -101,13 +101,16 @@ struct WorkoutTemplateCard: View {
                     .lineLimit(2)
             }
 
+            if !template.primaryBlockSummary.isEmpty {
+                Text(template.primaryBlockSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
             // Stats row
             HStack(spacing: 16) {
-                if template.sessionType.prefersStructuredEntries {
-                    Label("\(template.exerciseCount) exercises", systemImage: "dumbbell")
-                } else {
-                    Label("Flexible session", systemImage: "list.bullet.rectangle")
-                }
+                Label(template.displayWorkloadSummary, systemImage: template.exerciseCount > 0 ? "dumbbell" : "list.bullet.rectangle")
                 Label("~\(template.estimatedDurationMinutes) min", systemImage: "clock")
             }
             .font(.caption)

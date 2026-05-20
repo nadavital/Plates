@@ -125,10 +125,10 @@ struct StatsInlineView: View {
     let entry: TraiWidgetEntry
 
     var body: some View {
-        let calPct = Int(entry.data.calorieProgress * 100)
-        let proPct = Int(entry.data.proteinProgress * 100)
+        let calorieText = "\(Int(entry.data.calorieProgress * 100))% cal"
+        let proteinText = "\(Int(entry.data.proteinProgress * 100))% protein"
 
-        Text("\(calPct)% cal | \(proPct)% protein | \(entry.data.readyMuscleCount) ready")
+        Text("\(calorieText) | \(proteinText) | \(entry.data.readyMuscleCount) ready")
     }
 }
 

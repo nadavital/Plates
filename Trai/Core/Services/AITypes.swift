@@ -302,8 +302,8 @@ extension SuggestedFoodComponent {
 /// Context provided to AI for fitness-aware responses
 struct FitnessContext: Sendable {
     let userGoal: String
-    let dailyCalorieGoal: Int
-    let dailyProteinGoal: Int
+    let dailyCalorieGoal: Int?
+    let dailyProteinGoal: Int?
     let todaysCalories: Int
     let todaysProtein: Double
     let recentWorkouts: [String]
@@ -312,8 +312,8 @@ struct FitnessContext: Sendable {
 
     init(
         userGoal: String,
-        dailyCalorieGoal: Int,
-        dailyProteinGoal: Int,
+        dailyCalorieGoal: Int?,
+        dailyProteinGoal: Int?,
         todaysCalories: Int,
         todaysProtein: Double,
         recentWorkouts: [String] = [],
@@ -328,6 +328,18 @@ struct FitnessContext: Sendable {
         self.recentWorkouts = recentWorkouts
         self.currentWeight = currentWeight
         self.targetWeight = targetWeight
+    }
+
+    var calorieTargetPromptLine: String {
+        "- Daily calorie target: \(dailyCalorieGoal ?? 2_000) kcal"
+    }
+
+    var proteinTargetPromptLine: String {
+        "- Daily protein target: \(dailyProteinGoal ?? 150)g"
+    }
+
+    var calorieContextSummary: String {
+        "\(todaysCalories)/\(dailyCalorieGoal ?? 2_000)"
     }
 }
 

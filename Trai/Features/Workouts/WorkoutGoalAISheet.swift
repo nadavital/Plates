@@ -46,7 +46,12 @@ struct WorkoutGoalAISheet: View {
 
     private var plannedSessionSummaries: [String] {
         (workoutPlan?.templates ?? []).prefix(6).map { template in
-            let detail = template.focusAreasDisplay.isEmpty ? template.sessionType.displayName : template.focusAreasDisplay
+            let detail = [
+                template.focusAreasDisplay.isEmpty ? template.sessionType.displayName : template.focusAreasDisplay,
+                template.primaryBlockSummary
+            ]
+            .filter { !$0.isEmpty }
+            .joined(separator: " • ")
             return "\(template.name) (\(template.sessionType.displayName) • \(detail))"
         }
     }
@@ -87,7 +92,6 @@ struct WorkoutGoalAISheet: View {
                         ) {
                             proUpsellCoordinator?.present(source: .workoutPlan)
                         }
-                        .traiCard(cornerRadius: 16)
                     } else if isGenerating {
                         generatingCard
                             .traiCard(cornerRadius: 16)
@@ -384,6 +388,14 @@ private struct WorkoutGoalSuggestionCard: View {
 
                 if let targetLine {
                     Label(targetLine, systemImage: "target")
+                        .font(.traiLabel(12))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let criteria = suggestion.successCriteria?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !criteria.isEmpty,
+                   criteria != targetLine {
+                    Label(criteria, systemImage: "checklist.checked")
                         .font(.traiLabel(12))
                         .foregroundStyle(.secondary)
                 }

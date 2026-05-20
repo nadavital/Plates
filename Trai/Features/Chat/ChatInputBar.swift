@@ -248,6 +248,7 @@ struct SimpleChatInputBar: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1...6)
                     .focused(isFocused)
+                    .accessibilityIdentifier("simpleChatInputTextField")
 
                 dictationButton
 
@@ -287,6 +288,10 @@ struct SimpleChatInputBar: View {
             .animation(.snappy(duration: 0.18), value: inputCornerRadius)
             .padding(.horizontal)
             .padding(.vertical, 8)
+            .contentShape(.rect)
+            .onTapGesture {
+                isFocused.wrappedValue = true
+            }
         }
         .onDisappear {
             dictation.stop()

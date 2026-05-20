@@ -40,35 +40,26 @@ struct PlanReviewStepView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView {
-                VStack(spacing: 24) {
-                    if isLoading {
-                        loadingSection
-                    } else if let error {
-                        errorSection(error)
-                    } else if let plan {
-                        successHeader
-                            .offset(y: headerVisible ? 0 : -20)
-                            .opacity(headerVisible ? 1 : 0)
+        ScrollView {
+            VStack(spacing: 18) {
+                if isLoading {
+                    loadingSection
+                } else if let error {
+                    errorSection(error)
+                } else if let plan {
+                    successHeader
+                        .offset(y: headerVisible ? 0 : -20)
+                        .opacity(headerVisible ? 1 : 0)
 
-                        planContent(plan)
-                            .padding(.bottom, 160)
-                    } else {
-                        // Fallback: plan is nil but not loading - show error with retry
-                        errorSection("Something went wrong generating your plan. Please try again.")
-                    }
+                    planContent(plan)
+                        .padding(.bottom, 140)
+                } else {
+                    errorSection("Something went wrong generating your plan. Please try again.")
                 }
-                .padding(.horizontal, 20)
             }
-            .scrollIndicators(.hidden)
-
-            if plan != nil && planRequest != nil && !isLoading {
-                floatingAskButton
-                    .offset(y: headerVisible ? 0 : 50)
-                    .opacity(headerVisible ? 1 : 0)
-            }
+            .padding(.horizontal, 20)
         }
+        .scrollIndicators(.hidden)
         .overlay {
             if showConfetti {
                 ConfettiView()
@@ -164,18 +155,18 @@ struct PlanReviewStepView: View {
     // MARK: - Loading Section
 
     private var loadingSection: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 22) {
             Spacer(minLength: 50)
 
-            TraiLensView(size: 72, state: .thinking, palette: .energy)
+            TraiLensView(size: 70, state: .answering, palette: .energy)
 
             VStack(spacing: 10) {
                 Text((monetizationService?.canAccessAIFeatures ?? true) ? "Building Your Plan" : "Setting Up Your Plan")
                     .font(.traiBold(26))
 
                 Text((monetizationService?.canAccessAIFeatures ?? true)
-                     ? "Trai is reviewing your answers and building a personalized nutrition strategy."
-                     : "Trai is turning your answers into a personalized nutrition starting point.")
+                     ? "Trai is turning your answers into daily targets."
+                     : "Trai is preparing a standard nutrition starting point.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -239,34 +230,22 @@ struct PlanReviewStepView: View {
     // MARK: - Success Header
 
     private var successHeader: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.green.opacity(0.2), Color.clear],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 60
-                        )
-                    )
-                    .frame(width: 100, height: 100)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.green)
-            }
+        VStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.green)
 
             VStack(spacing: 8) {
-                Text("Your Plan is Ready!")
+                Text("Your Plan is Ready")
                     .font(.traiBold(26))
 
-                Text("Review your personalized targets below")
+                Text("Start logging. Trai will learn from what you do next.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
-        .padding(.top, 20)
+        .padding(.top, 14)
     }
 
     // MARK: - Floating Ask Button
@@ -302,7 +281,7 @@ struct PlanReviewStepView: View {
     // MARK: - Plan Content
 
     private func planContent(_ plan: NutritionPlan) -> some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 14) {
             DailyTargetsCard(
                 adjustedCalories: $adjustedCalories,
                 adjustedProtein: $adjustedProtein,
@@ -312,35 +291,28 @@ struct PlanReviewStepView: View {
             .offset(y: card1Visible ? 0 : 30)
             .opacity(card1Visible ? 1 : 0)
 
-            RationaleCard(rationale: plan.rationale)
-                .offset(y: card2Visible ? 0 : 30)
-                .opacity(card2Visible ? 1 : 0)
-
-            if let insights = plan.progressInsights {
-                ProgressInsightsCard(
-                    insights: insights,
-                    goal: planRequest?.goal
-                )
-                    .offset(y: card3Visible ? 0 : 30)
-                    .opacity(card3Visible ? 1 : 0)
-            }
-
-            MacroVisualizationCard(split: plan.macroSplit)
+            planReadyNudge(plan)
                 .offset(y: card4Visible ? 0 : 30)
                 .opacity(card4Visible ? 1 : 0)
-
-            if !plan.nutritionGuidelines.isEmpty {
-                GuidelinesCard(guidelines: plan.nutritionGuidelines)
-                    .offset(y: card5Visible ? 0 : 30)
-                    .opacity(card5Visible ? 1 : 0)
-            }
-
-            if let warnings = plan.warnings, !warnings.isEmpty {
-                WarningsCard(warnings: warnings)
-                    .offset(y: card5Visible ? 0 : 30)
-                    .opacity(card5Visible ? 1 : 0)
-            }
         }
+    }
+
+    private func planReadyNudge(_ plan: NutritionPlan) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.headline)
+                .foregroundStyle(.accent)
+                .frame(width: 36, height: 36)
+                .background(Color.accentColor.opacity(0.12), in: Circle())
+
+            Text(plan.progressInsights?.shortTermMilestone ?? "Your first goal is simple: log your next meal and let Trai calibrate from there.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 

@@ -226,9 +226,7 @@ final class LiveWorkoutViewModel {
     }
 
     var isWorkoutComplete: Bool {
-        !entries.isEmpty && entries.allSatisfy { entry in
-            entry.sets.allSatisfy(\.completed)
-        }
+        !entries.isEmpty && entries.allSatisfy(isEntryComplete)
     }
 
     var volumePRMode: UserProfile.VolumePRMode {
@@ -1664,23 +1662,28 @@ final class LiveWorkoutViewModel {
         set.reps > 0
     }
 
-    private func isEntryStartedForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
-        if entry.isCardio {
-            return entry.completedAt != nil
-                || (entry.durationSeconds ?? 0) > 0
-                || (entry.distanceMeters ?? 0) > 0
-        }
-        return entry.sets.contains { hasLoggedSetData($0) }
-    }
-
-    private func isEntryCompleteForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
-        if entry.isCardio {
+    private func isEntryComplete(_ entry: LiveWorkoutEntry) -> Bool {
+        if entry.isCardio || entry.isGeneralActivity {
             return entry.completedAt != nil
         }
 
         let workingSets = entry.sets.filter { !$0.isWarmup }
         guard !workingSets.isEmpty else { return false }
-        return workingSets.allSatisfy { hasLoggedSetData($0) }
+        return workingSets.allSatisfy(\.completed)
+    }
+
+    private func isEntryStartedForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
+        if entry.isCardio || entry.isGeneralActivity {
+            return entry.completedAt != nil
+                || (entry.durationSeconds ?? 0) > 0
+                || (entry.distanceMeters ?? 0) > 0
+                || !entry.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return entry.sets.contains { hasLoggedSetData($0) }
+    }
+
+    private func isEntryCompleteForLiveActivity(_ entry: LiveWorkoutEntry) -> Bool {
+        isEntryComplete(entry)
     }
 
     private func liveActivityCurrentEntry() -> LiveWorkoutEntry? {

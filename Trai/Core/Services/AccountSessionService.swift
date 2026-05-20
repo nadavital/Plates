@@ -311,6 +311,15 @@ final class AccountSessionService {
         clearPendingAppleNonce()
         persist()
     }
+
+    func setDebugAuthenticatedBootstrap(_ bootstrap: BackendBootstrapResponse) {
+        invalidatePendingSessionOperations()
+        applyAuthenticatedBootstrap(bootstrap)
+        authState = .authenticated
+        lastErrorMessage = nil
+        clearPendingAppleNonce()
+        persist()
+    }
     #endif
 
     func signOut() {

@@ -9,307 +9,237 @@ struct ActivityLevelStepView: View {
     @Binding var activityLevel: UserProfile.ActivityLevel?
     @Binding var activityNotes: String
 
+    private var choices: [ActivityLevelChoice] {
+        ActivityLevelChoice.all
+    }
+
     @State private var headerVisible = false
-    @State private var cardsVisible: [Bool] = Array(repeating: false, count: 5)
-    @State private var notesVisible = false
-    @State private var iconBounce = false
-    @FocusState private var isNotesFocused: Bool
+    @State private var activityVisible = false
+    @State private var selectedChoiceID: String?
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 24) {
-                    headerSection
-                        .padding(.top, 16)
+        ScrollView {
+            VStack(spacing: 18) {
+                headerSection
+                    .padding(.top, 12)
 
-                    activitySelector
+                activitySelector
+                    .offset(y: activityVisible ? 0 : 24)
+                    .opacity(activityVisible ? 1 : 0)
 
-                    notesSection
-                        .id("notesSection")
-                        .offset(y: notesVisible ? 0 : 30)
-                        .opacity(notesVisible ? 1 : 0)
-                        .padding(.bottom, 140) // Space for floating button
-                }
-                .padding(.horizontal, 20)
-            }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
-            .onChange(of: isNotesFocused, initial: false) { _, focused in
-                if focused {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        proxy.scrollTo("notesSection", anchor: .center)
-                    }
+                if activityLevel != nil {
+                    selectedActivityResponse
+                        .opacity(activityVisible ? 1 : 0)
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 140)
         }
+        .scrollIndicators(.hidden)
         .onAppear {
             startEntranceAnimations()
         }
     }
 
     private func startEntranceAnimations() {
-        // Header
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
             headerVisible = true
         }
-
-        // Icon bounce
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.5).delay(0.3)) {
-            iconBounce = true
-        }
-
-        // Staggered activity cards
-        for index in 0..<5 {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.15 + Double(index) * 0.08)) {
-                cardsVisible[index] = true
-            }
-        }
-
-        // Notes section
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.6)) {
-            notesVisible = true
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.15)) {
+            activityVisible = true
         }
     }
 
-    // MARK: - Header
-
     private var headerSection: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                // Animated rings
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 2)
-                    .frame(width: 95, height: 95)
-                    .scaleEffect(headerVisible ? 1 : 0.5)
-
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.accentColor.opacity(0.16), TraiColors.coral.opacity(0.12)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-
-                Image(systemName: "figure.run")
-                    .font(.system(size: 36))
-                    .foregroundStyle(.accent)
-                    .symbolRenderingMode(.hierarchical)
-                    .offset(x: iconBounce ? 2 : 0)
-            }
-            .scaleEffect(headerVisible ? 1 : 0.8)
-
-            Text("Activity Level")
-                .font(.traiBold(28))
-
-            Text("How active are you in a typical week?")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
+        OnboardingTraiHeader(
+            title: "Choose your activity level.",
+            lensSize: 52
+        )
         .opacity(headerVisible ? 1 : 0)
         .offset(y: headerVisible ? 0 : -20)
     }
 
-    // MARK: - Activity Selector
-
     private var activitySelector: some View {
-        VStack(spacing: 12) {
-            ForEach(Array(UserProfile.ActivityLevel.allCases.enumerated()), id: \.element.id) { index, level in
+        GlassEffectContainer(spacing: 12) {
+            activityGrid
+        }
+    }
+
+    private var activityGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
                 ActivityLevelRow(
-                    level: level,
-                    isSelected: activityLevel == level,
+                    choice: choice,
+                    isSelected: isSelected(choice),
                     index: index
                 ) {
                     HapticManager.cardSelected()
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                        activityLevel = level
+                        selectedChoiceID = choice.id
+                        activityLevel = choice.level
                     }
                 }
-                .offset(y: cardsVisible.indices.contains(index) && cardsVisible[index] ? 0 : 30)
-                .opacity(cardsVisible.indices.contains(index) && cardsVisible[index] ? 1 : 0)
             }
         }
     }
 
-    // MARK: - Notes Section
+    private var selectedActivityResponse: some View {
+        HStack(alignment: .top) {
+            Text(selectedActivityChoice.map(responseText) ?? activityLevel.map(responseText) ?? "")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-    private var notesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Label("Tell us more", systemImage: "text.bubble.fill")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.tint)
-
-                    Spacer()
-
-                    Text("optional")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(.tertiarySystemBackground))
-                        .clipShape(.capsule)
-                }
-
-                Text("Help Trai understand your routine better")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            TextEditor(text: $activityNotes)
-                .font(.body)
-                .frame(minHeight: 85)
-                .padding(12)
-                .scrollContentBackground(.hidden)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(.rect(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(
-                            isNotesFocused ? Color.accentColor : Color.clear,
-                            lineWidth: 2
-                        )
-                )
-                .focused($isNotesFocused)
-                .onChange(of: isNotesFocused, initial: false) { _, focused in
-                    if focused {
-                        HapticManager.lightTap()
-                    }
-                }
-                .overlay(alignment: .topLeading) {
-                    if activityNotes.isEmpty && !isNotesFocused {
-                        Text("e.g., I lift weights 4x/week and play soccer on weekends...")
-                            .font(.body)
-                            .foregroundStyle(.tertiary)
-                            .padding(16)
-                            .allowsHitTesting(false)
-                    }
-                }
+            Spacer(minLength: 0)
         }
-        .traiCard(cornerRadius: 18)
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(
-                    isNotesFocused ? Color.accentColor.opacity(0.3) : Color.clear,
-                    lineWidth: 1.5
-                )
-        )
-        .shadow(
-            color: isNotesFocused ? Color.accentColor.opacity(0.1) : Color.clear,
-            radius: 12,
-            y: 4
-        )
-        .animation(.spring(response: 0.3), value: isNotesFocused)
+        .onboardingTraiResponseCard()
+        .animation(.smooth(duration: 0.3), value: activityLevel)
     }
+
+    private var selectedActivityChoice: ActivityLevelChoice? {
+        guard let selectedChoiceID else { return nil }
+        return choices.first { $0.id == selectedChoiceID }
+    }
+
+    private func isSelected(_ choice: ActivityLevelChoice) -> Bool {
+        if let selectedChoiceID {
+            return selectedChoiceID == choice.id
+        }
+        return choice.id == choice.level.id && activityLevel == choice.level
+    }
+
+    private func responseText(for choice: ActivityLevelChoice) -> String {
+        if choice.isUnsure {
+            return "No problem. I’ll start with a moderate estimate and adjust as you log."
+        }
+        return responseText(for: choice.level)
+    }
+
+    private func responseText(for level: UserProfile.ActivityLevel) -> String {
+        switch level {
+        case .sedentary:
+            return "I’ll start with lower activity assumptions and adjust as you log movement."
+        case .light:
+            return "I’ll account for light weekly movement without overestimating burn."
+        case .moderate:
+            return "I’ll build around regular movement and a balanced daily calorie target."
+        case .active:
+            return "I’ll give you more fuel for frequent training and recovery."
+        case .veryActive:
+            return "I’ll assume high output and keep targets high enough to support it."
+        }
+    }
+
 }
 
-// MARK: - Activity Level Row
+struct ActivityLevelChoice: Identifiable {
+    let id: String
+    let title: String
+    let hint: String
+    let iconName: String
+    let level: UserProfile.ActivityLevel
+    let color: Color
+    var isUnsure = false
+
+    static let all: [ActivityLevelChoice] = [
+        ActivityLevelChoice(
+            id: UserProfile.ActivityLevel.sedentary.id,
+            title: UserProfile.ActivityLevel.sedentary.displayName,
+            hint: "little exercise",
+            iconName: "figure.seated.seatbelt",
+            level: .sedentary,
+            color: Color(.systemGray3)
+        ),
+        ActivityLevelChoice(
+            id: UserProfile.ActivityLevel.light.id,
+            title: UserProfile.ActivityLevel.light.displayName,
+            hint: "1-3 days/week",
+            iconName: "figure.walk",
+            level: .light,
+            color: TraiColors.coral
+        ),
+        ActivityLevelChoice(
+            id: UserProfile.ActivityLevel.moderate.id,
+            title: UserProfile.ActivityLevel.moderate.displayName,
+            hint: "3-5 days/week",
+            iconName: "figure.run",
+            level: .moderate,
+            color: .accentColor
+        ),
+        ActivityLevelChoice(
+            id: UserProfile.ActivityLevel.active.id,
+            title: UserProfile.ActivityLevel.active.displayName,
+            hint: "most days",
+            iconName: "figure.highintensity.intervaltraining",
+            level: .active,
+            color: TraiColors.flame
+        ),
+        ActivityLevelChoice(
+            id: UserProfile.ActivityLevel.veryActive.id,
+            title: UserProfile.ActivityLevel.veryActive.displayName,
+            hint: "athlete or physical job",
+            iconName: "figure.strengthtraining.traditional",
+            level: .veryActive,
+            color: TraiColors.blaze
+        ),
+        ActivityLevelChoice(
+            id: "not_sure",
+            title: "Not sure",
+            hint: "start balanced",
+            iconName: "questionmark",
+            level: .moderate,
+            color: TraiColors.brandAccent,
+            isUnsure: true
+        )
+    ]
+}
 
 struct ActivityLevelRow: View {
-    let level: UserProfile.ActivityLevel
+    let choice: ActivityLevelChoice
     let isSelected: Bool
     let index: Int
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                // Activity indicator bar
-                activityIndicator
-
-                // Icon
+            VStack(spacing: 8) {
                 Circle()
-                    .fill(
-                        isSelected
-                            ? colorForLevel
-                            : Color(.tertiarySystemBackground)
-                    )
-                    .frame(width: 44, height: 44)
+                    .fill(choice.color.opacity(isSelected ? 0.95 : 0.78))
+                    .frame(width: 46, height: 46)
                     .overlay {
-                        Image(systemName: iconForLevel)
+                        Image(systemName: choice.iconName)
                             .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(isSelected ? .white : .secondary)
+                            .foregroundStyle(.white)
                     }
 
-                // Labels
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(level.displayName)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                VStack(spacing: 3) {
+                    Text(choice.title)
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
-
-                    Text(level.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                         .lineLimit(2)
-                }
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Spacer()
-
-                // Checkmark
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.accent)
+                    Text(choice.hint)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(
-                        isSelected ? colorForLevel.opacity(0.5) : Color.clear,
-                        lineWidth: 2
-                    )
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 12)
+            .onboardingTintedGlass(
+                tint: choice.color,
+                isSelected: isSelected,
+                cornerRadius: 16,
+                isInteractive: true
             )
         }
         .buttonStyle(.plain)
         .animation(.easeInOut(duration: 0.2), value: isSelected)
-    }
-
-    private var activityIndicator: some View {
-        VStack(spacing: 3) {
-            ForEach(0..<5) { barIndex in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(
-                        barIndex <= index
-                            ? colorForLevel
-                            : Color(.tertiarySystemBackground)
-                    )
-                    .frame(width: 5, height: 7)
-                    .opacity(barIndex <= index ? 1 : 0.5)
-            }
-        }
-        .rotationEffect(.degrees(180))
-        .animation(.spring(response: 0.3).delay(Double(index) * 0.05), value: isSelected)
-    }
-
-    private var iconForLevel: String {
-        switch level {
-        case .sedentary: "figure.seated.seatbelt"
-        case .light: "figure.walk"
-        case .moderate: "figure.run"
-        case .active: "figure.highintensity.intervaltraining"
-        case .veryActive: "figure.strengthtraining.traditional"
-        }
-    }
-
-    private var colorForLevel: Color {
-        switch level {
-        case .sedentary: Color(.systemGray3)
-        case .light: TraiColors.coral
-        case .moderate: .accentColor
-        case .active: TraiColors.flame
-        case .veryActive: TraiColors.blaze
-        }
     }
 }
 

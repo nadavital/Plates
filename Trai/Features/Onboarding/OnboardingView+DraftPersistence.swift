@@ -117,10 +117,22 @@ extension OnboardingView {
         if let generatedPlan, adjustedCalories.isEmpty {
             populateAdjustedValues(from: generatedPlan)
         }
-        if generatedPlan == nil && draft.currentStep >= 8 {
-            currentStep = 7
+        if generatedPlan == nil && draft.currentStep >= totalSteps {
+            currentStep = max(totalSteps - 2, 0)
         } else {
             currentStep = min(draft.currentStep, totalSteps - 1)
+        }
+
+        recoverPlanReviewIfNeededAfterDraftRestore()
+    }
+
+    private func recoverPlanReviewIfNeededAfterDraftRestore() {
+        guard currentStepID == .nutritionPlan, generatedPlan == nil else { return }
+
+        if buildPlanRequest() != nil {
+            generatePlan()
+        } else {
+            currentStep = onboardingSteps.firstIndex(of: .activity) ?? max(totalSteps - 2, 0)
         }
     }
 

@@ -42,7 +42,7 @@ struct WorkoutTemplateService {
     /// Create a startable workout from a plan template (without pre-filled entries).
     func createStartWorkout(from template: WorkoutPlan.WorkoutTemplate) -> LiveWorkout {
         let muscleGroups = template.sessionType.supportsMuscleTargets
-            ? LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+            ? LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
             : []
         return LiveWorkout(
             name: template.name,
@@ -62,7 +62,11 @@ struct WorkoutTemplateService {
         if let profile = try? modelContext.fetch(profileDescriptor).first,
            let plan = profile.workoutPlan,
            let template = plan.templates.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
-            return createStartWorkout(from: template)
+            return createWorkoutFromTemplate(
+                template,
+                progressionStrategy: plan.progressionStrategy,
+                modelContext: modelContext
+            )
         }
 
         // Preserve prior fallback behavior for unmatched names.
@@ -89,7 +93,7 @@ struct WorkoutTemplateService {
         progressionStrategy: WorkoutPlan.ProgressionStrategy,
         modelContext: ModelContext
     ) -> LiveWorkout {
-        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+        let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
 
         let workout = LiveWorkout(
             name: template.name,
@@ -98,44 +102,69 @@ struct WorkoutTemplateService {
             focusAreas: template.focusAreas
         )
 
-        guard template.sessionType.prefersStructuredEntries else {
-            return workout
-        }
-
-        // Create entries from exercise templates
         var entries: [LiveWorkoutEntry] = []
+        var nextOrderIndex = 0
+        let displayBlocks = template.displayBlocks
+        let hasBlockLevelExercises = displayBlocks.contains { !$0.exercises.isEmpty }
+        var usedTopLevelExerciseFallback = false
 
-        for exerciseTemplate in template.exercises.sorted(by: { $0.order < $1.order }) {
-            let entry = LiveWorkoutEntry(
-                exerciseName: exerciseTemplate.exerciseName,
-                orderIndex: exerciseTemplate.order
-            )
-
-            // Get last performance for this exercise
-            let lastPerformance = getLastPerformance(
-                exerciseName: exerciseTemplate.exerciseName,
-                modelContext: modelContext
-            )
-
-            // Calculate suggested weight with progression
-            let (weightKg, reps) = calculateSuggestedWeightAndReps(
-                lastPerformance: lastPerformance,
-                template: exerciseTemplate,
-                strategy: progressionStrategy
-            )
-            let cleanWeight = WeightUtility.cleanWeightFromKg(weightKg)
-
-            // Add sets based on template
-            for _ in 0..<exerciseTemplate.defaultSets {
-                entry.addSet(LiveWorkoutEntry.SetData(
-                    reps: reps,
-                    weight: cleanWeight,
-                    completed: false,
-                    isWarmup: false
-                ))
+        for block in displayBlocks {
+            var blockExercises = block.exercises
+            if blockExercises.isEmpty,
+               block.kind == .strength,
+               !hasBlockLevelExercises,
+               !usedTopLevelExerciseFallback {
+                blockExercises = template.structuredExercises
+                usedTopLevelExerciseFallback = !blockExercises.isEmpty
             }
 
-            entries.append(entry)
+            if !blockExercises.isEmpty {
+                for exerciseTemplate in blockExercises.sorted(by: { $0.order < $1.order }) {
+                    let entry = LiveWorkoutEntry(
+                        exerciseName: exerciseTemplate.exerciseName,
+                        orderIndex: nextOrderIndex
+                    )
+
+                    let lastPerformance = getLastPerformance(
+                        exerciseName: exerciseTemplate.exerciseName,
+                        modelContext: modelContext
+                    )
+
+                    let (weightKg, reps) = calculateSuggestedWeightAndReps(
+                        lastPerformance: lastPerformance,
+                        template: exerciseTemplate,
+                        strategy: progressionStrategy
+                    )
+                    let cleanWeight = WeightUtility.cleanWeightFromKg(weightKg)
+
+                    for _ in 0..<exerciseTemplate.defaultSets {
+                        entry.addSet(LiveWorkoutEntry.SetData(
+                            reps: reps,
+                            weight: cleanWeight,
+                            completed: false,
+                            isWarmup: false
+                        ))
+                    }
+
+                    entries.append(entry)
+                    nextOrderIndex += 1
+                }
+            } else if block.shouldCreateLiveWorkoutEntry {
+                let entry = LiveWorkoutEntry(
+                    exerciseName: block.title.isEmpty ? block.kind.displayName : block.title,
+                    orderIndex: nextOrderIndex,
+                    exerciseType: block.liveWorkoutExerciseType
+                )
+                if let durationMinutes = block.durationMinutes, durationMinutes > 0 {
+                    entry.durationSeconds = durationMinutes * 60
+                }
+                entry.notes = [block.detail, block.intensity, block.target, block.notes]
+                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " • ")
+                entries.append(entry)
+                nextOrderIndex += 1
+            }
         }
 
         workout.entries = entries
@@ -398,5 +427,27 @@ struct WorkoutTemplateService {
             return "\(repPattern.count)x\(reps)"
         }
         return repPattern.map(String.init).joined(separator: ",")
+    }
+}
+
+private extension WorkoutPlan.TrainingBlock {
+    var shouldCreateLiveWorkoutEntry: Bool {
+        switch kind {
+        case .warmup, .cardio, .cardioFinisher, .conditioning, .skill, .mobility, .recovery, .sportPractice, .cooldown, .custom:
+            return true
+        case .strength:
+            return false
+        }
+    }
+
+    var liveWorkoutExerciseType: String {
+        switch kind {
+        case .cardio, .cardioFinisher, .conditioning:
+            return "cardio"
+        case .mobility, .recovery, .cooldown, .warmup:
+            return "flexibility"
+        case .skill, .sportPractice, .custom, .strength:
+            return "activity"
+        }
     }
 }

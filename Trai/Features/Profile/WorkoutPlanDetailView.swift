@@ -79,6 +79,10 @@ struct WorkoutPlanDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+
+            if let intent = plan.planIntent {
+                intentChips(intent)
+            }
         }
         .padding()
         .background(Color(.secondarySystemBackground))
@@ -123,14 +127,29 @@ struct WorkoutPlanDetailView: View {
 
                 HStack(spacing: 12) {
                     Label("\(template.estimatedDurationMinutes) min", systemImage: "clock")
-                    if template.sessionType.prefersStructuredEntries {
-                        Label("\(template.exerciseCount) exercises", systemImage: "dumbbell")
-                    } else {
-                        Label("Flexible session", systemImage: "list.bullet.rectangle")
-                    }
+                    Label(template.displayWorkloadSummary, systemImage: template.exerciseCount > 0 ? "dumbbell" : "list.bullet.rectangle")
                 }
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+
+                if !template.displayBlocks.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(template.displayBlocks.prefix(4)) { block in
+                            HStack(spacing: 6) {
+                                Image(systemName: block.kind.iconName)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(template.displayAccentColor)
+                                    .frame(width: 14)
+
+                                Text(block.shortSummary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
 
             Spacer()
@@ -144,7 +163,46 @@ struct WorkoutPlanDetailView: View {
 
     @ViewBuilder
     private var progressionCard: some View {
-        if hasStructuredStrengthSessions {
+        if let modalityProgression = plan.modalityProgression {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.subheadline)
+                        .foregroundStyle(.green)
+
+                    Text("Progression")
+                        .font(.subheadline.weight(.semibold))
+
+                    Spacer()
+
+                    Text(modalityProgression.focus.displayName)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(modalityProgression.weeklyProgression)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !modalityProgression.targets.isEmpty {
+                    FlowLayout(spacing: 6) {
+                        ForEach(modalityProgression.targets.prefix(3)) { target in
+                            Text(target.label)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(Color(.tertiarySystemFill), in: Capsule())
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(Color(.tertiarySystemBackground))
+            .clipShape(.rect(cornerRadius: 12))
+        } else if hasStructuredStrengthSessions {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
@@ -185,6 +243,30 @@ struct WorkoutPlanDetailView: View {
         guard flexibleSessionCount > 0 else { return base }
         let suffix = flexibleSessionCount == 1 ? "1 flexible session" : "\(flexibleSessionCount) flexible sessions"
         return "\(base) • \(suffix)"
+    }
+
+    private func intentChips(_ intent: WorkoutPlan.PlanIntent) -> some View {
+        FlowLayout(spacing: 6) {
+            if !intent.primaryFocus.isEmpty {
+                intentChip(intent.primaryFocus, icon: "scope")
+            }
+            if !intent.sessionAllocation.isEmpty {
+                intentChip(intent.sessionAllocation, icon: "calendar")
+            }
+            ForEach(intent.honoredInputs.prefix(3), id: \.self) { input in
+                intentChip(input, icon: "checkmark")
+            }
+        }
+    }
+
+    private func intentChip(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color(.tertiarySystemFill), in: Capsule())
     }
 
     // MARK: - Guidelines Card

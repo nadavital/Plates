@@ -32,6 +32,8 @@ extension ChatView {
         lastActivityTimestamp = Date().timeIntervalSince1970
         isTemporarySession = false
         temporaryMessages = []
+        focusedFoodEntryContext = nil
+        isPreparingFirstMessageTransition = false
         rebuildSessionMessages(preferLiveQueryData: true)
         if !silent {
             HapticManager.lightTap()
@@ -129,15 +131,33 @@ extension ChatView {
 
     func sendMessage(_ text: String) {
         let hasText = !text.trimmingCharacters(in: .whitespaces).isEmpty
-        let hasImage = selectedImage != nil
+        let capturedImage = selectedImage
+        let hasImage = capturedImage != nil
 
         guard hasText || hasImage else { return }
 
+        selectedImage = nil
+        selectedPhotoItem = nil
+
+        if currentSessionMessages.isEmpty && !isPreparingFirstMessageTransition {
+            isPreparingFirstMessageTransition = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(170))
+                sendMessageAfterFirstFrameTransition(text, capturedImage: capturedImage)
+                isPreparingFirstMessageTransition = false
+            }
+            return
+        }
+
+        sendMessageAfterFirstFrameTransition(text, capturedImage: capturedImage)
+    }
+
+    private func sendMessageAfterFirstFrameTransition(_ text: String, capturedImage: UIImage?) {
         updateLastActivity()
         retirePendingPlanSuggestionsInCurrentSession()
 
         let previousMessages = Array(currentSessionMessages.suffix(10))
-        let imageData = selectedImage?.jpegData(compressionQuality: 0.8)
+        let imageData = capturedImage?.jpegData(compressionQuality: 0.8)
 
         let userMessage = ChatMessage(
             content: text,
@@ -148,20 +168,18 @@ extension ChatView {
 
         let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
         let baseContext = buildFitnessContext()
-        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
+        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.calorieContextSummary)"
 
-        if isTemporarySession {
-            temporaryMessages.append(userMessage)
-            temporaryMessages.append(aiMessage)
-        } else {
-            modelContext.insert(userMessage)
-            modelContext.insert(aiMessage)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            if isTemporarySession {
+                temporaryMessages.append(userMessage)
+                temporaryMessages.append(aiMessage)
+            } else {
+                modelContext.insert(userMessage)
+                modelContext.insert(aiMessage)
+            }
+            rebuildSessionMessages(preferLiveQueryData: true)
         }
-        rebuildSessionMessages(preferLiveQueryData: true)
-
-        let capturedImage = selectedImage
-        selectedImage = nil
-        selectedPhotoItem = nil
 
         currentMessageTask = Task {
             await performSendMessage(
@@ -188,7 +206,7 @@ extension ChatView {
         let previousMessages = Array(currentSessionMessages.suffix(10))
         let aiMessage = ChatMessage(content: "", isFromUser: false, sessionId: currentSessionId)
         let baseContext = buildFitnessContext()
-        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.todaysCalories)/\(baseContext.dailyCalorieGoal)"
+        aiMessage.contextSummary = "Goal: \(baseContext.userGoal), Calories: \(baseContext.calorieContextSummary)"
         if markNutritionPlanReviewedIfNoUpdate {
             nutritionPlanReviewMessageIds.insert(aiMessage.id)
         }
@@ -241,6 +259,7 @@ extension ChatView {
             let relevantMemories = activeMemories.filterForRelevance(message: text, maxCount: 10)
             let memoriesContext = relevantMemories.formatForPrompt()
             let coachContext = buildCompactCoachContext(now: Date())
+            let hasWorkoutForTargets = hasWorkoutLoggedToday(now: Date()) || workoutContext != nil
 
             // Fetch activity data from HealthKit
             let activityData = await fetchActivityData()
@@ -257,7 +276,9 @@ extension ChatView {
                 pendingWorkoutPlanSuggestion: pendingWorkoutPlanSuggestion?.suggestion,
                 isIncognitoMode: isTemporarySession,
                 activeWorkout: workoutContext,
-                activityData: activityData
+                activityData: activityData,
+                hasWorkoutToday: hasWorkoutForTargets,
+                focusedFoodEntry: focusedFoodEntryContext
             )
 
             let result = try await aiService.chatWithFunctions(
@@ -389,11 +410,12 @@ extension ChatView {
         let totalCalories = todaysFoodEntries.reduce(0) { $0 + $1.calories }
         let totalProtein = todaysFoodEntries.reduce(0.0) { $0 + $1.proteinGrams }
         let recentWorkoutNames = Array(recentWorkouts.prefix(5).map { $0.displayName })
+        let hasWorkoutForTargets = hasWorkoutLoggedToday(now: Date()) || workoutContext != nil
 
         return FitnessContext(
             userGoal: profile?.goal.displayName ?? "Maintenance",
-            dailyCalorieGoal: profile?.dailyCalorieGoal ?? 2000,
-            dailyProteinGoal: profile?.dailyProteinGoal ?? 150,
+            dailyCalorieGoal: profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutForTargets),
+            dailyProteinGoal: profile?.dailyProteinGoal,
             todaysCalories: totalCalories,
             todaysProtein: totalProtein,
             recentWorkouts: recentWorkoutNames,
@@ -448,9 +470,7 @@ extension ChatView {
         let hasWorkoutToday = hasWorkoutLoggedToday(now: now)
         let hasActiveWorkout = workoutContext != nil || liveWorkouts.contains(where: { $0.completedAt == nil })
 
-        let calorieGoal = profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday || hasActiveWorkout)
-            ?? profile?.dailyCalorieGoal
-            ?? 2000
+        let calorieGoal = profile?.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday || hasActiveWorkout) ?? 2_000
         let proteinGoal = profile?.dailyProteinGoal ?? 150
         let readyMuscleCount = recoveryService
             .getRecoveryStatus(modelContext: modelContext)
@@ -545,20 +565,12 @@ extension ChatView {
     }
 
     private func hasWorkoutLoggedToday(now: Date) -> Bool {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: now)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            return false
-        }
-
-        let hasLoggedSession = recentWorkouts.contains { workout in
-            workout.loggedAt >= startOfDay && workout.loggedAt < endOfDay
-        }
-        let hasLiveWorkout = liveWorkouts.contains { workout in
-            workout.startedAt >= startOfDay && workout.startedAt < endOfDay
-        }
-
-        return hasLoggedSession || hasLiveWorkout
+        let interval = WorkoutDayTargetContext.dayInterval(containing: now)
+        return WorkoutDayTargetContext.hasWorkout(
+            in: interval,
+            workoutSessions: recentWorkouts,
+            liveWorkouts: liveWorkouts
+        )
     }
 
     private func fetchActivityData() async -> AIService.ActivityData {
@@ -639,10 +651,13 @@ extension ChatView {
         activeWorkoutGoals
             .prefix(6)
             .map { goal in
+                let trackingSummary = goal.trackingSummary
+                let supportingSummary = goal.supportingSummary
                 let parts = [
                     goal.trimmedTitle,
                     goal.scopeSummary,
-                    goal.trackingSummary,
+                    trackingSummary,
+                    supportingSummary == trackingSummary ? nil : supportingSummary,
                     goal.horizonSummary
                 ].compactMap { $0 }
                 return "• " + parts.joined(separator: " • ")

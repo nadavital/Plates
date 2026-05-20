@@ -9,6 +9,10 @@ import Foundation
 
 enum AppLaunchArguments {
     static let uiTestMode = "UITEST_MODE"
+    static let uiTestOnboardingFlow = "--ui-test-onboarding-flow"
+    static let uiTestFreePlan = "--ui-test-free-plan"
+    static let uiTestProPlan = "--ui-test-pro-plan"
+    static let uiTestLiveAIBackend = "--ui-test-live-ai-backend"
     static let pendingAppRoute = "-pendingAppRoute"
     static let seedLiveWorkoutPerfData = "--seed-live-workout-perf-data"
     static let uiTestLiveWorkoutPreset = "--ui-test-live-workout-preset"
@@ -34,6 +38,22 @@ enum AppLaunchArguments {
 
     static var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestMode)
+    }
+
+    static var shouldRunOnboardingFlowUITest: Bool {
+        ProcessInfo.processInfo.arguments.contains(uiTestOnboardingFlow)
+    }
+
+    static var shouldUseFreePlanForUITest: Bool {
+        ProcessInfo.processInfo.arguments.contains(uiTestFreePlan)
+    }
+
+    static var shouldUseProPlanForUITest: Bool {
+        ProcessInfo.processInfo.arguments.contains(uiTestProPlan)
+    }
+
+    static var shouldUseLiveAIBackendForUITest: Bool {
+        ProcessInfo.processInfo.arguments.contains(uiTestLiveAIBackend)
     }
 
     static var isRunningUnitTests: Bool {

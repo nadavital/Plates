@@ -58,14 +58,18 @@ extension View {
 
     func chatViewFoodEntrySheet(
         viewingEntry: FoodEntry?,
-        viewingLoggedMealId: Binding<UUID?>
+        viewingLoggedMealId: Binding<UUID?>,
+        onAskTrai: @escaping (String, AIService.FocusedFoodEntryContext) -> Void
     ) -> some View {
         self.sheet(isPresented: Binding(
             get: { viewingEntry != nil },
             set: { if !$0 { viewingLoggedMealId.wrappedValue = nil } }
         )) {
             if let entry = viewingEntry {
-                EditFoodEntrySheet(entry: entry)
+                EditFoodEntrySheet(entry: entry) { prompt, focusedContext in
+                    viewingLoggedMealId.wrappedValue = nil
+                    onAskTrai(prompt, focusedContext)
+                }
                     .traiSheetBranding()
             }
         }

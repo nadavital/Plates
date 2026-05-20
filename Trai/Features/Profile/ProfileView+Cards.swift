@@ -282,11 +282,7 @@ extension ProfileView {
 
                 // Create plan prompt
                 Button {
-                    if canAccessAIFeatures {
-                        showPlanSetupSheet = true
-                    } else {
-                        proUpsellCoordinator?.present(source: .workoutPlan)
-                    }
+                    showPlanSetupSheet = true
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "circle.hexagongrid.circle")
@@ -305,15 +301,6 @@ extension ProfileView {
                         }
 
                         Spacer()
-
-                        if !canAccessAIFeatures {
-                            Text("PRO")
-                                .font(.traiLabel(11))
-                                .foregroundStyle(TraiColors.ember)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(TraiColors.ember.opacity(0.10), in: Capsule())
-                        }
 
                         Image(systemName: "chevron.right")
                             .font(.caption)

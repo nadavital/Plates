@@ -47,6 +47,10 @@ struct AskTraiIntent: AppIntent {
             sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
         )
         let todayFood = (try? context.fetch(foodDescriptor)) ?? []
+        let hasWorkoutToday = WorkoutDayTargetContext.hasWorkout(
+            in: DateInterval(start: startOfDay, end: endOfDay),
+            modelContext: context
+        )
 
         // Build context for the shared AI service
         let aiService = AIService()
@@ -54,7 +58,11 @@ struct AskTraiIntent: AppIntent {
         do {
             let response = try await aiService.askQuickQuestion(
                 question: question,
-                userContext: buildUserContext(profile: profile, todayFood: todayFood)
+                userContext: buildUserContext(
+                    profile: profile,
+                    todayFood: todayFood,
+                    hasWorkoutToday: hasWorkoutToday
+                )
             )
 
             // Keep response concise for Siri
@@ -67,12 +75,16 @@ struct AskTraiIntent: AppIntent {
         }
     }
 
-    private func buildUserContext(profile: UserProfile?, todayFood: [FoodEntry]) -> String {
+    private func buildUserContext(
+        profile: UserProfile?,
+        todayFood: [FoodEntry],
+        hasWorkoutToday: Bool
+    ) -> String {
         var context = ""
 
         if let profile {
             context += "User: \(profile.name), Goal: \(profile.goal.displayName)\n"
-            context += "Calorie goal: \(profile.dailyCalorieGoal)\n"
+            context += "Calorie target: \(profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday))\n"
         }
 
         context += FoodLogSummaryFormatter.promptSummary(

@@ -21,7 +21,8 @@ struct MacroRingItem: View {
     @State private var animatedProgress: Double = 0
 
     private var progress: Double {
-        min(current / goal, 1.0)
+        guard goal > 0 else { return 0 }
+        return min(current / goal, 1.0)
     }
 
     private var labelText: String {

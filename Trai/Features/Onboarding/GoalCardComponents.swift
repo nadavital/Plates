@@ -16,60 +16,51 @@ struct GoalCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 ZStack {
                     if isSelected {
                         Circle()
                             .fill(colorForGoal.opacity(0.3))
-                            .frame(width: 58, height: 58)
+                            .frame(width: 54, height: 54)
                             .blur(radius: 8)
                     }
 
                     Circle()
                         .fill(
-                            isSelected
-                                ? LinearGradient(
-                                    colors: [colorForGoal, colorForGoal.opacity(0.8)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                                : LinearGradient(
-                                    colors: [colorForGoal.opacity(0.15), colorForGoal.opacity(0.1)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+                            colorForGoal.opacity(isSelected ? 0.95 : 0.78)
                         )
-                        .frame(width: 52, height: 52)
+                        .frame(width: 48, height: 48)
 
                     Image(systemName: goal.iconName)
-                        .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(isSelected ? .white : colorForGoal)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(.white)
                         .scaleEffect(isSelected ? 1.1 : 1)
                 }
 
-                Text(goal.displayName)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 3) {
+                    Text(goal.displayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(shortHint)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
+            .padding(.vertical, 13)
             .padding(.horizontal, 8)
-            .traiCard(cornerRadius: 18, contentPadding: 0)
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(
-                        isSelected ? colorForGoal.opacity(0.6) : Color.clear,
-                        lineWidth: 2
-                    )
-            )
-            .shadow(
-                color: isSelected ? colorForGoal.opacity(0.3) : Color.black.opacity(0.03),
-                radius: isSelected ? 10 : 4,
-                y: isSelected ? 5 : 2
+            .onboardingTintedGlass(
+                tint: colorForGoal,
+                isSelected: isSelected,
+                cornerRadius: 18,
+                isInteractive: true
             )
         }
         .buttonStyle(.plain)
@@ -85,6 +76,18 @@ struct GoalCard: View {
         case .maintenance: Color(.systemGray3)
         case .performance: TraiColors.blaze
         case .health: .accentColor
+        }
+    }
+
+    private var shortHint: String {
+        switch goal {
+        case .loseWeight: "overall weight"
+        case .loseFat: "keep muscle"
+        case .buildMuscle: "strength + size"
+        case .recomposition: "body recomp"
+        case .maintenance: "steady weight"
+        case .performance: "fuel workouts"
+        case .health: "daily wellness"
         }
     }
 }
@@ -109,23 +112,13 @@ struct GoalCardWithDescription: View {
 
                     Circle()
                         .fill(
-                            isSelected
-                                ? LinearGradient(
-                                    colors: [colorForGoal, colorForGoal.opacity(0.8)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                                : LinearGradient(
-                                    colors: [colorForGoal.opacity(0.15), colorForGoal.opacity(0.1)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+                            colorForGoal.opacity(isSelected ? 0.95 : 0.78)
                         )
                         .frame(width: 44, height: 44)
 
                     Image(systemName: goal.iconName)
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(isSelected ? .white : colorForGoal)
+                        .foregroundStyle(.white)
                         .scaleEffect(isSelected ? 1.1 : 1)
                 }
 
@@ -149,18 +142,11 @@ struct GoalCardWithDescription: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .padding(.horizontal, 6)
-            .traiCard(cornerRadius: 18, contentPadding: 0)
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(
-                        isSelected ? colorForGoal.opacity(0.6) : Color.clear,
-                        lineWidth: 2
-                    )
-            )
-            .shadow(
-                color: isSelected ? colorForGoal.opacity(0.3) : Color.black.opacity(0.03),
-                radius: isSelected ? 10 : 4,
-                y: isSelected ? 5 : 2
+            .onboardingTintedGlass(
+                tint: colorForGoal,
+                isSelected: isSelected,
+                cornerRadius: 18,
+                isInteractive: true
             )
         }
         .buttonStyle(.plain)

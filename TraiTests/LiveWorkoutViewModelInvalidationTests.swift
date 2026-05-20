@@ -30,18 +30,18 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         context.insert(workout)
 
         let viewModel = LiveWorkoutViewModel(workout: workout)
-        var entryListInvalidationCount = 0
+        let entryListInvalidationCount = InvalidationCounter()
 
         withObservationTracking {
             _ = viewModel.entries.count
         } onChange: {
-            entryListInvalidationCount += 1
+            entryListInvalidationCount.increment()
         }
 
         viewModel.updateSet(at: 0, in: entry, reps: 9)
 
         XCTAssertEqual(entry.sets.first?.reps, 9)
-        XCTAssertEqual(entryListInvalidationCount, 0)
+        XCTAssertEqual(entryListInvalidationCount.value, 0)
     }
 
     func testRepEditAcrossZeroBoundaryStillUpdatesProgressMetrics() {
@@ -57,6 +57,27 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(viewModel.completedSets, 1)
     }
 
+    func testGeneralActivityEntryDoesNotMakeWorkoutCompleteUntilMarkedComplete() {
+        let workout = LiveWorkout(name: "Recovery Session", workoutType: .mobility)
+        let entry = LiveWorkoutEntry(
+            exerciseName: "Hip Mobility",
+            orderIndex: 0,
+            exerciseType: "flexibility"
+        )
+        entry.durationSeconds = 600
+        entry.workout = workout
+        workout.entries = [entry]
+        context.insert(workout)
+
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+
+        XCTAssertFalse(viewModel.isWorkoutComplete)
+
+        viewModel.toggleGeneralEntryCompletion(for: entry)
+
+        XCTAssertTrue(viewModel.isWorkoutComplete)
+    }
+
     private func makeWorkout(initialReps: Int) -> (LiveWorkout, LiveWorkoutEntry) {
         let workout = LiveWorkout(name: "Push Day", workoutType: .strength)
         let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
@@ -69,5 +90,20 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         entry.workout = workout
         workout.entries = [entry]
         return (workout, entry)
+    }
+}
+
+private final class InvalidationCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.withLock { count }
+    }
+
+    func increment() {
+        lock.withLock {
+            count += 1
+        }
     }
 }

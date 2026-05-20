@@ -245,8 +245,8 @@ enum AIPromptBuilder {
         Coach tone: \(tone.rawValue). \(tone.chatStylePrompt)
 
         Goal: \(context.userGoal)
-        Daily Calorie Target: \(context.dailyCalorieGoal) kcal
-        Daily Protein Target: \(context.dailyProteinGoal)g
+        \(context.calorieTargetPromptLine)
+        \(context.proteinTargetPromptLine)
 
         Today's Progress:
         - Calories consumed: \(context.todaysCalories) kcal
@@ -276,24 +276,40 @@ enum AIPromptBuilder {
         let totalProtein = meals.reduce(0.0) { $0 + $1.proteinGrams }
         let totalCarbs = meals.reduce(0.0) { $0 + $1.carbsGrams }
         let totalFat = meals.reduce(0.0) { $0 + $1.fatGrams }
-
-        return """
-        User's Daily Goals:
+        let goalLines = """
         - Calories: \(profile.dailyCalorieGoal) kcal
         - Protein: \(profile.dailyProteinGoal)g
         - Carbs: \(profile.dailyCarbsGoal)g
         - Fat: \(profile.dailyFatGoal)g
+        """
+        let adviceInstruction = "Based on this, provide brief nutrition advice for the rest of the day. Suggest specific foods or meals that would help them hit their remaining macros."
+
+        return """
+        User's Daily Goals:
+        \(goalLines)
 
         Today's intake so far:
-        - Calories: \(totalCalories) kcal (\(Int(Double(totalCalories) / Double(profile.dailyCalorieGoal) * 100))%)
-        - Protein: \(Int(totalProtein))g (\(Int(totalProtein / Double(profile.dailyProteinGoal) * 100))%)
-        - Carbs: \(Int(totalCarbs))g (\(Int(totalCarbs / Double(profile.dailyCarbsGoal) * 100))%)
-        - Fat: \(Int(totalFat))g (\(Int(totalFat / Double(profile.dailyFatGoal) * 100))%)
+        \(nutritionAdviceProgressLines(profile: profile, totalCalories: totalCalories, totalProtein: totalProtein, totalCarbs: totalCarbs, totalFat: totalFat))
 
         Meals logged:
         \(meals.map { "- \($0.meal.displayName): \($0.name) (\($0.calories) kcal)" }.joined(separator: "\n"))
 
-        Based on this, provide brief nutrition advice for the rest of the day. Suggest specific foods or meals that would help them hit their remaining macros.
+        \(adviceInstruction)
+        """
+    }
+
+    private static func nutritionAdviceProgressLines(
+        profile: UserProfile,
+        totalCalories: Int,
+        totalProtein: Double,
+        totalCarbs: Double,
+        totalFat: Double
+    ) -> String {
+        return """
+        - Calories: \(totalCalories) kcal (\(Int(Double(totalCalories) / Double(max(profile.dailyCalorieGoal, 1)) * 100))%)
+        - Protein: \(Int(totalProtein))g (\(Int(totalProtein / Double(max(profile.dailyProteinGoal, 1)) * 100))%)
+        - Carbs: \(Int(totalCarbs))g (\(Int(totalCarbs / Double(max(profile.dailyCarbsGoal, 1)) * 100))%)
+        - Fat: \(Int(totalFat))g (\(Int(totalFat / Double(max(profile.dailyFatGoal, 1)) * 100))%)
         """
     }
 }

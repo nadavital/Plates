@@ -31,35 +31,23 @@ enum AccountSetupContext: String, Identifiable {
         case .restorePurchases:
             "Sign in before restoring purchases"
         case .aiFeatures:
-            "Sign in to use cloud Trai AI"
+            "Sign in to continue"
         }
     }
 
-    var message: String {
+    var message: String? {
         switch self {
         case .secureExistingData:
-            "Sign in with Apple to connect this device to your Trai account."
+            nil
         case .billing:
             "Connect your Trai account before starting a subscription."
         case .restorePurchases:
             "Connect your Trai account before restoring purchases."
         case .aiFeatures:
-            "Connect your Trai account to use cloud AI features like food photo analysis, chat, and plan help."
+            "Use Sign in with Apple to connect your Trai account."
         }
     }
 
-    var secondaryMessage: String {
-        switch self {
-        case .secureExistingData:
-            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
-        case .billing:
-            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
-        case .restorePurchases:
-            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
-        case .aiFeatures:
-            "Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI."
-        }
-    }
 }
 
 struct AccountSetupView: View {
@@ -80,7 +68,6 @@ struct AccountSetupView: View {
                 Spacer(minLength: 0)
 
                 AccountSetupBottomContent(
-                    secondaryMessage: context.secondaryMessage,
                     blockedReason: appAccountService?.realAccountSignInBlockedReason,
                     backendActionTitle: backendActionTitle,
                     lastErrorMessage: accountSessionService?.lastErrorMessage,
@@ -93,8 +80,6 @@ struct AccountSetupView: View {
             .padding(.horizontal, 20)
             .padding(.top, 20)
             .padding(.bottom, 28)
-            .navigationTitle("Account Setup")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if showsDismissButton {
                     ToolbarItem(placement: .cancellationAction) {
@@ -153,26 +138,21 @@ private struct AccountSetupHero: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            ZStack {
-                Circle()
-                    .fill(TraiColors.brandAccent.opacity(0.12))
-                    .frame(width: 124, height: 124)
-                    .blur(radius: 14)
-
-                TraiLensView(size: 78, state: .thinking, palette: .energy)
-            }
+            TraiLensView(size: 78, state: .idle, palette: .energy, breathes: false)
 
             VStack(spacing: 10) {
                 Text(context.title)
                     .font(.traiBold(30))
                     .multilineTextAlignment(.center)
 
-                Text(context.message)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 6)
+                if let message = context.message {
+                    Text(message)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 6)
+                }
             }
         }
     }
@@ -180,7 +160,6 @@ private struct AccountSetupHero: View {
 
 private struct AccountSetupBottomContent: View {
     @Environment(\.colorScheme) private var colorScheme
-    let secondaryMessage: String
     let blockedReason: String?
     let backendActionTitle: String?
     let lastErrorMessage: String?
@@ -190,13 +169,6 @@ private struct AccountSetupBottomContent: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Text(secondaryMessage)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 14)
-
             if let lastErrorMessage {
                 Text(lastErrorMessage)
                     .font(.footnote)

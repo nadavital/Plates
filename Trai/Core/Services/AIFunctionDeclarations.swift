@@ -511,6 +511,10 @@ enum AIFunctionDeclarations {
                         "type": "integer",
                         "description": "Optional number of period units, e.g. 1 week or 4 weeks"
                     ],
+                    "success_criteria": [
+                        "type": "string",
+                        "description": "Concise criteria for how Trai and the user will know the goal is achieved, especially for custom or milestone goals"
+                    ],
                     "target_date": [
                         "type": "string",
                         "description": "Optional soft target date in YYYY-MM-DD format"
@@ -524,7 +528,7 @@ enum AIFunctionDeclarations {
                         "description": "Optional notes or rationale"
                     ]
                 ],
-                "required": ["title", "goal_kind"]
+                "required": ["title", "goal_kind", "success_criteria"]
             ]
         ]
     }
@@ -576,6 +580,10 @@ enum AIFunctionDeclarations {
                     "period_count": [
                         "type": "integer",
                         "description": "Updated period count"
+                    ],
+                    "success_criteria": [
+                        "type": "string",
+                        "description": "Updated success criteria. Pass empty string to clear."
                     ],
                     "target_date": [
                         "type": "string",

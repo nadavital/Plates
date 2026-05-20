@@ -52,7 +52,6 @@ struct ManualFoodEntrySheet: View {
                 VStack(spacing: 14) {
                     if shouldShowUpgradeRow {
                         upgradeRow
-                            .traiCard(cornerRadius: 16)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {

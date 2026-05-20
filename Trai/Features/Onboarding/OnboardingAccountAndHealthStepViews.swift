@@ -12,13 +12,29 @@ struct AccountOnboardingStepView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(AppAccountService.self) private var appAccountService: AppAccountService?
+    @Environment(BillingService.self) private var billingService: BillingService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @State private var didRefreshAccess = false
+
+    private var proAccessState: OnboardingProAccessState {
+        let recommendedProductID = billingService?.recommendedProduct?.id ?? "trai.pro.monthly"
+        return OnboardingProAccessState(
+            isAuthenticated: accountSessionService?.isAuthenticated == true,
+            canAccessAIFeatures: monetizationService?.canAccessAIFeatures == true,
+            didAttemptRefresh: didRefreshAccess,
+            isLoadingProducts: billingService?.isLoadingProducts == true,
+            isRestoringPurchases: billingService?.isRestoringPurchases == true,
+            purchaseInFlightProductID: billingService?.purchaseInFlightProductID,
+            recommendedProductID: recommendedProductID,
+            accessErrorMessage: billingService?.storeKitUpsellMessage
+        )
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 onboardingHeader(
-                    title: "Connect your Trai account",
-                    subtitle: "Sign in with Apple before plan choices so Trai Pro access and cloud AI features stay attached to your account."
+                    title: "Connect your Trai account"
                 )
 
                 if accountSessionService?.isAuthenticated == true {
@@ -30,7 +46,7 @@ struct AccountOnboardingStepView: View {
                         Text(accountSessionService?.currentUserDisplayName ?? "Connected")
                             .font(.body)
 
-                        Text("You’re all set. We’ll use this account for subscriptions and cloud Trai AI features.")
+                        Text(proAccessState.signedInAccountMessage)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -47,17 +63,20 @@ struct AccountOnboardingStepView: View {
             .padding(.bottom, 140)
         }
         .scrollIndicators(.hidden)
+        .task {
+            guard !didRefreshAccess else { return }
+            didRefreshAccess = true
+            #if DEBUG
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                return
+            }
+            #endif
+            await billingService?.refreshAccessStateForImmediateUse()
+        }
     }
 
     private var accountSetupCard: some View {
         VStack(spacing: 16) {
-            Text("Recommended, not required")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color(.tertiarySystemBackground), in: Capsule())
-
             if let blockedReason = appAccountService?.realAccountSignInBlockedReason {
                 BackendRequirementCard(
                     message: blockedReason,
@@ -73,12 +92,6 @@ struct AccountOnboardingStepView: View {
                 .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(height: 52)
             }
-
-            Text("Your health, profile, and logs remain stored locally on this device. When you use Trai AI, only the selected context and photos needed for that request are sent to Trai AI.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
 
             if let lastErrorMessage = accountSessionService?.lastErrorMessage {
                 Text(lastErrorMessage)
@@ -178,6 +191,7 @@ struct HealthSyncStepView: View {
                         }
                     }
                     .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: false, fillOpacity: 0.16))
+                    .accessibilityIdentifier("onboardingConnectHealthButton")
                     .disabled(isRequestingHealthAccess || isConnected || (!syncFoodToHealthKit && !syncWeightToHealthKit))
 
                     Text(statusText)
@@ -235,7 +249,7 @@ struct HealthSyncStepView: View {
 }
 
 @ViewBuilder
-private func onboardingHeader(title: String, subtitle: String) -> some View {
+private func onboardingHeader(title: String, subtitle: String? = nil) -> some View {
     VStack(spacing: 12) {
         TraiLensView(size: 54, state: .thinking, palette: .energy)
 
@@ -243,10 +257,12 @@ private func onboardingHeader(title: String, subtitle: String) -> some View {
             .font(.traiBold(28))
             .multilineTextAlignment(.center)
 
-        Text(subtitle)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
+        if let subtitle {
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

@@ -19,6 +19,7 @@ nonisolated enum SharedStorageKeys {
     enum Chat {
         static let pendingPrompt = "pendingTraiChatPrompt"
         static let pendingLaunchLabel = "pendingTraiChatLaunchLabel"
+        static let pendingFocusedFoodEntryId = "pendingTraiChatFocusedFoodEntryId"
     }
 
     enum AppRouting {

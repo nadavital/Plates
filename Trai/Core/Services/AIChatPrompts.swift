@@ -26,8 +26,8 @@ extension AIPromptBuilder {
 
         User's fitness context:
         - Goal: \(context.userGoal)
-        - Daily calorie goal: \(context.dailyCalorieGoal) kcal
-        - Daily protein goal: \(context.dailyProteinGoal)g
+        \(context.calorieTargetPromptLine)
+        \(context.proteinTargetPromptLine)
         - Today's progress: \(context.todaysCalories) kcal consumed, \(Int(context.todaysProtein))g protein
 
         User's message: \(userMessage)
@@ -91,8 +91,8 @@ extension AIPromptBuilder {
 
         User's fitness context:
         - Goal: \(context.userGoal)
-        - Daily calorie goal: \(context.dailyCalorieGoal) kcal
-        - Daily protein goal: \(context.dailyProteinGoal)g
+        \(context.calorieTargetPromptLine)
+        \(context.proteinTargetPromptLine)
         - Today's progress: \(context.todaysCalories) kcal consumed, \(Int(context.todaysProtein))g protein
         \(pendingContext)
 

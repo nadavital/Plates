@@ -6,15 +6,21 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
     @Bindable var profile: UserProfile
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(AccountSessionService.self) private var accountSessionService: AccountSessionService?
     @Environment(AppAccountService.self) private var appAccountService: AppAccountService?
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
     @State private var showPlanAdjustment = false
     @State private var showWorkoutPlanSetup = false
     @State private var showWorkoutPlanEdit = false
+    @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State private var standardWorkoutPlanAIService = AIService()
     @State private var pendingEnabledMacroReveal: MacroType?
     @State private var presentedAccountSetupContext: AccountSetupContext?
     @State private var isShowingDeleteAccountConfirmation = false
@@ -349,7 +355,14 @@ struct SettingsView: View {
             )
         }
         .sheet(isPresented: $showWorkoutPlanSetup) {
-            WorkoutPlanChatFlow()
+            WorkoutPlanSetupChoiceFlow(
+                draft: $standardWorkoutPlanDraft,
+                context: standardWorkoutPlanSetupContext,
+                aiService: standardWorkoutPlanAIService,
+                canAccessAIFeatures: monetizationService?.canAccessAIFeatures ?? true,
+                onComplete: saveStandardWorkoutPlan,
+                onBack: { showWorkoutPlanSetup = false }
+            )
                 .traiSheetBranding()
         }
         .sheet(isPresented: $showWorkoutPlanEdit) {
@@ -375,6 +388,95 @@ struct SettingsView: View {
             } catch {
                 accountActionError = AccountActionError(message: error.localizedDescription)
             }
+        }
+    }
+
+    private var standardWorkoutPlanSetupContext: OnboardingWorkoutPlanUserContext {
+        OnboardingWorkoutPlanUserContext(
+            name: profile.name,
+            age: profile.age ?? 30,
+            gender: profile.genderValue,
+            goal: profile.goal,
+            activityLevel: profile.activityLevelValue,
+            nutritionContext: OnboardingWorkoutPlanUserContext.nutritionContext(from: profile),
+            memoryContext: workoutPlanMemoryContext(),
+            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoalsForPlanSetup())
+        )
+    }
+
+    private func saveStandardWorkoutPlan(
+        _ plan: WorkoutPlan,
+        generatedGoals: [WorkoutGoal],
+        mode: WorkoutPlanSetupMode,
+        draftSnapshot: OnboardingWorkoutPlanDraft
+    ) {
+        let hadExistingPlan = profile.workoutPlan != nil
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: plan
+        )
+
+        profile.workoutPlan = plan
+        draftSnapshot.applyPreferences(to: profile, generatedPlan: plan)
+
+        if mode == .proAI {
+            insertGeneratedWorkoutGoals(generatedGoals)
+        }
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                plan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        try? modelContext.save()
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        showWorkoutPlanSetup = false
+        HapticManager.success()
+    }
+
+    private func workoutPlanMemoryContext() -> [String] {
+        let descriptor = FetchDescriptor<CoachMemory>(
+            predicate: #Predicate<CoachMemory> { memory in
+                memory.isActive
+            },
+            sortBy: [
+                SortDescriptor(\CoachMemory.importance, order: .reverse),
+                SortDescriptor(\CoachMemory.createdAt, order: .reverse)
+            ]
+        )
+        let memories = (try? modelContext.fetch(descriptor)) ?? []
+        return memories
+            .filter {
+                $0.topic == .workout || $0.topic == .general || $0.category == .goal || $0.category == .context || $0.category == .restriction
+            }
+            .prefix(8)
+            .map(\.promptFormat)
+    }
+
+    private func activeWorkoutGoalsForPlanSetup() -> [WorkoutGoal] {
+        let descriptor = FetchDescriptor<WorkoutGoal>(
+            predicate: #Predicate<WorkoutGoal> { goal in
+                goal.statusRaw == "active"
+            },
+            sortBy: [SortDescriptor(\WorkoutGoal.updatedAt, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal]) {
+        var existingTitles = Set(activeWorkoutGoalsForPlanSetup().map { $0.trimmedTitle.lowercased() })
+        for goal in goals {
+            let titleKey = goal.trimmedTitle.lowercased()
+            guard !titleKey.isEmpty, !existingTitles.contains(titleKey) else { continue }
+            modelContext.insert(goal)
+            existingTitles.insert(titleKey)
         }
     }
 
@@ -415,6 +517,7 @@ private struct MacroToggleRow: View {
         }
         .buttonStyle(.plain)
     }
+
 }
 
 #Preview {

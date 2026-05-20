@@ -51,7 +51,8 @@ final class WorkoutSemanticParsingTests: XCTestCase {
                     "goal_kind": "frequency",
                     "workout_type": "running",
                     "period_unit": "week",
-                    "period_count": 1
+                    "period_count": 1,
+                    "success_criteria": "Complete three cardio sessions in one week."
                 ]
             )
         )
@@ -62,6 +63,7 @@ final class WorkoutSemanticParsingTests: XCTestCase {
         }
 
         XCTAssertEqual(goal["workout_type"] as? String, WorkoutMode.cardio.rawValue)
+        XCTAssertEqual(goal["success_criteria"] as? String, "Complete three cardio sessions in one week.")
     }
 
     func testUpdateWorkoutGoalNormalizesWeightLiftingToStrength() async throws {

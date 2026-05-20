@@ -168,7 +168,6 @@ extension ChatView {
 
         // Archive current plan before updating
         archiveCurrentPlan(profile: profile, reason: .chatAdjustment, userWeightKg: currentWeight)
-
         if let calories = plan.calories {
             profile.dailyCalorieGoal = calories
         }
@@ -957,6 +956,11 @@ extension ChatView {
             pendingChatPrompt = ""
             pendingChatLaunchLabel = ""
             startNewSession(silent: true)
+            if let focusedEntryId = UUID(uuidString: pendingFocusedFoodEntryId),
+               let focusedEntry = allFoodEntries.first(where: { $0.id == focusedEntryId }) {
+                focusedFoodEntryContext = focusedEntry.focusedChatContext
+            }
+            pendingFocusedFoodEntryId = ""
             sendAppInitiatedPrompt(
                 trimmedPrompt,
                 launchLabel: trimmedLaunchLabel.isEmpty ? "Reviewing with Trai..." : trimmedLaunchLabel,

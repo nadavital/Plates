@@ -29,6 +29,21 @@ extension OnboardingView {
         Task { @MainActor in
             let plan: NutritionPlan
 
+            #if DEBUG
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                plan = NutritionPlan.createDefault(from: request)
+            } else if !(monetizationService?.canAccessAIFeatures ?? true) {
+                plan = NutritionPlan.createDefault(from: request)
+            } else {
+                do {
+                    plan = try await aiService.generateNutritionPlan(request: request)
+                } catch {
+                    // Fall back to calculated plan
+                    print("⚠️ Plan generation failed, using fallback: \(error.localizedDescription)")
+                    plan = NutritionPlan.createDefault(from: request)
+                }
+            }
+            #else
             if !(monetizationService?.canAccessAIFeatures ?? true) {
                 plan = NutritionPlan.createDefault(from: request)
             } else {
@@ -40,6 +55,7 @@ extension OnboardingView {
                     plan = NutritionPlan.createDefault(from: request)
                 }
             }
+            #endif
 
             let elapsed = generationStartedAt.duration(to: clock.now)
             if elapsed < minimumLoadingDuration {
@@ -90,7 +106,7 @@ extension OnboardingView {
         }
 
         return PlanGenerationRequest(
-            name: userName.trimmingCharacters(in: .whitespaces),
+            name: resolvedProfileName,
             age: age,
             gender: gender ?? .notSpecified,
             heightCm: heightCm,

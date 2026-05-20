@@ -21,6 +21,7 @@ final class UserProfile {
 
     /// Goal type: "weightLoss", "muscleGain", "maintenance", etc.
     var goalType: String = "maintenance"
+
     var targetWeightKg: Double?
     var currentWeightKg: Double?
 
@@ -160,13 +161,13 @@ extension UserProfile {
 
         var displayName: String {
             switch self {
-            case .loseWeight: "Lose Weight"
-            case .loseFat: "Lose Fat, Keep Muscle"
-            case .buildMuscle: "Build Muscle"
-            case .recomposition: "Body Recomposition"
-            case .maintenance: "Maintain Weight"
-            case .performance: "Athletic Performance"
-            case .health: "General Health"
+            case .loseWeight: "Lose weight"
+            case .loseFat: "Lose fat"
+            case .buildMuscle: "Build muscle"
+            case .recomposition: "Get leaner and stronger"
+            case .maintenance: "Maintain"
+            case .performance: "Improve performance"
+            case .health: "Improve health"
             }
         }
 
@@ -193,12 +194,22 @@ extension UserProfile {
             case .health: "heart.circle.fill"
             }
         }
+
+        var shouldCollectTargetWeight: Bool {
+            switch self {
+            case .loseWeight, .loseFat, .buildMuscle:
+                true
+            case .recomposition, .maintenance, .performance, .health:
+                false
+            }
+        }
     }
 
     var goal: GoalType {
         get { GoalType(rawValue: goalType) ?? .maintenance }
         set { goalType = newValue.rawValue }
     }
+
 }
 
 // MARK: - Gender

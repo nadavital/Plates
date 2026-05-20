@@ -20,18 +20,27 @@ extension AIFunctionExecutor {
             ))
         }
 
+        let todayInterval = WorkoutDayTargetContext.dayInterval()
+        let hasWorkoutToday = WorkoutDayTargetContext.hasWorkout(
+            in: todayInterval,
+            modelContext: modelContext
+        )
+        let dailyTargets: [String: Any] = [
+            "calories": profile.dailyCalorieGoal,
+            "protein": profile.dailyProteinGoal,
+            "carbs": profile.dailyCarbsGoal,
+            "fat": profile.dailyFatGoal,
+            "fiber": profile.dailyFiberGoal,
+            "sugar": profile.dailySugarGoal
+        ]
+
         return .dataResponse(FunctionResult(
             name: "get_user_plan",
             response: [
                 "goal": profile.goal.rawValue,
-                "daily_targets": [
-                    "calories": profile.dailyCalorieGoal,
-                    "protein": profile.dailyProteinGoal,
-                    "carbs": profile.dailyCarbsGoal,
-                    "fat": profile.dailyFatGoal,
-                    "fiber": profile.dailyFiberGoal,
-                    "sugar": profile.dailySugarGoal
-                ],
+                "daily_targets": dailyTargets,
+                "effective_calorie_target_today": profile.effectiveCalorieGoal(hasWorkoutToday: hasWorkoutToday),
+                "has_workout_today": hasWorkoutToday,
                 "enabled_macros": profile.enabledMacrosOrdered.map(\.rawValue),
                 "activity_level": profile.activityLevel,
                 "current_weight_kg": profile.currentWeightKg ?? 0,
@@ -149,9 +158,21 @@ extension AIFunctionExecutor {
 
             // Build detailed exercise list
             var exercises: [[String: Any]] = []
+            var activities: [[String: Any]] = []
             for entry in sortedEntries {
                 let sets = entry.sets
-                guard !sets.isEmpty else { continue }
+                if entry.isCardio || entry.isGeneralActivity || sets.isEmpty {
+                    let trimmedNotes = entry.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                    activities.append([
+                        "name": entry.exerciseName,
+                        "type": entry.exerciseType,
+                        "duration_minutes": entry.durationSeconds.map { $0 / 60 } ?? 0,
+                        "distance_meters": entry.distanceMeters ?? 0,
+                        "completed": entry.completedAt != nil,
+                        "notes": trimmedNotes
+                    ])
+                    continue
+                }
 
                 var exerciseData: [String: Any] = [
                     "name": entry.exerciseName,
@@ -189,6 +210,9 @@ extension AIFunctionExecutor {
 
             if !exercises.isEmpty {
                 workoutData["exercises"] = exercises
+            }
+            if !activities.isEmpty {
+                workoutData["activities"] = activities
             }
 
             workoutsWithDate.append((sortDate: liveWorkout.startedAt, payload: workoutData))
@@ -298,6 +322,7 @@ extension AIFunctionExecutor {
                 "target_unit": goal.targetUnit,
                 "period_unit": goal.periodUnit?.rawValue ?? "",
                 "period_count": goal.periodCount as Any,
+                "success_criteria": goal.trimmedSuccessCriteria,
                 "notes": goal.trimmedNotes,
                 "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
                 "check_in_cadence_days": goal.checkInCadenceDays as Any,
@@ -349,6 +374,7 @@ extension AIFunctionExecutor {
         let targetUnit = (args["target_unit"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let periodUnit = (args["period_unit"] as? String).flatMap(WorkoutGoal.PeriodUnit.init(rawValue:))
         let periodCount = numericInt(from: args["period_count"])
+        let successCriteria = (args["success_criteria"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let targetDate = parseDate(args["target_date"] as? String)
         let checkInCadenceDays = numericInt(from: args["check_in_cadence_days"])
 
@@ -361,6 +387,7 @@ extension AIFunctionExecutor {
             targetUnit: goalKind.supportsNumericTarget ? targetUnit : "",
             periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
             periodCount: goalKind.usesPeriodTarget ? periodCount : nil,
+            successCriteria: successCriteria,
             notes: notes,
             targetDate: targetDate,
             checkInCadenceDays: checkInCadenceDays
@@ -383,6 +410,7 @@ extension AIFunctionExecutor {
                     "target_unit": goal.targetUnit,
                     "period_unit": goal.periodUnit?.rawValue ?? "",
                     "period_count": goal.periodCount as Any,
+                    "success_criteria": goal.trimmedSuccessCriteria,
                     "notes": goal.trimmedNotes,
                     "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
                     "check_in_cadence_days": goal.checkInCadenceDays as Any
@@ -464,6 +492,10 @@ extension AIFunctionExecutor {
             goal.periodCount = numericInt(from: args["period_count"])
         }
 
+        if let rawSuccessCriteria = args["success_criteria"] as? String {
+            goal.successCriteria = rawSuccessCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
         if let rawTargetDate = args["target_date"] as? String {
             let trimmedTargetDate = rawTargetDate.trimmingCharacters(in: .whitespacesAndNewlines)
             goal.targetDate = trimmedTargetDate.isEmpty ? nil : parseDate(trimmedTargetDate)
@@ -494,6 +526,7 @@ extension AIFunctionExecutor {
                     "target_unit": goal.targetUnit,
                     "period_unit": goal.periodUnit?.rawValue ?? "",
                     "period_count": goal.periodCount as Any,
+                    "success_criteria": goal.trimmedSuccessCriteria,
                     "notes": goal.trimmedNotes,
                     "target_date": goal.targetDate.map(formatDateForFunction) ?? "",
                     "check_in_cadence_days": goal.checkInCadenceDays as Any

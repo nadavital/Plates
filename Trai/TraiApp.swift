@@ -84,9 +84,32 @@ struct TraiApp: App {
 
         #if DEBUG
         if isUITesting {
-            monetizationService.setDebugPlan(.developer)
+            if AppLaunchArguments.shouldRunOnboardingFlowUITest {
+                UserDefaults.standard.set(false, forKey: AppLaunchArguments.onboardingCompletedCacheKey)
+                UserDefaults.standard.removeObject(forKey: "onboardingDraft")
+            }
+            if AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+                appAccountService.setDebugBackendEnvironment(.localDevelopment)
+            }
+            if AppLaunchArguments.shouldUseFreePlanForUITest {
+                monetizationService.setDebugPlan(.free)
+                accountSessionService.signOut()
+            } else {
+                monetizationService.setDebugPlan(AppLaunchArguments.shouldUseProPlanForUITest ? .pro : .developer)
+                if !AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+                    accountSessionService.setDebugAuthenticatedSession()
+                }
+            }
             monetizationService.resetQuotaForDebug()
-            accountSessionService.setDebugAuthenticatedSession()
+        }
+
+        if isUITesting && AppLaunchArguments.shouldUseLiveAIBackendForUITest {
+            Task { @MainActor in
+                await Self.prepareLiveAIBackendSessionForUITest(
+                    appAccountService: appAccountService,
+                    accountSessionService: accountSessionService
+                )
+            }
         }
         #endif
 
@@ -156,7 +179,7 @@ struct TraiApp: App {
             let container = modelContainer
             Task { @MainActor in
                 TraiApp.sharedModelContainer = container
-                if isUITesting {
+                if isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest {
                     seedUITestProfileIfNeeded(modelContainer: container)
                     if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {
                         seedAppStoreScreenshotDataIfNeeded(modelContainer: container)
@@ -172,6 +195,63 @@ struct TraiApp: App {
             fatalError("Failed to create ModelContainer: \(error)")
         }
     }
+
+    #if DEBUG
+    @MainActor
+    private static func prepareLiveAIBackendSessionForUITest(
+        appAccountService: AppAccountService,
+        accountSessionService: AccountSessionService
+    ) async {
+        appAccountService.setDebugBackendEnvironment(.localDevelopment)
+
+        do {
+            let bootstrap = try await TraiBackendClient.shared.exchangeAppleIdentity(
+                AppleIdentityExchangeRequest(
+                    installationID: appAccountService.installationID,
+                    appAccountToken: appAccountService.appAccountToken,
+                    identityToken: "ui-test-live-ai-token",
+                    authorizationCode: "ui-test-live-ai-code",
+                    rawNonce: nil,
+                    appleUserID: "ui-test-live-ai-\(appAccountService.installationID)",
+                    email: "ui-live-ai@trai.local",
+                    displayName: "Live AI Tester"
+                ),
+                environment: .localDevelopment
+            )
+            accountSessionService.setDebugAuthenticatedBootstrap(bootstrap)
+
+            try await applyLocalDeveloperSubscriptionOverrideForUITest(userID: bootstrap.session.userID)
+            await accountSessionService.refreshAccountFromBackend()
+        } catch {
+            print("⚠️ Failed to prepare live AI backend UI-test session: \(error.localizedDescription)")
+        }
+    }
+
+    private static func applyLocalDeveloperSubscriptionOverrideForUITest(userID: String) async throws {
+        guard let baseURL = TraiBackendClient.shared.baseURL(for: .localDevelopment) else {
+            throw BackendClientError.environmentNotConfigured
+        }
+
+        var request = URLRequest(url: baseURL.appending(path: "/v1/admin/subscription-override"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer local-dev-admin", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "userID": userID,
+            "plan": "developer",
+            "status": "active",
+            "source": "developer",
+            "reason": "local simulator live AI testing",
+            "createdBy": "trai-ios-ui-test"
+        ])
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw BackendClientError.invalidResponse
+        }
+    }
+    #endif
 
     var body: some Scene {
         WindowGroup {
@@ -480,6 +560,9 @@ struct TraiApp: App {
 
     @MainActor
     private func scheduleForegroundHealthKitSyncIfEligible() {
+        guard hasCompletedOnboardingProfile() else { return }
+        guard healthKitService.isAuthorized else { return }
+
         deferredHealthKitSyncTask?.cancel()
         deferredHealthKitSyncTask = Task(priority: .utility) { @MainActor in
             try? await Task.sleep(for: foregroundHealthKitSyncDelay)
@@ -491,6 +574,15 @@ struct TraiApp: App {
             ) else { return }
             await syncRecentWorkoutsFromHealthKit()
         }
+    }
+
+    @MainActor
+    private func hasCompletedOnboardingProfile() -> Bool {
+        var descriptor = FetchDescriptor<UserProfile>(
+            predicate: #Predicate<UserProfile> { $0.hasCompletedOnboarding == true }
+        )
+        descriptor.fetchLimit = 1
+        return ((try? modelContainer.mainContext.fetch(descriptor)) ?? []).isEmpty == false
     }
 
     @MainActor

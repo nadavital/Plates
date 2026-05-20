@@ -21,7 +21,7 @@ struct GeneralSessionOverviewCard: View {
                     Text(workout.type.displayName)
                         .font(.headline)
 
-                    Text("Flexible session workspace")
+                    Text("Activity session")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -41,7 +41,7 @@ struct GeneralSessionOverviewCard: View {
                 }
             }
 
-            Text("Track notes, log activities as you go, and ask Trai questions with full session context.")
+            Text("Log activities and notes with full session context.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

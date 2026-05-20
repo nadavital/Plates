@@ -157,6 +157,7 @@ struct WorkoutGoalCheckInView: View {
                     goalTitle: goal.trimmedTitle,
                     goalKind: goal.goalKind.rawValue,
                     goalScope: goal.scopeSummary,
+                    successCriteria: goal.trimmedSuccessCriteria,
                     currentProgress: insight.currentValueText,
                     targetSummary: insight.targetValueText,
                     recentSessionSummaries: recentSummaries,

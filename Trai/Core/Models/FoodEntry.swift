@@ -179,6 +179,57 @@ extension FoodEntry {
             return .snack
         }
     }
+
+    var traiMealReviewPrompt: String {
+        var lines: [String] = [
+            "I opened this logged meal from the food editor. Make it the focus of the conversation.",
+            "Meal: \(name)",
+            "Logged: \(loggedAt.formatted(date: .abbreviated, time: .shortened))",
+            "Semantic meal: \(semanticMeal.displayName)",
+            "Nutrition: \(calories) kcal, \(formattedMacroValue(proteinGrams))g protein, \(formattedMacroValue(carbsGrams))g carbs, \(formattedMacroValue(fatGrams))g fat."
+        ]
+
+        if let fiberGrams {
+            lines.append("Fiber: \(formattedMacroValue(fiberGrams))g.")
+        }
+        if let sugarGrams {
+            lines.append("Sugar: \(formattedMacroValue(sugarGrams))g.")
+        }
+        if let servingSize, !servingSize.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Serving size: \(servingSize).")
+        }
+        if let userDescription, !userDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("User notes: \(userDescription).")
+        }
+
+        lines.append("Start by briefly acknowledging this meal and ask what I want to know or change.")
+        return lines.joined(separator: "\n")
+    }
+
+    var focusedChatContext: AIService.FocusedFoodEntryContext {
+        AIService.FocusedFoodEntryContext(
+            entryId: id,
+            name: name,
+            loggedAt: loggedAt,
+            semanticMeal: semanticMeal.displayName,
+            calories: calories,
+            proteinGrams: proteinGrams,
+            carbsGrams: carbsGrams,
+            fatGrams: fatGrams,
+            fiberGrams: fiberGrams,
+            sugarGrams: sugarGrams,
+            servingSize: servingSize,
+            notes: userDescription
+        )
+    }
+
+    private func formattedMacroValue(_ value: Double) -> String {
+        let rounded = value.rounded()
+        if abs(value - rounded) < 0.05 {
+            return String(Int(rounded))
+        }
+        return String(format: "%.1f", value)
+    }
 }
 
 // MARK: - Input Method Helper

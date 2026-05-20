@@ -272,6 +272,7 @@ enum WorkoutGoalProgressResolver {
             or: matchingSessions
         )
         let trimmedGoalNotes = goal.trimmedNotes
+        let trimmedSuccessCriteria = goal.trimmedSuccessCriteria
 
         switch goal.goalKind {
         case .milestone:
@@ -284,7 +285,9 @@ enum WorkoutGoalProgressResolver {
                 progressText = "Use notes and completed sessions to track this"
             }
 
-            let supportingText = latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+            let supportingText = latestSupportingNote
+                ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
 
             return WorkoutGoalInsight(
                 goal: goal,
@@ -317,6 +320,7 @@ enum WorkoutGoalProgressResolver {
             let supportingParts = [
                 frequencyProgress.periodRangeText,
                 latestSupportingNote,
+                trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria,
                 trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes
             ].compactMap { $0 }
 
@@ -352,7 +356,9 @@ enum WorkoutGoalProgressResolver {
                 for: goal,
                 currentBaseValue: currentSeconds,
                 formattedCurrentValue: currentSeconds.map { formatDuration(seconds: $0, unit: goal.targetUnit) },
-                supportingText: latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
             )
 
         case .distance:
@@ -370,7 +376,9 @@ enum WorkoutGoalProgressResolver {
                 for: goal,
                 currentBaseValue: currentMeters,
                 formattedCurrentValue: currentMeters.map { formatDistance(meters: $0, unit: goal.targetUnit) },
-                supportingText: latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes)
             )
 
         case .weight:
@@ -420,7 +428,9 @@ enum WorkoutGoalProgressResolver {
                 formattedCurrentValue: currentKg.map {
                     formatWeight(kg: $0, unit: goal.targetUnit, useLbsFallback: useLbs)
                 },
-                supportingText: latestSupportingNote ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes),
+                supportingText: latestSupportingNote
+                    ?? (trimmedSuccessCriteria.isEmpty ? nil : trimmedSuccessCriteria)
+                    ?? (trimmedGoalNotes.isEmpty ? nil : trimmedGoalNotes),
                 autoBaselineBaseValue: autoBaselineKg
             )
         }
@@ -694,7 +704,7 @@ struct SessionGoalsCard: View {
             }
 
             if goals.isEmpty {
-                Text("Add an optional goal for this session type or a specific activity. Trai can use it during the workout, and completed sessions can show note-based progress toward it.")
+                Text("Add a goal Trai can follow during this session.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -714,8 +724,8 @@ struct SessionGoalsCard: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
-                            if !goal.trimmedNotes.isEmpty {
-                                Text(goal.trimmedNotes)
+                            if let supportingSummary = goal.supportingSummary {
+                                Text(supportingSummary)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
@@ -916,7 +926,24 @@ struct WorkoutGoalsOverviewSection: View {
         Array(signals.prefix(canCreateGoalsWithTrai ? 2 : 3))
     }
 
+    @ViewBuilder
     var body: some View {
+        if !canCreateGoalsWithTrai {
+            VStack(spacing: 12) {
+                overviewContent
+                    .traiCard(glow: .activity)
+
+                if !(insights.isEmpty && signals.isEmpty) {
+                    lockedUpsellCard
+                }
+            }
+        } else {
+            overviewContent
+                .traiCard(glow: .activity)
+        }
+    }
+
+    private var overviewContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             if canCreateGoalsWithTrai {
                 TraiSectionHeader("Goals & Signals", icon: "scope") {
@@ -949,7 +976,6 @@ struct WorkoutGoalsOverviewSection: View {
                 }
             }
         }
-        .traiCard(glow: .activity)
     }
 
     private var emptyStateCard: some View {
@@ -982,13 +1008,15 @@ struct WorkoutGoalsOverviewSection: View {
             if let firstSignal = visibleSignals.first {
                 signalRow(firstSignal)
             }
-
-            ProUpsellInlineCard(
-                source: .workoutPlan,
-                actionTitle: "Unlock Trai Pro",
-                action: onUnlockPro
-            )
         }
+    }
+
+    private var lockedUpsellCard: some View {
+        ProUpsellInlineCard(
+            source: .workoutPlan,
+            actionTitle: "Unlock Trai Pro",
+            action: onUnlockPro
+        )
     }
 
     private func featuredGoalCard(_ insight: WorkoutGoalInsight) -> some View {
@@ -1314,7 +1342,7 @@ struct WorkoutGoalDetailSheet: View {
                     if !recentActivityItems.isEmpty {
                         sessionsSection
                     }
-                    if !relatedSignals.isEmpty || !goal.trimmedNotes.isEmpty {
+                    if !relatedSignals.isEmpty || goal.supportingSummary != nil {
                         notesSection
                     }
                 }
@@ -1541,32 +1569,28 @@ struct WorkoutGoalDetailSheet: View {
             TraiSectionHeader("Notes", icon: "text.quote")
                 .padding(.bottom, 12)
 
-            if !goal.trimmedNotes.isEmpty {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "circle.hexagongrid.circle")
-                        .font(.subheadline)
-                        .foregroundStyle(TraiColors.brandAccent)
-                        .frame(width: 32, height: 32)
-                        .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+            let successCriteria = goal.trimmedSuccessCriteria
+            let goalNotes = goal.trimmedNotes
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text("Goal notes")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if let promptDate = goal.lastCheckInPromptAt {
-                                Text(promptDate, format: .dateTime.month(.abbreviated).day())
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        Text(goal.trimmedNotes)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(6)
-                    }
+            if !successCriteria.isEmpty {
+                goalContextRow(
+                    title: "Success criteria",
+                    text: successCriteria,
+                    icon: "checklist.checked"
+                )
+
+                if !goalNotes.isEmpty || !relatedSignals.isEmpty {
+                    Divider().padding(.vertical, 12)
                 }
+            }
+
+            if !goalNotes.isEmpty {
+                goalContextRow(
+                    title: "Goal notes",
+                    text: goalNotes,
+                    icon: "circle.hexagongrid.circle",
+                    showsCheckInDate: true
+                )
 
                 if !relatedSignals.isEmpty {
                     Divider().padding(.vertical, 12)
@@ -1596,6 +1620,39 @@ struct WorkoutGoalDetailSheet: View {
             }
         }
         .traiCard()
+    }
+
+    private func goalContextRow(
+        title: String,
+        text: String,
+        icon: String,
+        showsCheckInDate: Bool = false
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .foregroundStyle(TraiColors.brandAccent)
+                .frame(width: 32, height: 32)
+                .background(TraiColors.brandAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if showsCheckInDate, let promptDate = goal.lastCheckInPromptAt {
+                        Text(promptDate, format: .dateTime.month(.abbreviated).day())
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(6)
+            }
+        }
     }
 }
 
@@ -1691,6 +1748,7 @@ struct AddWorkoutGoalSheet: View {
     @State private var targetUnit: String
     @State private var periodUnit: WorkoutGoal.PeriodUnit = .week
     @State private var periodCountText = "1"
+    @State private var successCriteria = ""
     @State private var targetDateEnabled = false
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 42, to: Date()) ?? Date()
     @State private var checkInCadenceDaysText = ""
@@ -1738,6 +1796,7 @@ struct AddWorkoutGoalSheet: View {
         )
         _periodUnit = State(initialValue: existing.periodUnit ?? .week)
         _periodCountText = State(initialValue: existing.periodCount.map { "\($0)" } ?? "1")
+        _successCriteria = State(initialValue: existing.successCriteria)
         _targetDateEnabled = State(initialValue: existing.targetDate != nil)
         _targetDate = State(initialValue: existing.targetDate ?? Calendar.current.date(byAdding: .day, value: 42, to: Date()) ?? Date())
         _checkInCadenceDaysText = State(initialValue: existing.checkInCadenceDays.map { "\($0)" } ?? "")
@@ -1781,6 +1840,11 @@ struct AddWorkoutGoalSheet: View {
                             .font(.headline)
 
                         TextField("e.g. Send the blue V5 clean, Hold a 60 minute flow, Hit 225 on bench", text: $title)
+                            .padding(12)
+                            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+                        TextField("Success criteria", text: $successCriteria, axis: .vertical)
+                            .lineLimit(1...3)
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
 
@@ -1970,6 +2034,7 @@ struct AddWorkoutGoalSheet: View {
                             existing.periodCount = goalKind.usesPeriodTarget
                                 ? Int(periodCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1
                                 : nil
+                            existing.successCriteria = successCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
                             existing.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
                             existing.targetDate = targetDateEnabled ? targetDate : nil
                             existing.checkInCadenceDays = Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -1985,6 +2050,7 @@ struct AddWorkoutGoalSheet: View {
                                 targetUnit: goalKind.supportsNumericTarget ? targetUnit : "",
                                 periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
                                 periodCount: goalKind.usesPeriodTarget ? Int(periodCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1 : nil,
+                                successCriteria: successCriteria.trimmingCharacters(in: .whitespacesAndNewlines),
                                 notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
                                 targetDate: targetDateEnabled ? targetDate : nil,
                                 checkInCadenceDays: Int(checkInCadenceDaysText.trimmingCharacters(in: .whitespacesAndNewlines)),

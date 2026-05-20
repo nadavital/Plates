@@ -145,94 +145,140 @@ extension View {
 
 extension ProUpsellSource {
     var inlineTitle: String {
-        switch self {
-        case .chat:
-            "Unlock coach chat"
-        case .foodAnalysis:
-            "Unlock Trai food logging"
-        case .nutritionPlan:
-            "Unlock Trai plan coaching"
-        case .workoutPlan:
-            "Unlock workout coaching"
-        case .exerciseAnalysis:
-            "Unlock exercise analysis"
-        case .settings:
-            "Upgrade to Trai Pro"
-        }
+        offerContent.inlineTitle
     }
 
     var inlineMessage: String {
-        switch self {
-        case .chat:
-            "Talk with Trai about food, workouts, momentum, and next steps in one ongoing conversation."
-        case .foodAnalysis:
-            "Snap meals and get fast calorie and macro estimates when you want the quickest path to logging."
-        case .nutritionPlan:
-            "Have Trai build and refine your nutrition plan around your goals, routine, and progress."
-        case .workoutPlan:
-            "Build and refine workout plans around your schedule, goals, and available equipment."
-        case .exerciseAnalysis:
-            "Get instant exercise guidance, smarter setup help, and faster analysis when adding new movements."
-        case .settings:
-            "Unlock adaptive coaching, faster food logging, and personalized plans across the app."
-        }
+        offerContent.inlineMessage
     }
 
     var inlineSystemImage: String {
-        switch self {
-        case .chat:
-            "message.badge.waveform.fill"
-        case .foodAnalysis:
-            "fork.knife"
-        case .nutritionPlan:
-            "slider.horizontal.3"
-        case .workoutPlan:
-            "figure.strengthtraining.traditional"
-        case .exerciseAnalysis:
-            "dumbbell.fill"
-        case .settings:
-            "circle.hexagongrid.circle"
-        }
+        offerContent.inlineIconName
     }
 }
 
 struct ProUpsellInlineCard: View {
     let source: ProUpsellSource
+    var title: String? = nil
+    var message: String? = nil
+    var systemImage: String? = nil
     var actionTitle = "See Trai Pro"
     var isActionDisabled = false
+    var showsActionButton = true
+    var usesIconContainer = true
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        Group {
+            if showsActionButton {
+                cardContent
+            } else {
+                Button(action: action) {
+                    cardContent
+                }
+                .buttonStyle(.plain)
+                .disabled(isActionDisabled)
+                .opacity(isActionDisabled ? 0.62 : 1)
+            }
+        }
+    }
+
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: source.inlineSystemImage)
-                    .font(.headline)
-                    .foregroundStyle(TraiColors.brandAccent)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        TraiColors.brandAccent.opacity(0.10),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    )
+                iconView
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(source.inlineTitle)
-                        .font(.traiHeadline(18))
+                    HStack(spacing: 6) {
+                        Text("Trai Pro")
+                            .font(.caption.weight(.heavy))
+                            .foregroundStyle(TraiColors.brandAccent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.white.opacity(0.92), in: .capsule)
 
-                    Text(source.inlineMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+
+                    Text(resolvedTitle)
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(.white)
+
+                    Text(resolvedMessage)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.80))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
             }
 
-            Button(action: action) {
-                Text(actionTitle)
+            if showsActionButton {
+                Button(action: action) {
+                    HStack(spacing: 8) {
+                        Text(actionTitle)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                    }
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(TraiColors.brandAccent)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 14)
                     .frame(maxWidth: .infinity)
+                    .background(.white.opacity(0.92), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .disabled(isActionDisabled)
+                .opacity(isActionDisabled ? 0.62 : 1)
+            } else {
+                HStack(spacing: 8) {
+                    Text(actionTitle)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                }
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white.opacity(0.88))
             }
-            .buttonStyle(.traiSecondary(color: TraiColors.brandAccent, fullWidth: true, fillOpacity: 0.12))
-            .disabled(isActionDisabled)
         }
+        .padding(16)
+        .background(TraiColors.brandGradient, in: .rect(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+        }
+        .shadow(color: TraiColors.brandAccent.opacity(0.18), radius: 16, x: 0, y: 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        if usesIconContainer {
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.16))
+
+                Image(systemName: resolvedSystemImage)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 42, height: 42)
+        } else {
+            Image(systemName: resolvedSystemImage)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 38)
+        }
+    }
+
+    private var resolvedTitle: String {
+        title ?? source.inlineTitle
+    }
+
+    private var resolvedMessage: String {
+        message ?? source.inlineMessage
+    }
+
+    private var resolvedSystemImage: String {
+        systemImage ?? "circle.hexagongrid.circle.fill"
     }
 }

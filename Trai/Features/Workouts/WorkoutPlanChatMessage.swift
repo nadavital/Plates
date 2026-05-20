@@ -37,6 +37,15 @@ struct WorkoutPlanFlowMessage: Identifiable {
         /// Existing saved plan shown as the starting point for editing
         case currentPlan(WorkoutPlan, String)
 
+        /// Goals Trai created alongside a generated onboarding plan
+        case generatedGoals([WorkoutGoal])
+
+        /// Saves the generated onboarding plan and goals together
+        case saveGeneratedPlan
+
+        /// Compact placeholder for the previous plan while Trai is refining it
+        case planUpdateInProgress(WorkoutPlan)
+
         /// Plan was accepted
         case planAccepted
 

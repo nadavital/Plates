@@ -59,6 +59,39 @@ struct AnimatedGradientBackground: View {
     }
 }
 
+// MARK: - Onboarding Background
+
+struct OnboardingAmbientBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            Color(.systemBackground)
+
+            LinearGradient(
+                colors: [
+                    TraiColors.coral.opacity(colorScheme == .dark ? 0.08 : 0.18),
+                    TraiColors.flame.opacity(colorScheme == .dark ? 0.05 : 0.12),
+                    Color(.systemBackground).opacity(0.92)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            LinearGradient(
+                colors: [
+                    Color(.systemBackground).opacity(0.15),
+                    Color(.systemBackground).opacity(0.65),
+                    Color(.systemBackground)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+    }
+}
+
 // MARK: - Section Header
 
 struct OnboardingSectionHeader: View {
@@ -93,6 +126,61 @@ struct GlassCard<Content: View>: View {
             .padding()
             .background(.ultraThinMaterial)
             .clipShape(.rect(cornerRadius: 20))
+            .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
+    }
+}
+
+// MARK: - Tinted Onboarding Glass
+
+private struct OnboardingTintedGlassModifier: ViewModifier {
+    let tint: Color
+    let isSelected: Bool
+    let cornerRadius: CGFloat
+    let isInteractive: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .glassEffect(
+                isInteractive
+                    ? .regular.tint(tint.opacity(isSelected ? 0.62 : 0.28)).interactive()
+                    : .regular.tint(tint.opacity(isSelected ? 0.46 : 0.18)),
+                in: .rect(cornerRadius: cornerRadius)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(isSelected ? 0.42 : 0.18), lineWidth: isSelected ? 1.5 : 1)
+            }
+            .shadow(
+                color: isSelected ? tint.opacity(0.14) : .black.opacity(0.03),
+                radius: isSelected ? 10 : 5,
+                y: isSelected ? 5 : 3
+            )
+    }
+}
+
+extension View {
+    func onboardingTintedGlass(
+        tint: Color,
+        isSelected: Bool = false,
+        cornerRadius: CGFloat = 18,
+        isInteractive: Bool = false
+    ) -> some View {
+        modifier(
+            OnboardingTintedGlassModifier(
+                tint: tint,
+                isSelected: isSelected,
+                cornerRadius: cornerRadius,
+                isInteractive: isInteractive
+            )
+        )
+    }
+
+    func onboardingTraiResponseCard(cornerRadius: CGFloat = 18) -> some View {
+        padding(14)
+            .glassEffect(
+                .regular,
+                in: .rect(cornerRadius: cornerRadius)
+            )
             .shadow(color: .black.opacity(0.05), radius: 10, y: 5)
     }
 }
@@ -196,6 +284,83 @@ struct SelectionCard<Content: View>: View {
     }
 }
 
+// MARK: - Reusable Onboarding Choice Card
+
+struct OnboardingChoiceCard: View {
+    let title: String
+    var hint: String?
+    let iconName: String
+    let tint: Color
+    let isSelected: Bool
+    var minHeight: CGFloat = 112
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            HapticManager.cardSelected()
+            action()
+        } label: {
+            VStack(spacing: 8) {
+                ZStack {
+                    if isSelected {
+                        Circle()
+                            .fill(tint.opacity(0.3))
+                            .frame(width: 52, height: 52)
+                            .blur(radius: 8)
+                    }
+
+                    Circle()
+                        .fill(tint.opacity(isSelected ? 0.95 : 0.78))
+                        .frame(width: 46, height: 46)
+
+                    Image(systemName: iconName)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white)
+                        .scaleEffect(isSelected ? 1.08 : 1)
+                }
+
+                VStack(spacing: 3) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let hint, !hint.isEmpty {
+                        Text(hint)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.82)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: minHeight)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 12)
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .background(.thinMaterial, in: Circle())
+                        .padding(10)
+                }
+            }
+            .onboardingTintedGlass(
+                tint: tint,
+                isSelected: isSelected,
+                cornerRadius: 18,
+                isInteractive: true
+            )
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.72), value: isSelected)
+    }
+}
+
 // MARK: - Animated Icon
 
 struct AnimatedIcon: View {
@@ -291,7 +456,10 @@ struct OnboardingChip: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                if let icon {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                } else if let icon {
                     Image(systemName: icon)
                         .font(.caption)
                 }
@@ -301,14 +469,16 @@ struct OnboardingChip: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(isSelected ? Color.accentColor : Color(.tertiarySystemBackground))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .clipShape(.capsule)
+            .foregroundStyle(isSelected ? Color.accentColor : .primary)
+            .glassEffect(
+                .regular.tint(Color.accentColor.opacity(isSelected ? 0.24 : 0.08)).interactive(),
+                in: .capsule
+            )
             .overlay(
                 Capsule()
                     .strokeBorder(
-                        isSelected ? Color.clear : Color.gray.opacity(0.3),
-                        lineWidth: 1
+                        isSelected ? Color.accentColor.opacity(0.55) : Color.white.opacity(0.22),
+                        lineWidth: isSelected ? 1.4 : 1
                     )
             )
         }

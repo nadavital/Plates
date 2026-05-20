@@ -407,7 +407,15 @@ struct LiveWorkoutView: View {
 
                     // Exercise cards - different UI for strength vs cardio
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        if entry.isCardio {
+                        if entry.isGeneralActivity {
+                            GeneralActivityCard(
+                                entry: entry,
+                                onUpdateNotes: { viewModel.updateEntryNotes(for: entry, notes: $0) },
+                                onUpdateDuration: { viewModel.updateEntryDuration(for: entry, seconds: $0) },
+                                onToggleComplete: { viewModel.toggleGeneralEntryCompletion(for: entry) },
+                                onDelete: { viewModel.removeExercise(at: index) }
+                            )
+                        } else if entry.isCardio {
                             CardioExerciseCard(
                                 entry: entry,
                                 onUpdateDuration: { seconds in

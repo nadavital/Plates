@@ -11,7 +11,7 @@ import Charts
 /// A line chart showing calorie or macro trends over time.
 struct NutritionTrendChart: View {
     let data: [TrendsService.DailyNutrition]
-    let goal: Int
+    let goal: Int?
     let valueKeyPath: KeyPath<TrendsService.DailyNutrition, Double>
     let title: String
     let color: Color
@@ -19,7 +19,7 @@ struct NutritionTrendChart: View {
 
     init(
         data: [TrendsService.DailyNutrition],
-        goal: Int,
+        goal: Int?,
         metric: NutritionMetric,
         title: String? = nil
     ) {
@@ -137,16 +137,17 @@ struct NutritionTrendChart: View {
                         }
                     }
 
-                    // Goal line
-                    RuleMark(y: .value("Goal", goal))
-                        .foregroundStyle(.green.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
-                        .annotation(position: .top, alignment: .trailing) {
-                            Text("Goal")
-                                .font(.caption2)
-                                .foregroundStyle(.green)
-                                .padding(.horizontal, 4)
-                        }
+                    if let goal {
+                        RuleMark(y: .value("Goal", goal))
+                            .foregroundStyle(.green.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
+                            .annotation(position: .top, alignment: .trailing) {
+                                Text("Goal")
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                                    .padding(.horizontal, 4)
+                            }
+                    }
                 }
                 .frame(height: 150)
                 .chartYAxis {

@@ -11,6 +11,7 @@ struct WorkoutPlanDecisionView: View {
     let hasWorkoutPlan: Bool
     let workoutPlan: WorkoutPlan?
     let onCreatePlan: () -> Void
+    let onSkipPlan: () -> Void
 
     @State private var headerVisible = false
     @State private var contentVisible = false
@@ -22,13 +23,13 @@ struct WorkoutPlanDecisionView: View {
                 VStack(spacing: 16) {
                     TraiLensView(size: 60, state: .idle, palette: .energy)
 
-                    Text(hasWorkoutPlan ? "Your Workout Plan is Ready!" : "One More Thing...")
+                    Text(hasWorkoutPlan ? "Your Workout Plan is Ready!" : "Set Up Workouts")
                         .font(.traiBold(28))
                         .multilineTextAlignment(.center)
 
                     Text(hasWorkoutPlan
                          ? "Review your personalized workout plan below."
-                         : "Would you like Trai to create a personalized workout plan for you?")
+                         : "Choose how you want to start training in Trai.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -55,29 +56,23 @@ struct WorkoutPlanDecisionView: View {
                     .offset(y: contentVisible ? 0 : 20)
                     .opacity(contentVisible ? 1 : 0)
                 } else {
-                    // Create plan button
-                    Button {
-                        HapticManager.lightTap()
-                        onCreatePlan()
-                    } label: {
-                        HStack(spacing: 12) {
-                            TraiLensIcon(size: 22, palette: .energy)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Create Workout Plan")
-                                    .font(.headline)
-                                Text("Personalized to your goals")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .traiCard(cornerRadius: 16, contentPadding: 0)
+                    VStack(spacing: 12) {
+                        workoutChoiceCard(
+                            icon: "sparkles",
+                            title: "Create Workout Plan",
+                            subtitle: "Build a personalized weekly plan",
+                            tint: .accentColor,
+                            action: onCreatePlan
+                        )
+
+                        workoutChoiceCard(
+                            icon: "figure.strengthtraining.traditional",
+                            title: "Track Workouts Only",
+                            subtitle: "Log sessions and decide on a plan later",
+                            tint: .secondary,
+                            action: onSkipPlan
+                        )
                     }
-                    .buttonStyle(.plain)
                     .offset(y: contentVisible ? 0 : 20)
                     .opacity(contentVisible ? 1 : 0)
 
@@ -138,9 +133,10 @@ struct WorkoutPlanDecisionView: View {
                         Text(template.name)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                        Text("\(template.exercises.count) exercises")
+                        Text(template.primaryBlockSummary.isEmpty ? template.displayWorkloadSummary : template.primaryBlockSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
 
                     Spacer()
@@ -157,12 +153,51 @@ struct WorkoutPlanDecisionView: View {
             }
         }
     }
+
+    private func workoutChoiceCard(
+        icon: String,
+        title: String,
+        subtitle: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            HapticManager.lightTap()
+            action()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.headline)
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(tint.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .traiCard(cornerRadius: 16, contentPadding: 0)
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 #Preview("No Plan") {
     WorkoutPlanDecisionView(
         hasWorkoutPlan: false,
         workoutPlan: nil,
-        onCreatePlan: {}
+        onCreatePlan: {},
+        onSkipPlan: {}
     )
 }

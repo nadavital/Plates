@@ -44,12 +44,13 @@ enum TraiCoachPatternService {
 
         let workoutWindowScores = normalizedScores(from: workoutBucketCounts, total: workoutDatesInWindow.count)
         let mealWindowScores = normalizedScores(from: mealBucketCounts, total: windowFoodEntries.count)
-        let commonProteinAnchors = topProteinAnchors(entries: windowFoodEntries, proteinGoal: profile?.dailyProteinGoal)
+        let proteinGoal = profile?.dailyProteinGoal
+        let commonProteinAnchors = topProteinAnchors(entries: windowFoodEntries, proteinGoal: proteinGoal)
 
         let adherenceContext = buildAdherenceContext(
             entries: windowFoodEntries,
             workoutsInWindow: Array(workoutDatesInWindow),
-            proteinGoal: profile?.dailyProteinGoal
+            proteinGoal: proteinGoal
         )
 
         let behaviorActionAffinity = buildActionAffinity(from: windowBehaviorEvents)
@@ -177,8 +178,7 @@ enum TraiCoachPatternService {
         proteinGoal: Int?
     ) -> AdherenceContext {
         let calendar = Calendar.current
-        let proteinTarget = Double(max(proteinGoal ?? 140, 1))
-        let proteinHitThreshold = proteinTarget * 0.8
+        let proteinTarget = proteinGoal.map { Double(max($0, 1)) }
 
         var entriesByDay: [Date: [FoodEntry]] = [:]
         for entry in entries {
@@ -198,7 +198,7 @@ enum TraiCoachPatternService {
             let weekday = calendar.component(.weekday, from: day)
             var stat = weekdayStats[weekday] ?? (0, 0)
             stat.total += 1
-            if protein >= proteinHitThreshold {
+            if let proteinTarget, protein >= proteinTarget * 0.8 {
                 stat.hits += 1
                 proteinHitDays += 1
             }
@@ -211,7 +211,7 @@ enum TraiCoachPatternService {
         }
 
         let proteinHitRate = uniqueLoggedDays > 0 ? Double(proteinHitDays) / Double(uniqueLoggedDays) : 0
-        if proteinHitRate < 0.45 && uniqueLoggedDays >= 4 {
+        if proteinGoal != nil && proteinHitRate < 0.45 && uniqueLoggedDays >= 4 {
             notes.append("Protein target is often missed")
         }
 

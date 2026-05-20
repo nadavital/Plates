@@ -12,7 +12,15 @@ struct EditFoodEntrySheet: View {
     @Bindable var entry: FoodEntry
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.appTabSelection) private var appTabSelection
+    @Environment(MonetizationService.self) private var monetizationService: MonetizationService?
+    @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
+    @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage(SharedStorageKeys.Chat.pendingFocusedFoodEntryId) private var pendingFocusedFoodEntryId: String = ""
     @Query private var profiles: [UserProfile]
+
+    let onAskTrai: ((String, AIService.FocusedFoodEntryContext) -> Void)?
 
     @State private var name: String
     @State private var caloriesText: String
@@ -34,8 +42,9 @@ struct EditFoodEntrySheet: View {
         MacroType.displayOrder.filter { enabledMacros.contains($0) }
     }
 
-    init(entry: FoodEntry) {
+    init(entry: FoodEntry, onAskTrai: ((String, AIService.FocusedFoodEntryContext) -> Void)? = nil) {
         self.entry = entry
+        self.onAskTrai = onAskTrai
         _name = State(initialValue: entry.name)
         _caloriesText = State(initialValue: String(entry.calories))
         _proteinText = State(initialValue: String(format: "%.1f", entry.proteinGrams))
@@ -64,6 +73,8 @@ struct EditFoodEntrySheet: View {
                         }
                         .traiCard(cornerRadius: 16)
                     }
+
+                    askTraiCard
 
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -158,6 +169,47 @@ struct EditFoodEntrySheet: View {
                 }
             }
         }
+        .proUpsellPresenter()
+        .traiSheetBranding()
+    }
+
+    private var canAccessTraiChat: Bool {
+        monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var askTraiCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    .font(.headline)
+                    .foregroundStyle(.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.14), in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Ask Trai")
+                        .font(.traiHeadline())
+                    Text(entry.name)
+                        .font(.traiLabel(12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Button {
+                askTraiAboutMeal()
+            } label: {
+                HStack {
+                    Image(systemName: canAccessTraiChat ? "sparkles" : "lock.fill")
+                    Text(canAccessTraiChat ? "Talk About This Meal" : "Unlock Trai Coaching")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.traiSecondary(color: .accentColor, fullWidth: true, fillOpacity: 0.14))
+        }
+        .traiCard(cornerRadius: 16)
     }
 
     private func sectionTitle(_ title: String, icon: String) -> some View {
@@ -203,6 +255,31 @@ struct EditFoodEntrySheet: View {
         WidgetDataProvider.shared.scheduleRefresh()
         HapticManager.success()
         dismiss()
+    }
+
+    private func askTraiAboutMeal() {
+        guard canAccessTraiChat else {
+            proUpsellCoordinator?.present(source: .chat)
+            HapticManager.lightTap()
+            return
+        }
+
+        let prompt = entry.traiMealReviewPrompt
+        if let onAskTrai {
+            dismiss()
+            DispatchQueue.main.async {
+                onAskTrai(prompt, entry.focusedChatContext)
+            }
+        } else {
+            pendingChatPrompt = prompt
+            pendingChatLaunchLabel = "Opening this meal with Trai..."
+            pendingFocusedFoodEntryId = entry.id.uuidString
+            dismiss()
+            DispatchQueue.main.async {
+                appTabSelection.wrappedValue = .trai
+            }
+        }
+        HapticManager.selectionChanged()
     }
 }
 

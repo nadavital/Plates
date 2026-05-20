@@ -41,6 +41,7 @@ struct WorkoutsView: View {
     @EnvironmentObject private var activeWorkoutRuntimeState: ActiveWorkoutRuntimeState
     @AppStorage(SharedStorageKeys.Chat.pendingPrompt) private var pendingChatPrompt: String = ""
     @AppStorage(SharedStorageKeys.Chat.pendingLaunchLabel) private var pendingChatLaunchLabel: String = ""
+    @AppStorage("pendingWorkoutPlanSetupRequest") private var pendingWorkoutPlanSetupRequest = false
 
     // MARK: - Services
 
@@ -56,10 +57,13 @@ struct WorkoutsView: View {
     @State private var cachedLiveWorkoutsByDate: [(date: Date, workouts: [LiveWorkout])] = []
     @State private var suggestedWorkoutGoals: [WorkoutGoalSuggestion] = []
     @State private var celebratedWorkoutGoal: WorkoutGoal?
+    @State private var standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+    @State private var standardWorkoutPlanAIService = AIService()
 
     // MARK: - Sheet States
 
     @State private var showingPlanSetup = false
+    @State private var showingStandardPlanSetup = false
     @State private var showingMuscleRecoveryDetail = false
     @State private var showingWorkoutDetail: WorkoutSession?
     @State private var showingLiveWorkoutDetail: LiveWorkout?
@@ -165,6 +169,20 @@ struct WorkoutsView: View {
 
     private var canAccessAIFeatures: Bool {
         monetizationService?.canAccessAIFeatures ?? true
+    }
+
+    private var standardWorkoutPlanSetupContext: OnboardingWorkoutPlanUserContext {
+        let profile = userProfile
+        return OnboardingWorkoutPlanUserContext(
+            name: profile?.name ?? "User",
+            age: profile?.age ?? 30,
+            gender: profile?.genderValue ?? .notSpecified,
+            goal: profile?.goal ?? .maintenance,
+            activityLevel: profile?.activityLevelValue ?? .moderate,
+            nutritionContext: OnboardingWorkoutPlanUserContext.nutritionContext(from: profile),
+            memoryContext: workoutGoalMemoryContext(),
+            activeWorkoutGoalContext: OnboardingWorkoutPlanUserContext.activeGoalContext(from: activeWorkoutGoals)
+        )
     }
 
     private var activeWorkoutGoals: [WorkoutGoal] {
@@ -295,9 +313,19 @@ struct WorkoutsView: View {
                         recommendedTemplateId: recommendedTemplateId,
                         onStartTemplate: startWorkoutFromTemplate,
                         onStartCustomWorkout: { showingCustomWorkoutSetup = true },
-                        onCreatePlan: workoutPlan == nil ? { showingPlanSetup = true } : nil,
+                        onCreatePlan: workoutPlan == nil ? { showingStandardPlanSetup = true } : nil,
                         onEditPlan: workoutPlan != nil ? { showingPlanSetup = true } : nil
                     )
+
+                    if workoutPlan != nil, !canAccessAIFeatures {
+                        ProUpsellInlineCard(
+                            source: .workoutPlan,
+                            actionTitle: "Unlock Pro Coaching",
+                            action: {
+                                proUpsellCoordinator?.present(source: .workoutPlan)
+                            }
+                        )
+                    }
 
                     WorkoutsQuickActionsRow(
                         onPersonalRecords: { showingPersonalRecords = true },
@@ -352,6 +380,10 @@ struct WorkoutsView: View {
                 seedHistoryCachesFromCurrentQueriesIfNeeded()
                 schedulePendingRefreshesIfNeeded()
                 scheduleCloudKitHistoryReconciliationIfNeeded()
+                consumePendingWorkoutPlanSetupRequest()
+            }
+            .onChange(of: pendingWorkoutPlanSetupRequest) { _, _ in
+                consumePendingWorkoutPlanSetupRequest()
             }
             .onChange(of: workoutPlan) {
                 markRecoveryRefreshNeeded(delayMilliseconds: 140)
@@ -393,6 +425,17 @@ struct WorkoutsView: View {
             .sheet(isPresented: $showingPlanSetup) {
                 WorkoutPlanChatFlow(currentPlanToEdit: workoutPlan)
                     .traiSheetBranding()
+            }
+            .sheet(isPresented: $showingStandardPlanSetup) {
+                WorkoutPlanSetupChoiceFlow(
+                    draft: $standardWorkoutPlanDraft,
+                    context: standardWorkoutPlanSetupContext,
+                    aiService: standardWorkoutPlanAIService,
+                    canAccessAIFeatures: canAccessAIFeatures,
+                    onComplete: saveStandardWorkoutPlan,
+                    onBack: { showingStandardPlanSetup = false }
+                )
+                .traiSheetBranding()
             }
             .sheet(isPresented: $showingPersonalRecords) {
                 PersonalRecordsView()
@@ -973,6 +1016,63 @@ struct WorkoutsView: View {
         HapticManager.selectionChanged()
     }
 
+    private func consumePendingWorkoutPlanSetupRequest() {
+        guard pendingWorkoutPlanSetupRequest else { return }
+        pendingWorkoutPlanSetupRequest = false
+
+        showingStandardPlanSetup = true
+        HapticManager.selectionChanged()
+    }
+
+    private func saveStandardWorkoutPlan(
+        _ plan: WorkoutPlan,
+        generatedGoals: [WorkoutGoal],
+        mode: WorkoutPlanSetupMode,
+        draftSnapshot: OnboardingWorkoutPlanDraft
+    ) {
+        guard let profile = userProfile else { return }
+        let hadExistingPlan = profile.workoutPlan != nil
+
+        WorkoutPlanHistoryService.archiveCurrentPlanIfExists(
+            profile: profile,
+            reason: .chatAdjustment,
+            modelContext: modelContext,
+            replacingWith: plan
+        )
+
+        profile.workoutPlan = plan
+        draftSnapshot.applyPreferences(to: profile, generatedPlan: plan)
+
+        if mode == .proAI {
+            insertGeneratedWorkoutGoals(generatedGoals)
+        }
+
+        if !hadExistingPlan {
+            WorkoutPlanHistoryService.archivePlan(
+                plan,
+                profile: profile,
+                reason: .chatCreate,
+                modelContext: modelContext
+            )
+        }
+
+        try? modelContext.save()
+        standardWorkoutPlanDraft = OnboardingWorkoutPlanDraft()
+        showingStandardPlanSetup = false
+        HapticManager.success()
+
+    }
+
+    private func insertGeneratedWorkoutGoals(_ goals: [WorkoutGoal]) {
+        var existingTitles = Set(activeWorkoutGoals.map { $0.trimmedTitle.lowercased() })
+        for goal in goals {
+            let titleKey = goal.trimmedTitle.lowercased()
+            guard !titleKey.isEmpty, !existingTitles.contains(titleKey) else { continue }
+            modelContext.insert(goal)
+            existingTitles.insert(titleKey)
+        }
+    }
+
     private func persistCachedGoalSuggestionSnapshot(_ suggestions: [WorkoutGoalSuggestion]) {
         let snapshot = CachedGoalSuggestionSnapshot(generatedAt: Date(), suggestions: suggestions)
         guard let data = try? JSONEncoder().encode(snapshot),
@@ -1141,7 +1241,11 @@ struct WorkoutsView: View {
             return
         }
 
-        let workout = templateService.createStartWorkout(from: template)
+        let workout = templateService.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: workoutPlan?.progressionStrategy ?? .defaultStrategy,
+            modelContext: modelContext
+        )
         _ = templateService.persistWorkout(workout, modelContext: modelContext)
         BehaviorTracker(modelContext: modelContext).record(
             actionKey: BehaviorActionKey.startWorkout,

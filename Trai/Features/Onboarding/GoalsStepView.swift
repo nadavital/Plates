@@ -9,45 +9,32 @@ struct GoalsStepView: View {
     @Binding var selectedGoal: UserProfile.GoalType?
     @Binding var additionalNotes: String
 
-    /// Filtered goals (6 instead of 7 - removed "health" as too generic)
     private var availableGoals: [UserProfile.GoalType] {
         [.loseWeight, .loseFat, .buildMuscle, .recomposition, .maintenance, .performance]
     }
 
     @State private var headerVisible = false
     @State private var goalsVisible = false
-    @State private var notesVisible = false
-    @FocusState private var isNotesFocused: Bool
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 24) {
-                    headerSection
-                        .padding(.top, 16)
+        ScrollView {
+            VStack(spacing: 18) {
+                headerSection
+                    .padding(.top, 12)
 
-                    goalsSection
-                        .offset(y: goalsVisible ? 0 : 30)
+                goalsSection
+                    .offset(y: goalsVisible ? 0 : 24)
+                    .opacity(goalsVisible ? 1 : 0)
+
+                if selectedGoal != nil {
+                    selectedGoalResponse
                         .opacity(goalsVisible ? 1 : 0)
-
-                    notesSection
-                        .id("notesSection")
-                        .offset(y: notesVisible ? 0 : 30)
-                        .opacity(notesVisible ? 1 : 0)
-                        .padding(.bottom, 140) // Space for floating button
-                }
-                .padding(.horizontal, 20)
-            }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
-            .onChange(of: isNotesFocused, initial: false) { _, focused in
-                if focused {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        proxy.scrollTo("notesSection", anchor: .center)
-                    }
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 140)
         }
+        .scrollIndicators(.hidden)
         .onAppear {
             startEntranceAnimations()
         }
@@ -60,42 +47,27 @@ struct GoalsStepView: View {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.15)) {
             goalsVisible = true
         }
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.75).delay(0.3)) {
-            notesVisible = true
-        }
     }
 
-    // MARK: - Header
-
     private var headerSection: some View {
-        VStack(spacing: 12) {
-            TraiLensView(size: 54, state: .idle, palette: .energy)
-                .scaleEffect(headerVisible ? 1 : 0.8)
-
-            Text("Your Goals")
-                .font(.traiBold(28))
-
-            Text("What would you like to achieve?")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            Text("Choose `Build Muscle` if you want to intentionally gain scale weight. Choose `Recomposition` if you want to stay closer to the same weight while getting leaner and stronger.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
-        }
+        OnboardingTraiHeader(
+            title: "Choose your goal.",
+            lensSize: 52
+        )
         .opacity(headerVisible ? 1 : 0)
         .offset(y: headerVisible ? 0 : -20)
     }
 
-    // MARK: - Goals Section
-
     private var goalsSection: some View {
+        GlassEffectContainer(spacing: 12) {
+            goalGrid
+        }
+    }
+
+    private var goalGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             ForEach(availableGoals) { goal in
-                GoalCardWithDescription(
+                GoalCard(
                     goal: goal,
                     isSelected: selectedGoal == goal
                 ) {
@@ -108,78 +80,38 @@ struct GoalsStepView: View {
         }
     }
 
-    // MARK: - Notes Section
+    private var selectedGoalResponse: some View {
+        HStack(alignment: .top) {
+            Text(selectedGoal.map(responseText) ?? "")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-    private var notesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Label("Anything else?", systemImage: "sparkles")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.accent)
-
-                    Spacer()
-
-                    Text("optional")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(.tertiarySystemBackground))
-                        .clipShape(.capsule)
-                }
-
-                Text("Dietary preferences, medical conditions, injuries, or specific needs")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            TextEditor(text: $additionalNotes)
-                .font(.body)
-                .frame(minHeight: 80)
-                .padding(12)
-                .scrollContentBackground(.hidden)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(.rect(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(
-                            isNotesFocused ? Color.accentColor : Color.clear,
-                            lineWidth: 2
-                        )
-                )
-                .focused($isNotesFocused)
-                .onChange(of: isNotesFocused, initial: false) { _, focused in
-                    if focused {
-                        HapticManager.lightTap()
-                    }
-                }
-                .overlay(alignment: .topLeading) {
-                    if additionalNotes.isEmpty && !isNotesFocused {
-                        Text("e.g., I'm vegetarian, have PCOS, training for a marathon...")
-                            .font(.body)
-                            .foregroundStyle(.tertiary)
-                            .padding(16)
-                            .allowsHitTesting(false)
-                    }
-                }
+            Spacer(minLength: 0)
         }
-        .traiCard(cornerRadius: 18)
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(
-                    isNotesFocused ? Color.accentColor.opacity(0.3) : Color.clear,
-                    lineWidth: 1.5
-                )
-        )
-        .shadow(
-            color: isNotesFocused ? Color.accentColor.opacity(0.1) : Color.clear,
-            radius: 12,
-            y: 4
-        )
-        .animation(.spring(response: 0.3), value: isNotesFocused)
+        .onboardingTraiResponseCard()
+        .animation(.smooth(duration: 0.3), value: selectedGoal)
     }
+
+    private func responseText(for goal: UserProfile.GoalType) -> String {
+        switch goal {
+        case .loseWeight:
+            return "I’ll start with a steady deficit so weight trends down without making the target feel extreme."
+        case .loseFat:
+            return "I’ll keep protein higher and create a gradual deficit, so the focus is fat loss while protecting muscle."
+        case .buildMuscle:
+            return "I’ll bias your plan toward muscle growth, which usually means intentionally gaining some scale weight. If you want to stay closer to your current weight, recomposition may fit better."
+        case .recomposition:
+            return "I’ll keep you closer to maintenance while prioritizing strength and protein, so the focus is getting leaner and stronger without chasing scale gain."
+        case .maintenance:
+            return "I’ll aim for consistency and steady energy without pushing your weight up or down."
+        case .performance:
+            return "I’ll prioritize enough fuel for training, recovery, and better output instead of a strict weight-change target."
+        case .health:
+            return "I’ll build a balanced starting point for everyday nutrition."
+        }
+    }
+
 }
 
 #Preview {

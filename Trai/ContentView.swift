@@ -51,7 +51,7 @@ struct ContentView: View {
     }
 
     private var hasCompletedOnboarding: Bool {
-        AppLaunchArguments.isUITesting
+        (AppLaunchArguments.isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest)
             || cachedOnboardingReady
             || !completedProfiles.isEmpty
     }
@@ -59,7 +59,8 @@ struct ContentView: View {
     /// Fast query-backed readiness used for first paint.
     /// Cached readiness is validated in `runStartupFlow()`.
     private var hasCompletedOnboardingFromQuery: Bool {
-        AppLaunchArguments.isUITesting || !completedProfiles.isEmpty
+        (AppLaunchArguments.isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest)
+            || !completedProfiles.isEmpty
     }
 
     var body: some View {
@@ -95,7 +96,7 @@ struct ContentView: View {
 
     @MainActor
     private func runStartupFlow() async {
-        guard !AppLaunchArguments.isUITesting else { return }
+        guard !AppLaunchArguments.isUITesting || AppLaunchArguments.shouldRunOnboardingFlowUITest else { return }
 
         let interval = PerformanceTrace.begin("content_startup_flow", category: .launch)
         defer { PerformanceTrace.end("content_startup_flow", interval, category: .launch) }

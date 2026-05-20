@@ -136,6 +136,13 @@ private struct FeaturedStartWorkoutCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+
+                    if !template.primaryBlockSummary.isEmpty {
+                        Text(template.primaryBlockSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -249,7 +256,7 @@ private struct StartWorkoutCreatePlanCard: View {
                         .font(.traiHeadline(16))
                         .foregroundStyle(.primary)
 
-                    Text("Let Trai build sessions around your goals and preferred workout styles.")
+                    Text("Set up a week you can start now, then unlock Trai Pro when you want coaching and adjustments over time.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)

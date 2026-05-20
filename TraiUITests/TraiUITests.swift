@@ -442,6 +442,43 @@ final class TraiUITests: XCTestCase {
         )
     }
 
+    func testOnboardingCriticalFlowCompletesIntoDashboard() {
+        let app = makeOnboardingApp()
+        app.launch()
+
+        completeSharedOnboardingFields(in: app, goalLabel: "Maintain")
+
+        XCTAssertTrue(app.staticTexts["Your Plan is Ready"].waitForExistence(timeout: 12))
+        tapOnboardingPrimaryButton(in: app)
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Finish setting up Trai"].waitForExistence(timeout: 5))
+    }
+
+    func testOnboardingGuidedNutritionShowsFreeUserProChoiceAndStandardFallback() {
+        let app = makeOnboardingApp(extraArguments: ["--ui-test-free-plan"])
+        app.launch()
+
+        completeSharedOnboardingFields(in: app, goalLabel: "Maintain")
+
+        XCTAssertTrue(app.staticTexts["Plans that adjust as you log, train, and make progress."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Continue with Trai Pro"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Continue without Pro"].exists)
+    }
+
+    func testPostOnboardingChecklistOffersWorkoutAndHealthSetupForExistingPro() {
+        let app = makeOnboardingApp(extraArguments: ["--ui-test-pro-plan"])
+        app.launch()
+
+        completeSharedOnboardingFields(in: app, goalLabel: "Maintain")
+
+        XCTAssertTrue(app.staticTexts["Your Plan is Ready"].waitForExistence(timeout: 12))
+        tapOnboardingPrimaryButton(in: app)
+
+        XCTAssertTrue(app.staticTexts["Finish setting up Trai"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Create a workout plan"].exists)
+        XCTAssertTrue(app.buttons["Connect Apple Health"].exists)
+    }
+
     private func makeApp(
         extraArguments: [String] = [],
         includeUITestMode: Bool = true
@@ -453,6 +490,79 @@ final class TraiUITests: XCTestCase {
             app.launchArguments = ["--use-persistent-store", "--disable-tab-prewarm"] + extraArguments
         }
         return app
+    }
+
+    private func makeOnboardingApp(extraArguments: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "UITEST_MODE",
+            "--ui-test-onboarding-flow",
+            "--use-in-memory-store",
+            "--disable-tab-prewarm"
+        ] + extraArguments
+        return app
+    }
+
+    private func completeSharedOnboardingFields(
+        in app: XCUIApplication,
+        goalLabel: String
+    ) {
+        XCTAssertTrue(app.staticTexts["Trai"].waitForExistence(timeout: 12))
+        let welcomeButton = app.buttons["Get Started"]
+        XCTAssertTrue(welcomeButton.waitForExistence(timeout: 5))
+        welcomeButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Choose your goal."].waitForExistence(timeout: 5))
+        let goalButton = button(containing: goalLabel, in: app)
+        XCTAssertTrue(goalButton.waitForExistence(timeout: 5))
+        goalButton.tap()
+        tapOnboardingPrimaryButton(in: app)
+
+        XCTAssertTrue(app.staticTexts["Enter your basics."].waitForExistence(timeout: 5))
+        let heightField = app.textFields["onboardingHeightField"]
+        XCTAssertTrue(heightField.waitForExistence(timeout: 5))
+        typeTextIfNeeded("170", in: heightField, app: app)
+
+        let weightField = app.textFields["onboardingCurrentWeightField"]
+        if !weightField.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(weightField.waitForExistence(timeout: 5))
+        typeTextIfNeeded("155", in: weightField, app: app)
+        tapOnboardingPrimaryButton(in: app)
+
+        XCTAssertTrue(app.staticTexts["Choose your activity level."].waitForExistence(timeout: 5))
+        let activityButton = button(containing: "Moderately Active", in: app)
+        XCTAssertTrue(activityButton.waitForExistence(timeout: 5))
+        activityButton.tap()
+        tapOnboardingPrimaryButton(in: app)
+
+    }
+
+    private func button(containing label: String, in app: XCUIApplication) -> XCUIElement {
+        app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", label))
+            .firstMatch
+    }
+
+    private func typeTextIfNeeded(_ text: String, in field: XCUIElement, app: XCUIApplication) {
+        let currentValue = field.value as? String ?? ""
+        guard !currentValue.contains(text) else { return }
+        if !field.isHittable {
+            app.swipeUp()
+        }
+        field.tap()
+        field.typeText(text)
+    }
+
+    private func tapOnboardingPrimaryButton(in app: XCUIApplication) {
+        let button = app.buttons["onboardingPrimaryButton"]
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        if !button.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(button.isEnabled)
+        button.tap()
     }
 
     private func ensurePersistentStoreProfileForRealDataTests() {

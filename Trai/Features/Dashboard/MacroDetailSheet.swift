@@ -36,13 +36,15 @@ struct MacroDetailSheet: View {
     }
 
     private var macroGoals: [MacroType: Int] {
-        [
-            .protein: proteinGoal,
-            .carbs: carbsGoal,
-            .fat: fatGoal,
-            .fiber: fiberGoal,
-            .sugar: sugarGoal
-        ]
+        Dictionary(
+            uniqueKeysWithValues: [
+                (.protein, proteinGoal),
+                (.carbs, carbsGoal),
+                (.fat, fatGoal),
+                (.fiber, fiberGoal),
+                (.sugar, sugarGoal)
+            ]
+        )
     }
 
     private var orderedEnabledMacros: [MacroType] {
@@ -144,18 +146,26 @@ private struct MacroRingsDisplay: View {
         MacroType.displayOrder.filter { enabledMacros.contains($0) }
     }
 
+    private var macroStates: [NutritionDisplayPolicy.MacroState] {
+        NutritionDisplayPolicy.macroStates(
+            values: macroValues,
+            targets: macroGoals,
+            enabledMacros: enabledMacros
+        )
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let layout = ringLayout(for: geometry.size.width)
 
             HStack(spacing: layout.spacing) {
-                ForEach(orderedMacros) { macro in
+                ForEach(macroStates) { state in
                     MacroRing(
-                        name: macro.displayName,
-                        compactLabel: macro.shortName,
-                        current: macroValues[macro] ?? 0,
-                        goal: Double(macroGoals[macro] ?? 100),
-                        color: macro.color,
+                        name: state.macro.displayName,
+                        compactLabel: state.macro.shortName,
+                        current: state.current,
+                        goal: Double(state.target),
+                        color: state.macro.color,
                         unit: "g",
                         diameter: layout.diameter,
                         prefersCompactLabel: layout.useCompactLabels
@@ -190,11 +200,12 @@ private struct MacroRing: View {
     let prefersCompactLabel: Bool
 
     private var progress: Double {
-        min(current / goal, 1.0)
+        guard goal > 0 else { return 0 }
+        return min(current / goal, 1.0)
     }
 
     private var remaining: Double {
-        max(goal - current, 0)
+        return max(goal - current, 0)
     }
 
     private var labelText: String {
@@ -492,7 +503,7 @@ private struct MacroTrendsSection: View {
                 ForEach(orderedMacros) { macro in
                     NutritionTrendChart(
                         data: trendData,
-                        goal: macroGoals[macro] ?? 100,
+                        goal: macroGoals[macro],
                         metric: metricFor(macro),
                         title: "\(macro.displayName) Trend"
                     )

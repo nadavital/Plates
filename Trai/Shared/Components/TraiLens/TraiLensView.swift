@@ -65,6 +65,7 @@ public struct TraiLensView: View {
     let size: CGFloat
     let state: TraiLensState
     let palette: TraiLensPalette
+    let breathes: Bool
 
     @State private var particles: [TraiParticle] = []
     @State private var currentBlur: CGFloat = 10
@@ -79,10 +80,16 @@ public struct TraiLensView: View {
         1.0 / 30.0
     }
 
-    public init(size: CGFloat = 120, state: TraiLensState = .idle, palette: TraiLensPalette = .energy) {
+    public init(
+        size: CGFloat = 120,
+        state: TraiLensState = .idle,
+        palette: TraiLensPalette = .energy,
+        breathes: Bool = true
+    ) {
         self.size = size
         self.state = state
         self.palette = palette
+        self.breathes = breathes
         _particles = State(initialValue: Self.makeParticles(size: size, state: state, palette: palette))
         _currentBlur = State(initialValue: state.blurAmount(forSize: size))
         _currentSpeedMult = State(initialValue: state.speedMultiplier)
@@ -95,7 +102,6 @@ public struct TraiLensView: View {
     public var body: some View {
         TimelineView(.animation(minimumInterval: animationCadence)) { timeline in
             ZStack {
-                // The liquid core - particles with blur for metaball effect
                 Canvas { context, canvasSize in
                     for particle in particles {
                         let rect = CGRect(
@@ -111,13 +117,12 @@ public struct TraiLensView: View {
                 .opacity(size < 50 ? 1.0 : 0.9)
                 .mask(Circle())
 
-                // The glass lens overlay
                 Circle()
                     .fill(.white.opacity(0.01))
                     .glassEffect(.regular, in: .circle)
             }
             .frame(width: size, height: size)
-            .scaleEffect(1.0 + breathingOffset(at: timeline.date))
+            .scaleEffect(breathes ? 1.0 + breathingOffset(at: timeline.date) : 1.0)
             .onChange(of: timeline.date) { _, _ in
                 updateParticles()
             }
@@ -125,7 +130,7 @@ public struct TraiLensView: View {
                 createParticles()
             }
             .onChange(of: state) { _, _ in
-                // Smoothly transition particle count
+                createParticles()
             }
             .onAppear {
                 if particles.isEmpty {
@@ -137,13 +142,11 @@ public struct TraiLensView: View {
     }
 
     func updateParticles() {
-        // Smooth interpolation for blur and speed
         let targetBlur = state.blurAmount(forSize: size)
         let targetSpeed = state.speedMultiplier
         currentBlur += (targetBlur - currentBlur) * 0.08
         currentSpeedMult += (targetSpeed - currentSpeedMult) * 0.08
 
-        // Dynamic population adjustment
         let targetCount = state.particleCount(forSize: size)
         if particles.count < targetCount {
             let sizeRange = state.particleSizeRange(forSize: size)
@@ -159,13 +162,11 @@ public struct TraiLensView: View {
             particles.removeLast()
         }
 
-        // Update particle positions
         let sizeMotionScale: CGFloat = size < 70 ? 0.85 : 1.0
         for i in particles.indices {
             particles[i].x += particles[i].baseSpeedX * currentSpeedMult * sizeMotionScale
             particles[i].y += particles[i].baseSpeedY * currentSpeedMult * sizeMotionScale
 
-            // Wrap around for smooth flow
             if particles[i].x < -0.2 { particles[i].x += 1.4 }
             if particles[i].x > 1.2 { particles[i].x -= 1.4 }
             if particles[i].y < -0.2 { particles[i].y += 1.4 }
@@ -214,7 +215,6 @@ public struct TraiLensIcon: View {
 
     public var body: some View {
         ZStack {
-            // Simplified static gradient
             Circle()
                 .fill(
                     RadialGradient(
@@ -226,7 +226,6 @@ public struct TraiLensIcon: View {
                 )
                 .blur(radius: size * 0.08)
 
-            // Glass overlay
             Circle()
                 .fill(.white.opacity(0.01))
                 .glassEffect(.regular, in: .circle)

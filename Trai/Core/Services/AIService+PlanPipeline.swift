@@ -19,7 +19,8 @@ extension AIService {
     func executePlanGenerationPipeline<Plan: Decodable>(
         prompt: String,
         schema: [String: Any],
-        decodeFailureLabel: String
+        decodeFailureLabel: String,
+        reasoningLevel: AIReasoningLevel = .medium
     ) async throws -> Plan {
         let request = AIBackendPayloadBuilder.canonicalRequest(
             messages: [
@@ -30,11 +31,11 @@ extension AIService {
                 schema: schema
             ),
             generation: AIBackendPayloadBuilder.canonicalGeneration(
-                reasoningLevel: .medium
+                reasoningLevel: reasoningLevel
             )
         )
 
-        let responseText = try await makeRequest(request: request)
+        let responseText = try await makeRequest(request: request, timeoutInterval: 150)
         logResponse(responseText)
         return try parsePlanPayload(
             from: responseText,
@@ -110,10 +111,19 @@ extension AIService {
         let cleanText = cleanJSONResponse(text)
 
         guard let data = cleanText.data(using: .utf8) else {
+            log("⚠️ Failed to convert response to UTF8 data for plan refinement", type: .error)
             throw AIServiceError.parsingError
         }
 
-        return try JSONDecoder().decode(PlanPipelineRefinementEnvelope<Plan>.self, from: data)
+        do {
+            return try JSONDecoder().decode(PlanPipelineRefinementEnvelope<Plan>.self, from: data)
+        } catch let decodingError {
+            log("⚠️ plan refinement JSON decoding failed: \(decodingError)", type: .error)
+            if let decodingError = decodingError as? DecodingError {
+                logPlanPipelineDecodingError(decodingError)
+            }
+            throw AIServiceError.parsingError
+        }
     }
 
     private func logPlanPipelineDecodingError(_ error: DecodingError) {

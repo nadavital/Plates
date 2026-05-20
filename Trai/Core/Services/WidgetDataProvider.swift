@@ -88,14 +88,18 @@ nonisolated private struct WidgetDataSnapshotBuilder {
         let profileDescriptor = FetchDescriptor<UserProfile>()
         let profile = (try? modelContext.fetch(profileDescriptor))?.first
 
-        let calorieGoal = profile?.effectiveCalorieGoal ?? 2000
-        let proteinGoal = profile?.dailyProteinGoal ?? 150
-        let carbsGoal = profile?.dailyCarbsGoal ?? 200
-        let fatGoal = profile?.dailyFatGoal ?? 65
-
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: Date())
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        let todayWorkoutCompleted = hasWorkout(
+            in: DateInterval(start: startOfDay, end: endOfDay),
+            modelContext: modelContext
+        )
+
+        let calorieGoal = profile?.effectiveCalorieGoal(hasWorkoutToday: todayWorkoutCompleted) ?? 2_000
+        let proteinGoal = profile?.dailyProteinGoal ?? 150
+        let carbsGoal = profile?.dailyCarbsGoal ?? 200
+        let fatGoal = profile?.dailyFatGoal ?? 65
 
         let foodDescriptor = FetchDescriptor<FoodEntry>(
             predicate: #Predicate { entry in
@@ -119,14 +123,6 @@ nonisolated private struct WidgetDataSnapshotBuilder {
                 recoveryInfo: recoveryInfo
             )?.template.name
         }
-
-        let workoutDescriptor = FetchDescriptor<LiveWorkout>(
-            predicate: #Predicate { workout in
-                workout.completedAt != nil && workout.completedAt! >= startOfDay
-            }
-        )
-        let todayWorkouts = (try? modelContext.fetch(workoutDescriptor)) ?? []
-        let todayWorkoutCompleted = !todayWorkouts.isEmpty
 
         return WidgetData(
             caloriesConsumed: caloriesConsumed,
@@ -158,6 +154,30 @@ nonisolated private struct WidgetDataSnapshotBuilder {
                     status: recoveryStatus(hoursSinceTraining: hoursSince)
                 )
             }
+    }
+
+    nonisolated private func hasWorkout(in interval: DateInterval, modelContext: ModelContext) -> Bool {
+        let startDate = interval.start
+        let endDate = interval.end
+
+        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { session in
+                session.loggedAt >= startDate && session.loggedAt < endDate
+            }
+        )
+        sessionDescriptor.fetchLimit = 1
+        if ((try? modelContext.fetch(sessionDescriptor)) ?? []).isEmpty == false {
+            return true
+        }
+
+        var liveDescriptor = FetchDescriptor<LiveWorkout>(
+            predicate: #Predicate { workout in
+                (workout.startedAt >= startDate && workout.startedAt < endDate)
+                    || (workout.completedAt != nil && workout.completedAt! >= startDate && workout.completedAt! < endDate)
+            }
+        )
+        liveDescriptor.fetchLimit = 1
+        return ((try? modelContext.fetch(liveDescriptor)) ?? []).isEmpty == false
     }
 
     nonisolated private func lastTrainedDates(modelContext: ModelContext) -> [LiveWorkout.MuscleGroup: Date] {
@@ -295,7 +315,7 @@ nonisolated private struct WidgetDataSnapshotBuilder {
         _ template: WorkoutPlan.WorkoutTemplate,
         recoveryInfo: [WidgetMuscleRecoveryInfo]
     ) -> (score: Double, reason: String) {
-        let templateMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(template.targetMuscleGroups)
+        let templateMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
 
         guard !templateMuscles.isEmpty else {
             return (0.5, "Unknown muscle groups")

@@ -18,6 +18,7 @@ final class WorkoutGoal {
     var targetUnit: String = ""
     var periodUnitRaw: String?
     var periodCount: Int?
+    var successCriteria: String = ""
     var notes: String = ""
     var targetDate: Date?
     var checkInCadenceDays: Int?
@@ -40,6 +41,7 @@ final class WorkoutGoal {
         targetUnit: String = "",
         periodUnit: PeriodUnit? = nil,
         periodCount: Int? = nil,
+        successCriteria: String = "",
         notes: String = "",
         targetDate: Date? = nil,
         checkInCadenceDays: Int? = nil,
@@ -54,6 +56,7 @@ final class WorkoutGoal {
         self.targetUnit = targetUnit
         self.periodUnitRaw = periodUnit?.rawValue
         self.periodCount = periodCount
+        self.successCriteria = successCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
         self.notes = notes
         self.targetDate = targetDate
         self.checkInCadenceDays = checkInCadenceDays
@@ -165,6 +168,20 @@ extension WorkoutGoal {
         notes.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    var trimmedSuccessCriteria: String {
+        successCriteria.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var supportingSummary: String? {
+        let criteria = trimmedSuccessCriteria
+        if !criteria.isEmpty {
+            return criteria
+        }
+
+        let notes = trimmedNotes
+        return notes.isEmpty ? nil : notes
+    }
+
     var isActive: Bool {
         status == .active
     }
@@ -205,7 +222,8 @@ extension WorkoutGoal {
             let periodLabel = periodLabelText
             return "\(roundedTarget)x per \(periodLabel)"
         case .milestone:
-            return nil
+            let criteria = trimmedSuccessCriteria
+            return criteria.isEmpty ? nil : criteria
         case .duration, .distance, .weight:
             guard let targetValue, targetValue > 0 else { return nil }
             return formattedTargetValue(targetValue, unit: targetUnit)

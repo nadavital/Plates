@@ -13,6 +13,7 @@ struct BiometricsStepView: View {
     @Binding var targetWeightValue: String
     @Binding var usesMetricHeight: Bool
     @Binding var usesMetricWeight: Bool
+    var showsTargetWeight: Bool = true
 
     @State private var heightFeet: String = ""
     @State private var heightInches: String = ""
@@ -28,11 +29,11 @@ struct BiometricsStepView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 18) {
                     headerSection
-                        .padding(.top, 16)
+                        .padding(.top, 10)
 
-                    VStack(spacing: 18) {
+                    VStack(spacing: 14) {
                         birthdayCard
                             .offset(y: card1Visible ? 0 : 30)
                             .opacity(card1Visible ? 1 : 0)
@@ -98,38 +99,10 @@ struct BiometricsStepView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 2)
-                    .frame(width: 95, height: 95)
-                    .scaleEffect(headerVisible ? 1 : 0.5)
-
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.accentColor.opacity(0.16), TraiColors.coral.opacity(0.12)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-
-                Image(systemName: "person.text.rectangle.fill")
-                    .font(.system(size: 36))
-                    .foregroundStyle(.accent)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .scaleEffect(headerVisible ? 1 : 0.8)
-
-            Text("About You")
-                .font(.traiBold(28))
-
-            Text("This helps us calculate your\npersonalized nutrition plan")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
+        OnboardingTraiHeader(
+            title: "Enter your basics.",
+            lensSize: 56
+        )
         .opacity(headerVisible ? 1 : 0)
         .offset(y: headerVisible ? 0 : -20)
     }
@@ -137,12 +110,12 @@ struct BiometricsStepView: View {
     // MARK: - Birthday Card
 
     private var birthdayCard: some View {
-        VStack(spacing: 12) {
+        HStack(spacing: 16) {
             Label("Birthday", systemImage: "gift.fill")
-                .font(.subheadline)
-                .fontWeight(.semibold)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.accent)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer()
 
             DatePicker(
                 "Birthday",
@@ -150,10 +123,8 @@ struct BiometricsStepView: View {
                 in: ...Date(),
                 displayedComponents: .date
             )
-            .datePickerStyle(.wheel)
+            .datePickerStyle(.compact)
             .labelsHidden()
-            .frame(height: 120)
-            .clipped()
         }
         .frame(maxWidth: .infinity)
         .traiCard(cornerRadius: 16)
@@ -164,16 +135,9 @@ struct BiometricsStepView: View {
     private var genderCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("Biological Sex", systemImage: "figure.stand")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.accent)
-
-                    Text("Used for accurate metabolic calculations")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Label("Biological Sex", systemImage: "figure.stand")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.accent)
 
                 Spacer()
 
@@ -223,6 +187,7 @@ struct BiometricsStepView: View {
                     placeholder: "170",
                     value: $heightValue,
                     unit: "cm",
+                    accessibilityIdentifier: "onboardingHeightField",
                     onFocus: { focusedCard = "heightCard" }
                 )
             } else {
@@ -231,12 +196,14 @@ struct BiometricsStepView: View {
                         placeholder: "5",
                         value: $heightFeet,
                         unit: "ft",
+                        accessibilityIdentifier: "onboardingHeightFeetField",
                         onFocus: { focusedCard = "heightCard" }
                     )
                     MeasurementInput(
                         placeholder: "10",
                         value: $heightInches,
                         unit: "in",
+                        accessibilityIdentifier: "onboardingHeightInchesField",
                         onFocus: { focusedCard = "heightCard" }
                     )
                 }
@@ -276,31 +243,35 @@ struct BiometricsStepView: View {
                     placeholder: usesMetricWeight ? "70" : "155",
                     value: $weightValue,
                     unit: usesMetricWeight ? "kg" : "lbs",
+                    accessibilityIdentifier: "onboardingCurrentWeightField",
                     onFocus: { focusedCard = "weightCard" }
                 )
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Target weight")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            if showsTargetWeight {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Target weight")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
-                    Text("optional")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color(.tertiarySystemBackground))
-                        .clipShape(.capsule)
+                        Text("optional")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(.tertiarySystemBackground))
+                            .clipShape(.capsule)
+                    }
+
+                    MeasurementInput(
+                        placeholder: usesMetricWeight ? "65" : "145",
+                        value: $targetWeightValue,
+                        unit: usesMetricWeight ? "kg" : "lbs",
+                        accessibilityIdentifier: "onboardingTargetWeightField",
+                        onFocus: { focusedCard = "weightCard" }
+                    )
                 }
-
-                MeasurementInput(
-                    placeholder: usesMetricWeight ? "65" : "145",
-                    value: $targetWeightValue,
-                    unit: usesMetricWeight ? "kg" : "lbs",
-                    onFocus: { focusedCard = "weightCard" }
-                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -388,6 +359,7 @@ struct BiometricsStepView: View {
         weightValue: .constant(""),
         targetWeightValue: .constant(""),
         usesMetricHeight: .constant(true),
-        usesMetricWeight: .constant(true)
+        usesMetricWeight: .constant(true),
+        showsTargetWeight: true
     )
 }

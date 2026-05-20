@@ -15,6 +15,9 @@ struct WorkoutPlanProposalCard: View {
     let acceptTitle: String
     let onCustomize: (() -> Void)?
     let customizeTitle: String
+    let isCompactReview: Bool
+
+    @State private var selectedTemplate: WorkoutPlan.WorkoutTemplate?
 
     private struct PlanSummaryMetric {
         let value: String
@@ -30,24 +33,19 @@ struct WorkoutPlanProposalCard: View {
         plan.templates.count - structuredSessionCount
     }
 
-    private var totalExercises: Int {
-        plan.templates.reduce(0) { $0 + $1.exerciseCount }
+    private var summaryMetric: PlanSummaryMetric {
+        return PlanSummaryMetric(
+            value: "\(plan.templates.count)",
+            label: "sessions",
+            footnote: flexibleSessionCount > 0 ? "\(flexibleSessionCount) flexible" : nil
+        )
     }
 
-    private var summaryMetric: PlanSummaryMetric {
-        if flexibleSessionCount > 0 {
-            return PlanSummaryMetric(
-                value: "\(plan.templates.count)",
-                label: "sessions",
-                footnote: flexibleSessionCount == 1 ? "1 flexible day" : "\(flexibleSessionCount) flexible days"
-            )
-        }
-
-        return PlanSummaryMetric(
-            value: "\(totalExercises)",
-            label: "exercises",
-            footnote: nil
-        )
+    private var averageDurationText: String? {
+        let durations = plan.templates.map(\.estimatedDurationMinutes).filter { $0 > 0 }
+        guard !durations.isEmpty else { return nil }
+        let average = Int((Double(durations.reduce(0, +)) / Double(durations.count)).rounded())
+        return "\(average)m avg"
     }
 
     init(
@@ -56,7 +54,8 @@ struct WorkoutPlanProposalCard: View {
         onAccept: (() -> Void)?,
         acceptTitle: String = "Use This Plan",
         onCustomize: (() -> Void)?,
-        customizeTitle: String = "Adjust"
+        customizeTitle: String = "Adjust",
+        isCompactReview: Bool = false
     ) {
         self.plan = plan
         self.message = message
@@ -64,21 +63,27 @@ struct WorkoutPlanProposalCard: View {
         self.acceptTitle = acceptTitle
         self.onCustomize = onCustomize
         self.customizeTitle = customizeTitle
+        self.isCompactReview = isCompactReview
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: isCompactReview ? 8 : 12) {
             // Trai's message (only show if not empty)
-            if !message.isEmpty {
+            if !isCompactReview, !message.isEmpty {
                 Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
             // Plan summary card
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: isCompactReview ? 10 : 12) {
                 // Header
                 planHeader
+
+                if !isCompactReview, let intent = plan.planIntent {
+                    intentSummary(intent)
+                }
 
                 Divider()
 
@@ -90,13 +95,19 @@ struct WorkoutPlanProposalCard: View {
                     actionButtons
                 }
             }
-            .padding()
+            .padding(isCompactReview ? 14 : 16)
             .background(Color(.secondarySystemBackground))
             .clipShape(.rect(cornerRadius: 16))
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
             }
+        }
+        .sheet(item: $selectedTemplate) { template in
+            CompactWorkoutDayDetailSheet(template: template)
+            .traiSheetBranding()
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -112,10 +123,12 @@ struct WorkoutPlanProposalCard: View {
                 Text(plan.splitType.displayName)
                     .font(.subheadline)
                     .bold()
+                    .lineLimit(1)
 
-                Text("\(plan.daysPerWeek) days/week")
+                Text(headerSubtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer()
@@ -130,7 +143,11 @@ struct WorkoutPlanProposalCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let footnote = summaryMetric.footnote {
+                if let averageDurationText {
+                    Text(averageDurationText)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else if let footnote = summaryMetric.footnote {
                     Text(footnote)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -142,50 +159,182 @@ struct WorkoutPlanProposalCard: View {
     // MARK: - Templates Preview
 
     private var templatesPreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: isCompactReview ? 7 : 8) {
             ForEach(plan.templates) { template in
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: template.sessionType.iconName)
-                        .font(.caption)
-                        .foregroundStyle(template.displayAccentColor)
-                        .frame(width: 12)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(template.name)
+                if isCompactReview {
+                    compactTemplateRow(template)
+                } else {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: template.sessionType.iconName)
                             .font(.caption)
-                            .fontWeight(.medium)
+                            .foregroundStyle(template.displayAccentColor)
+                            .frame(width: 12)
 
-                        Text(template.displaySubtitle)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(template.name)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+
+                            Text(template.displaySubtitle)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        Text(templateMeta(for: template))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-
-                    Spacer()
-
-                    if template.sessionType.prefersStructuredEntries {
-                        Text("\(template.exerciseCount) exercises")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(template.focusAreas.isEmpty ? "Flexible session" : template.focusAreasDisplay)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    Text("\(template.estimatedDurationMinutes) min")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
         }
     }
 
+    private func compactTemplateRow(_ template: WorkoutPlan.WorkoutTemplate) -> some View {
+        Button {
+            HapticManager.lightTap()
+            selectedTemplate = template
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: template.sessionType.iconName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(template.displayAccentColor)
+                    .frame(width: 20, height: 20)
+                    .background(template.displayAccentColor.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(template.name)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(compactTemplateSubtitle(for: template))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 5) {
+                    Text(templateMeta(for: template))
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .padding(.vertical, 2)
+        .buttonStyle(.plain)
+    }
+
+    private func templateMeta(for template: WorkoutPlan.WorkoutTemplate) -> String {
+        if template.estimatedDurationMinutes > 0 {
+            return "\(template.estimatedDurationMinutes)m"
+        }
+        return template.displayWorkloadSummary
+    }
+
+    private func compactTemplateSubtitle(for template: WorkoutPlan.WorkoutTemplate) -> String {
+        let supportBlocks = template.displayBlocks
+            .filter { block in
+                switch block.kind {
+                case .cardioFinisher, .cardio, .conditioning, .mobility, .recovery, .skill, .sportPractice:
+                    true
+                case .warmup, .strength, .cooldown, .custom:
+                    false
+                }
+            }
+            .map { block in
+                block.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? block.kind.displayName
+                    : block.title
+            }
+            .filter { !$0.isEmpty }
+
+        guard !supportBlocks.isEmpty else {
+            return template.displaySubtitle
+        }
+
+        let baseFocus = template.focusAreas
+            .prefix(2)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { $0.localizedCapitalized }
+            .joined(separator: " • ")
+        let supportText = supportBlocks.prefix(2).joined(separator: " • ")
+
+        if baseFocus.isEmpty {
+            return supportText
+        }
+        return "\(baseFocus) • \(supportText)"
+    }
+
+    private var headerSubtitle: String {
+        if isCompactReview, let averageDurationText {
+            return "\(plan.daysPerWeek) days/week • \(averageDurationText)"
+        }
+        return "\(plan.daysPerWeek) days/week"
+    }
+
+    private func intentSummary(_ intent: WorkoutPlan.PlanIntent) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !intent.summary.isEmpty {
+                Text(intent.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            FlowLayout(spacing: 6) {
+                planSignalChip("\(plan.daysPerWeek)d/week", icon: "calendar")
+                if let averageDurationText {
+                    planSignalChip(averageDurationText, icon: "clock")
+                }
+                ForEach(compactIntentSignals(from: intent), id: \.self) { signal in
+                    planSignalChip(signal, icon: "checkmark")
+                }
+            }
+        }
+    }
+
+    private func compactIntentSignals(from intent: WorkoutPlan.PlanIntent) -> [String] {
+        let candidates = intent.honoredInputs + intent.supportingFocuses + intent.avoided.map { "No \($0.lowercased())" }
+        var seen: Set<String> = []
+        return candidates.compactMap { raw in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.count <= 32 else { return nil }
+            let key = trimmed.lowercased()
+            guard seen.insert(key).inserted else { return nil }
+            return trimmed
+        }
+        .prefix(3)
+        .map { $0 }
+    }
+
+    private func planSignalChip(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.medium))
+            .lineLimit(1)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color(.tertiarySystemFill), in: Capsule())
+    }
+
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: isCompactReview ? 8 : 12) {
             // Accept button
             if let accept = onAccept {
                 Button(action: accept) {
@@ -195,11 +344,9 @@ struct WorkoutPlanProposalCard: View {
                         Text(acceptTitle)
                             .fontWeight(.semibold)
                     }
-                    .font(.subheadline)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
                 }
-                .buttonStyle(.traiPrimary(color: .accentColor))
+                .buttonStyle(.traiPrimary(color: .accentColor, size: .compact, fullWidth: true, height: isCompactReview ? 38 : nil))
             }
 
             // Customize button (optional)
@@ -261,6 +408,127 @@ struct WorkoutPlanUpdatedBadge: View {
         .background(Color.accentColor.opacity(0.1))
         .clipShape(.capsule)
     }
+}
+
+private struct CompactWorkoutDayDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let template: WorkoutPlan.WorkoutTemplate
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    headerCard
+                    blocksCard
+                }
+                .padding()
+            }
+            .navigationTitle("Workout Day")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") {
+                        dismiss()
+                    }
+                    .labelStyle(.iconOnly)
+                    .tint(.accentColor)
+                }
+            }
+        }
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: template.sessionType.iconName)
+                    .font(.headline)
+                    .foregroundStyle(template.displayAccentColor)
+                    .frame(width: 34, height: 34)
+                    .background(template.displayAccentColor.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(template.name)
+                        .font(.headline.weight(.bold))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(template.displaySubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                if template.estimatedDurationMinutes > 0 {
+                    Text("\(template.estimatedDurationMinutes)m")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if template.displayWorkloadSummary != template.sessionType.displayName {
+                Text(template.displayWorkloadSummary)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(template.displayAccentColor)
+            }
+
+            if let notes = template.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                Text(notes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, -2)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
+    }
+
+    private var blocksCard: some View {
+        let blocks = template.displayBlocks
+        return VStack(spacing: 0) {
+            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                blockRow(block, tint: template.displayAccentColor)
+                if index < blocks.count - 1 {
+                    Divider()
+                        .padding(.leading, 24)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16, style: .continuous))
+    }
+
+    private func blockRow(_ block: WorkoutPlan.TrainingBlock, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: block.kind.iconName)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 16)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(block.shortSummary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                if !block.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(block.detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 7)
+    }
+
 }
 
 // MARK: - Preview
