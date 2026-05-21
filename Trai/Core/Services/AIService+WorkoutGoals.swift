@@ -279,11 +279,11 @@ extension AIService {
             let prompt = """
             You are helping set workout goals inside Trai.
 
-            Create 1-2 workout goals that feel lightweight, motivating, and directly tied to what the user is already doing.
+            Create 0-2 workout goals that feel lightweight, motivating, and directly tied to what the user is already doing. One strong goal is better than two weak goals. Returning no goals is acceptable when the context does not support a specific, useful, trackable goal.
 
             Rules:
             - Suggest at most 2 goals.
-            - Prefer one concrete milestone goal and optionally one consistency or progression goal.
+            - Prefer one concrete plan-specific goal. Add a second only when it captures a different, meaningful intent from the plan or user request.
             - Goals should feel meaningful over roughly the next 4-8 weeks unless the user asked for a different timeline.
             - Goals should usually represent something the user works toward over multiple sessions or multiple weeks, not a single routine completion.
             - Do NOT suggest goals like "complete a push day", "finish a cardio workout", or anything that is already normal baseline behavior for a regular trainee.
@@ -295,6 +295,10 @@ extension AIService {
             - Do not create exercise-specific weight-increase goals for new users or thin context unless recent sessions, exercise summaries, memory, or the user request includes a current baseline for that exercise.
             - Do not infer a strength baseline just because an exercise appears in the plan.
             - Weight/load goals require a known current baseline and should progress from that baseline.
+            - Do not create vague progression goals like "add one rep", "add a little load", "improve the main lifts", or "get stronger" unless the structured target and successCriteria make the exact achievement verifiable from app data.
+            - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName, and successCriteria should all describe the same behavior Trai can track.
+            - If the current plan includes a personalized constraint or habit, such as cardio only as a lower-day finisher, prefer a goal for that habit over generic strength progression.
+            - For a brand-new workout plan with little history, use goals that establish the plan: weekly split adherence, named-day completion across several weeks, requested accessory placement, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
             - Every frequency goal must also include periodUnitRaw and periodCount.
             - For frequency goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
@@ -306,7 +310,7 @@ extension AIService {
             - Do not use "run" in a goal title unless the plan actually includes running.
             - Avoid duplicating any existing goal.
             - If the user gave a specific ask, prioritize that.
-            - If the context is thin, prefer a broader but still meaningful goal over a vague or tiny one.
+            - If the context is thin, prefer a broader but still meaningful goal over a vague or tiny one, and return only one goal when a second would be filler.
             - If an exercise clearly appears as a recurring anchor movement in the history, it is okay to recommend an exercise-specific goal tied to linkedActivityName.
             - Use linkedWorkoutType when the goal is broad to a session type.
             - Use linkedActivityName when the goal is tied to a specific exercise or activity like a route, lift, or interval format.

@@ -302,10 +302,14 @@ extension AIService {
         \(basePrompt)
 
         ALSO CREATE GOALS:
-        Alongside the plan, return 1-2 goalSuggestions that are directly tied to the plan you create.
-        - Prefer one concrete milestone goal and optionally one consistency or progression goal.
+        Alongside the plan, return 0-2 goalSuggestions that are directly tied to the plan you create. One strong goal is better than two weak goals. Returning no goals is acceptable when the plan/context does not support a goal that is specific, useful, and trackable.
+        - Prefer one concrete plan-specific goal. Add a second only when it captures a different, meaningful intent from the plan or user request.
         - Goals should feel meaningful over roughly the next 4-8 weeks unless the user asked for a different timeline.
         - Do not suggest goals like "complete a workout" or anything that is already normal baseline behavior.
+        - For new users or thin context, avoid goals that sound like performance progression unless Trai has a baseline to compare against.
+        - Do not create vague progression goals like "add one rep", "add a little load", "improve the main lifts", or "get stronger" unless the structured target and successCriteria make the exact achievement verifiable from app data.
+        - Broad goals are allowed, but the intent must be accurate: goal title, target fields, linkedWorkoutType/linkedActivityName, and successCriteria should all describe the same behavior Trai can track.
+        - If the plan includes a personalized constraint or habit, such as cardio only as a lower-day finisher, prefer a goal for that habit over generic strength progression.
         - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved.
         - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
         - Frequency, duration, distance, and weight goals must have a targetValue greater than 0 and a clear targetUnit.
@@ -316,7 +320,7 @@ extension AIService {
         - This is often the user's first Trai workout plan. Unless the context explicitly includes recent lifting numbers, a current baseline, or the user gave one in the setup answers, do not create exercise-specific weight-increase goals like "add 5 kg to bench".
         - Do not infer a strength baseline just because an exercise appears in the plan.
         - Weight/load goals require a known current baseline and should progress from that baseline.
-        - When baseline context is thin, prefer goals tied to the generated plan itself: complete all planned weekly sessions for several weeks, build the first progression block, log session notes, or establish the requested cardio/accessory habit with trackable fields.
+        - When baseline context is thin, prefer goals tied to the generated plan itself: complete the planned weekly structure for several weeks, log each named day in the split, complete a requested accessory habit, build a training routine, or check in on the plan after enough sessions.
         - Avoid duplicating any existing goal.
         - linkedWorkoutType must be one of: \(workoutModes)
         - goalKind must be one of: milestone, frequency, duration, distance, weight
@@ -334,7 +338,7 @@ extension AIService {
 
         Return a single JSON object with:
         - plan: the workout plan object
-        - goalSuggestions: the 1-2 trackable goals
+        - goalSuggestions: the trackable goals, or an empty array if no goal is good enough
         """
     }
 
