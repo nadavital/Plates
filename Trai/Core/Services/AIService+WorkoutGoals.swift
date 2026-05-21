@@ -286,28 +286,27 @@ extension AIService {
             - Prefer one concrete plan-specific goal. Add a second only when it captures a different, meaningful intent from the plan or user request.
             - Goals should feel meaningful over roughly the next 4-8 weeks unless the user asked for a different timeline.
             - Goals should usually represent something the user works toward over multiple sessions or multiple weeks, not a single routine completion.
-            - Do NOT suggest goals like "complete a push day", "finish a cardio workout", or anything that is already normal baseline behavior for a regular trainee.
+            - Do NOT suggest goals that merely restate a single normal workout task; goals should reflect a habit, milestone, progression target, or follow-up loop over time.
             - Do NOT suggest maintenance goals like "hold steady" unless the user is explicitly deloading, returning from injury, or asked for maintenance.
             - If the user already does a session type consistently, suggest progression, volume, duration, quality, or milestone goals instead of simple attendance.
             - Use frequency goals when the user's pattern or request is about consistency, e.g. 3 sessions per week.
-            - Good examples: "Send the blue V5 clean", "Build up to a 75 minute zone 2 session", "Climb 2 times each week for the next month", "Add 10 minutes to your weekly yoga flow sessions without extra breaks", "Complete every planned session for the first 4 weeks".
             - Add a numeric goal only if the recent training data clearly supports it, unless the user explicitly asked for a frequency such as weekly cardio.
             - Do not create exercise-specific weight-increase goals for new users or thin context unless recent sessions, exercise summaries, memory, or the user request includes a current baseline for that exercise.
             - Do not infer a strength baseline just because an exercise appears in the plan.
             - Weight/load goals require a known current baseline and should progress from that baseline.
-            - Do not create vague progression goals like "add one rep", "add a little load", "improve the main lifts", or "get stronger" unless the structured target and successCriteria make the exact achievement verifiable from app data.
+            - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
             - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName, and successCriteria should all describe the same behavior Trai can track.
-            - If the current plan includes a personalized constraint or habit, such as cardio only as a lower-day finisher, prefer a goal for that habit over generic strength progression.
-            - For a brand-new workout plan with little history, use goals that establish the plan: weekly split adherence, named-day completion across several weeks, requested accessory placement, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
+            - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
+            - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
             - Every frequency goal must also include periodUnitRaw and periodCount.
             - For frequency goals, periodCount means the denominator period, not the goal horizon. Use periodCount 1 for "per week", "per day", or "per month"; use targetDateISO8601/checkInCadenceDays to express a 4-8 week horizon.
             - Every goal must include successCriteria: one concise sentence that says how Trai and the person using the app will know the goal is achieved. This is especially important for creative, skill, sport, form, consistency quality, or milestone goals that do not fit a simple numeric target.
             - Write rationale, successCriteria, and notes directly to the person using the app with "you" and "your"; do not say "the user".
-            - Do not return vague frequency goals like "add a weekly cardio finisher" unless the structured fields make it trackable, e.g. targetValue 1, targetUnit "finishers", periodUnitRaw "week", periodCount 1, linkedActivityName "Cardio Finisher".
+            - Do not return vague frequency goals unless the structured fields make the tracked behavior clear.
             - If you cannot make a goal trackable from the plan and context, choose a milestone goal or omit that suggestion.
             - Do not invent an unrealistic modality or activity.
-            - Do not use "run" in a goal title unless the plan actually includes running.
+            - Do not name a modality, activity, exercise, or event that does not actually appear in the plan or context.
             - Avoid duplicating any existing goal.
             - If the user gave a specific ask, prioritize that.
             - If the context is thin, prefer a broader but still meaningful goal over a vague or tiny one, and return only one goal when a second would be filler.
@@ -317,7 +316,7 @@ extension AIService {
             - linkedWorkoutType must be one of: \(workoutModes)
             - goalKind must be one of: milestone, frequency, duration, distance, weight
             - For milestone goals, leave targetValue and targetUnit empty.
-            - For frequency goals, targetValue must be the count, targetUnit should usually be "sessions" or a specific activity unit like "finishers", periodUnitRaw must be day, week, or month, and periodCount must be 1.
+            - For frequency goals, targetValue must be the count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
             - When it helps, include a soft targetDateISO8601 roughly 4-8 weeks out.
             - checkInCadenceDays can be provided for more open-ended goals that should be revisited.
             - For weight goals, use \(prefersMetricWeight ? "kg by default" : "lbs by default") unless the user context clearly suggests the other unit.

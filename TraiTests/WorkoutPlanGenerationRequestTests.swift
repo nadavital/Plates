@@ -31,8 +31,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertTrue(request.requestsCardioAsAccessory)
-        XCTAssertTrue(request.generationDirectives.contains { $0.contains("supportive finisher") })
-        XCTAssertTrue(request.generationDirectives.contains { $0.contains("Dedicated cardio") })
+        XCTAssertTrue(request.limitsAccessoryCardioToOneSession)
     }
 
     func testAccessoryCardioDefaultPlanUsesFinisherInsteadOfStandaloneCardioDay() {
@@ -46,8 +45,11 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         let plan = WorkoutPlan.createDefault(from: request)
 
         XCTAssertEqual(plan.templates.count, 3)
-        XCTAssertFalse(plan.templates.contains { $0.sessionType == .cardio || $0.name.localizedCaseInsensitiveContains("running endurance") })
-        XCTAssertTrue(plan.templates.first?.displayBlocks.contains { $0.kind == .cardioFinisher } == true)
+        XCTAssertFalse(plan.templates.contains { $0.sessionType == .cardio })
+        XCTAssertEqual(
+            plan.templates.flatMap(\.displayBlocks).filter { $0.kind == .cardioFinisher }.count,
+            1
+        )
     }
 
     func testDedicatedCardioSignalOverridesAccessoryCardioDirective() {
@@ -58,7 +60,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         )
 
         XCTAssertFalse(request.requestsCardioAsAccessory)
-        XCTAssertFalse(request.generationDirectives.contains { $0.contains("supportive finisher") })
+        XCTAssertFalse(request.limitsAccessoryCardioToOneSession)
     }
 
     func testLegacyWorkoutPlanJSONSynthesizesBlocks() throws {
@@ -233,25 +235,25 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
     }
 
     func testWorkoutGoalSuggestionsDropDuplicateTitles() {
-        let first = makeGoalSuggestion(title: "Add a weekly cardio finisher")
-        let duplicate = makeGoalSuggestion(title: "  Add a Weekly Cardio Finisher  ")
+        let first = makeGoalSuggestion(title: "Complete the weekly plan")
+        let duplicate = makeGoalSuggestion(title: "  Complete The Weekly Plan  ")
 
         let validated = WorkoutGoalSuggestion.validatedUnique([first, duplicate])
 
-        XCTAssertEqual(validated.map(\.title), ["Add a weekly cardio finisher"])
+        XCTAssertEqual(validated.map(\.title), ["Complete the weekly plan"])
     }
 
     func testWorkoutGoalSuggestionsDropUntrackableNumericGoals() {
         let untrackable = makeGoalSuggestion(
-            title: "Add a weekly cardio finisher",
+            title: "Complete the weekly habit",
             targetValue: nil,
-            targetUnit: "finishers"
+            targetUnit: "sessions"
         )
-        let trackable = makeGoalSuggestion(title: "Finish one cardio finisher each week")
+        let trackable = makeGoalSuggestion(title: "Complete one planned habit each week")
 
         let validated = WorkoutGoalSuggestion.validatedUnique([untrackable, trackable])
 
-        XCTAssertEqual(validated.map(\.title), ["Finish one cardio finisher each week"])
+        XCTAssertEqual(validated.map(\.title), ["Complete one planned habit each week"])
     }
 
     func testWorkoutGoalSuggestionsDropGoalsWithoutSuccessCriteria() {
@@ -265,35 +267,35 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             successCriteria: "   "
         )
         let specific = makeGoalSuggestion(
-            title: "Send one V5 clean",
+            title: "Complete the plan milestone",
             goalKindRaw: WorkoutGoal.GoalKind.milestone.rawValue,
             targetValue: nil,
             targetUnit: nil,
             periodUnitRaw: nil,
             periodCount: nil,
-            successCriteria: "Complete one V5 from start to finish without falls."
+            successCriteria: "Complete the defined plan milestone with the criteria Trai can verify."
         )
 
         let validated = WorkoutGoalSuggestion.validatedUnique([vague, specific])
 
-        XCTAssertEqual(validated.map(\.title), ["Send one V5 clean"])
+        XCTAssertEqual(validated.map(\.title), ["Complete the plan milestone"])
     }
 
     func testWorkoutGoalSuggestionPreservesSuccessCriteria() throws {
         let suggestion = makeGoalSuggestion(
-            title: "Send the blue V5 clean",
+            title: "Complete the plan milestone",
             goalKindRaw: WorkoutGoal.GoalKind.milestone.rawValue,
             targetValue: nil,
             targetUnit: nil,
             periodUnitRaw: nil,
             periodCount: nil,
-            successCriteria: "Climb the blue V5 from start to finish without falls."
+            successCriteria: "Complete the defined plan milestone with the criteria Trai can verify."
         )
 
         let goal = try XCTUnwrap(WorkoutGoalSuggestion.validatedUnique([suggestion]).first?.asWorkoutGoal())
 
-        XCTAssertEqual(goal.trimmedSuccessCriteria, "Climb the blue V5 from start to finish without falls.")
-        XCTAssertEqual(goal.trackingSummary, "Climb the blue V5 from start to finish without falls.")
+        XCTAssertEqual(goal.trimmedSuccessCriteria, "Complete the defined plan milestone with the criteria Trai can verify.")
+        XCTAssertEqual(goal.trackingSummary, "Complete the defined plan milestone with the criteria Trai can verify.")
     }
 
     func testWorkoutTemplateDisplayBlocksSortByDeclaredOrder() {
@@ -335,7 +337,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         title: String,
         goalKindRaw: String = WorkoutGoal.GoalKind.frequency.rawValue,
         targetValue: Double? = 1,
-        targetUnit: String? = "finishers",
+        targetUnit: String? = "sessions",
         periodUnitRaw: String? = WorkoutGoal.PeriodUnit.week.rawValue,
         periodCount: Int? = 1,
         successCriteria: String = "Complete the tracked target."
@@ -345,7 +347,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             rationale: "Fits the plan.",
             goalKindRaw: goalKindRaw,
             linkedWorkoutTypeRaw: WorkoutMode.mixed.rawValue,
-            linkedActivityName: "Cardio Finisher",
+            linkedActivityName: "Planned Habit",
             targetValue: targetValue,
             targetUnit: targetUnit,
             periodUnitRaw: periodUnitRaw,
