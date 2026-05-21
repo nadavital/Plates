@@ -245,11 +245,20 @@ extension WorkoutSession {
         if token.contains("pilates") || token.contains("stretch") || token.contains("flexibility") {
             return "figure.flexibility"
         }
+        if token.contains("mobility") {
+            return "figure.mind.and.body"
+        }
         if token.contains("climb") || token.contains("boulder") {
             return "figure.climbing"
         }
+        if token.contains("skill") || token.contains("practice") {
+            return "sportscourt.fill"
+        }
         if token.contains("hiit") || token.contains("interval") || token.contains("conditioning") {
             return "bolt.heart.fill"
+        }
+        if token.contains("recovery") || token.contains("cooldown") {
+            return "heart.text.square.fill"
         }
         return isCardio ? "figure.mixed.cardio" : "figure.run"
     }

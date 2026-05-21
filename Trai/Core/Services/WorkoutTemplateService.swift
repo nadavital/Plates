@@ -91,7 +91,8 @@ struct WorkoutTemplateService {
     func createWorkoutFromTemplate(
         _ template: WorkoutPlan.WorkoutTemplate,
         progressionStrategy: WorkoutPlan.ProgressionStrategy,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        prefillStrengthExercises: Bool = true
     ) -> LiveWorkout {
         let muscleGroups = LiveWorkout.MuscleGroup.fromTargetStrings(template.resolvedTargetMuscleGroups)
 
@@ -118,7 +119,7 @@ struct WorkoutTemplateService {
                 usedTopLevelExerciseFallback = !blockExercises.isEmpty
             }
 
-            if !blockExercises.isEmpty {
+            if !blockExercises.isEmpty, prefillStrengthExercises {
                 for exerciseTemplate in blockExercises.sorted(by: { $0.order < $1.order }) {
                     let entry = LiveWorkoutEntry(
                         exerciseName: exerciseTemplate.exerciseName,
@@ -149,11 +150,11 @@ struct WorkoutTemplateService {
                     entries.append(entry)
                     nextOrderIndex += 1
                 }
-            } else if block.shouldCreateLiveWorkoutEntry {
+            } else if prefillStrengthExercises && block.shouldCreateLiveWorkoutEntry {
                 let entry = LiveWorkoutEntry(
                     exerciseName: block.title.isEmpty ? block.kind.displayName : block.title,
                     orderIndex: nextOrderIndex,
-                    exerciseType: block.kind.liveWorkoutExerciseType
+                    exerciseType: block.liveWorkoutExerciseType(in: template)
                 )
                 if let durationMinutes = block.durationMinutes, durationMinutes > 0 {
                     let seconds = durationMinutes * 60
@@ -165,10 +166,7 @@ struct WorkoutTemplateService {
                 entry.sourcePlanBlockID = block.id
                 entry.plannedIntensity = block.intensity
                 entry.plannedTarget = block.target
-                entry.notes = [block.detail, block.intensity, block.target, block.notes]
-                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " • ")
+                entry.notes = ""
                 entries.append(entry)
                 nextOrderIndex += 1
             }
@@ -445,5 +443,12 @@ private extension WorkoutPlan.TrainingBlock {
         case .strength:
             return false
         }
+    }
+
+    func liveWorkoutExerciseType(in template: WorkoutPlan.WorkoutTemplate) -> String {
+        if kind == .cardio || kind == .conditioning {
+            return template.sessionType == .cardio || template.sessionType == .hiit ? "cardio" : "activity"
+        }
+        return kind.liveWorkoutExerciseType
     }
 }

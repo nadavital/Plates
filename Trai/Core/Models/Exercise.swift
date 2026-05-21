@@ -7,7 +7,7 @@ final class Exercise {
     var id: UUID = UUID()
     var name: String = ""
 
-    /// Category: "strength", "cardio", or "flexibility"
+    /// Category: "strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", or "custom"
     var category: String = "strength"
 
     /// Target muscle group (for strength exercises)
@@ -24,6 +24,13 @@ final class Exercise {
 
     /// Whether this is a custom exercise created by the user
     var isCustom: Bool = false
+
+    /// Comma-separated targeting tags. Strength tags usually mirror muscle groups;
+    /// other categories use intent tags like endurance, zone2, skill, or recovery.
+    var targetTagsRaw: String = ""
+
+    /// Comma-separated tracking fields that decide which live-workout inputs this exercise shows.
+    var trackingFieldsRaw: String = ""
 
     var createdAt: Date = Date()
 
@@ -51,7 +58,13 @@ extension Exercise {
     enum Category: String, CaseIterable, Identifiable {
         case strength = "strength"
         case cardio = "cardio"
+        case conditioning = "conditioning"
+        case mobility = "mobility"
+        case skill = "skill"
+        case sportPractice = "sportPractice"
+        case recovery = "recovery"
         case flexibility = "flexibility"
+        case custom = "custom"
 
         var id: String { rawValue }
 
@@ -59,22 +72,168 @@ extension Exercise {
             switch self {
             case .strength: "Strength"
             case .cardio: "Cardio"
+            case .conditioning: "Conditioning"
+            case .mobility: "Mobility"
+            case .skill: "Skill"
+            case .sportPractice: "Practice"
+            case .recovery: "Recovery"
             case .flexibility: "Flexibility"
+            case .custom: "Custom"
             }
         }
 
         var iconName: String {
             switch self {
             case .strength: "dumbbell.fill"
-            case .cardio: "heart.fill"
+            case .cardio: "figure.run"
+            case .conditioning: "bolt.heart.fill"
+            case .mobility: "figure.mind.and.body"
+            case .skill: "figure.climbing"
+            case .sportPractice: "sportscourt.fill"
+            case .recovery: "heart.text.square.fill"
             case .flexibility: "figure.flexibility"
+            case .custom: "slider.horizontal.3"
+            }
+        }
+
+        var liveWorkoutActivityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+            switch self {
+            case .strength:
+                return .strength
+            case .cardio:
+                return .cardio
+            case .conditioning:
+                return .conditioning
+            case .mobility, .flexibility:
+                return .mobility
+            case .skill:
+                return .skill
+            case .sportPractice:
+                return .sportPractice
+            case .recovery:
+                return .recovery
+            case .custom:
+                return .custom
             }
         }
     }
 
     var exerciseCategory: Category {
-        get { Category(rawValue: category) ?? .strength }
+        get { Category(rawValue: category) ?? .custom }
         set { category = newValue.rawValue }
+    }
+
+    enum TrackingField: String, CaseIterable, Identifiable {
+        case sets
+        case reps
+        case weight
+        case duration
+        case distance
+        case calories
+        case notes
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .sets: "Sets"
+            case .reps: "Reps"
+            case .weight: "Weight"
+            case .duration: "Duration"
+            case .distance: "Distance"
+            case .calories: "Calories"
+            case .notes: "Notes"
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .sets: "number"
+            case .reps: "repeat"
+            case .weight: "scalemass.fill"
+            case .duration: "clock.fill"
+            case .distance: "map.fill"
+            case .calories: "flame.fill"
+            case .notes: "note.text"
+            }
+        }
+    }
+
+    var trackingFields: [TrackingField] {
+        get {
+            let fields = trackingFieldsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .compactMap(TrackingField.init(rawValue:))
+            return fields.isEmpty ? Self.defaultTrackingFields(for: exerciseCategory) : fields
+        }
+        set {
+            trackingFieldsRaw = newValue.map(\.rawValue).joined(separator: ",")
+        }
+    }
+
+    var targetTags: [String] {
+        get {
+            let stored = targetTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !stored.isEmpty { return stored }
+            if let targetMuscleGroup {
+                return [targetMuscleGroup.displayName]
+            }
+            return Self.defaultTargetTags(for: exerciseCategory)
+        }
+        set {
+            targetTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
+    static func defaultTrackingFields(for category: Category) -> [TrackingField] {
+        switch category {
+        case .strength:
+            return [.sets, .weight, .reps]
+        case .cardio:
+            return [.duration, .distance, .calories]
+        case .conditioning:
+            return [.duration, .reps, .calories, .notes]
+        case .mobility, .flexibility, .recovery:
+            return [.duration, .notes]
+        case .skill, .sportPractice:
+            return [.duration, .reps, .notes]
+        case .custom:
+            return [.duration, .notes]
+        }
+    }
+
+    static func targetOptions(for category: Category) -> [String] {
+        switch category {
+        case .strength:
+            return MuscleGroup.allCases.map(\.displayName)
+        case .cardio:
+            return ["Endurance", "Zone 2", "Speed", "Intervals", "Hills", "Recovery"]
+        case .conditioning:
+            return ["Work Capacity", "Power", "Intervals", "Core", "Full Body", "Explosiveness"]
+        case .mobility:
+            return ["Hips", "Shoulders", "Ankles", "Thoracic", "Warm-Up", "Cooldown"]
+        case .skill:
+            return ["Technique", "Coordination", "Grip", "Footwork", "Balance", "Practice"]
+        case .sportPractice:
+            return ["Technique", "Drills", "Agility", "Conditioning", "Game Pace", "Recovery"]
+        case .recovery:
+            return ["Easy Movement", "Breathing", "Cooldown", "Restoration", "Walking", "Mobility"]
+        case .flexibility:
+            return ["Hamstrings", "Hips", "Shoulders", "Back", "Cooldown", "Range of Motion"]
+        case .custom:
+            return ["Strength", "Endurance", "Skill", "Mobility", "Recovery", "Conditioning"]
+        }
+    }
+
+    static func defaultTargetTags(for category: Category) -> [String] {
+        Array(targetOptions(for: category).prefix(category == .strength ? 0 : 2))
     }
 }
 
@@ -193,10 +352,33 @@ extension Exercise {
         // Cardio
         ("Running", "cardio", nil, "Treadmill / Outdoor"),
         ("Cycling", "cardio", nil, "Stationary Bike / Outdoor"),
+        ("Walking", "cardio", nil, "Treadmill / Outdoor"),
+        ("Incline Walk", "cardio", nil, "Treadmill"),
         ("Swimming", "cardio", nil, "Pool"),
         ("Rowing", "cardio", nil, "Rowing Machine"),
+        ("Elliptical", "cardio", nil, "Elliptical"),
+        ("Stair Climber", "cardio", nil, "Stair Climber"),
         ("Jump Rope", "cardio", nil, "Jump Rope"),
-        ("HIIT", "cardio", nil, "Various"),
+        ("Zone 2 Cardio", "cardio", nil, "Treadmill / Bike / Outdoor"),
+
+        // Conditioning
+        ("Intervals", "conditioning", nil, "Treadmill / Bike / Rower"),
+        ("Sled Push", "conditioning", nil, "Sled"),
+        ("Battle Ropes", "conditioning", nil, "Battle Ropes"),
+        ("Kettlebell Swings", "conditioning", nil, "Kettlebell"),
+        ("Circuit Training", "conditioning", nil, "Various"),
+
+        // Skill / sport practice
+        ("Bouldering", "skill", nil, "Climbing Wall"),
+        ("Top Rope Climbing", "skill", nil, "Climbing Wall"),
+        ("Technique Practice", "skill", nil, "Sport-Specific"),
+
+        // Mobility / recovery
+        ("Hip Mobility Flow", "mobility", nil, "Mat / Bodyweight"),
+        ("Shoulder Mobility Flow", "mobility", nil, "Band / Bodyweight"),
+        ("Ankle Mobility", "mobility", nil, "Bodyweight"),
+        ("Breathwork", "recovery", nil, "Mat"),
+        ("Easy Recovery Walk", "recovery", nil, "Outdoor / Treadmill"),
 
         // Flexibility
         ("Yoga", "flexibility", nil, "Yoga Mat"),

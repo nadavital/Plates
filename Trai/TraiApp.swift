@@ -179,6 +179,7 @@ struct TraiApp: App {
             let container = modelContainer
             Task { @MainActor in
                 TraiApp.sharedModelContainer = container
+                ExerciseLibrarySeeder.ensureDefaults(in: container.mainContext)
                 if isUITesting && !AppLaunchArguments.shouldRunOnboardingFlowUITest {
                     seedUITestProfileIfNeeded(modelContainer: container)
                     if AppLaunchArguments.shouldUseAppStoreScreenshotSeed {

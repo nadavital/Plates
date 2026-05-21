@@ -11,9 +11,11 @@ import os.log
 // MARK: - Exercise Analysis Types
 
 struct ExerciseAnalysis: Codable {
-    let category: String       // "strength", "cardio", "flexibility"
-    let muscleGroup: String?   // Primary muscle group (nil for cardio/flexibility)
+    let category: String
+    let muscleGroup: String?   // Primary muscle group (nil for non-strength exercises)
     let secondaryMuscles: [String]?  // Secondary muscles worked
+    let targetTags: [String]?
+    let trackingFields: [String]?
     let description: String    // Brief description of the exercise
     let tips: String?          // Optional form tips
 }
@@ -46,11 +48,21 @@ extension AIService {
             Exercise name: "\(name)"
 
             Determine:
-            1. Category: Is it primarily "strength", "cardio", or "flexibility"?
-            2. Primary muscle group (for strength exercises): chest, back, shoulders, biceps, triceps, legs, core, or fullBody
-            3. Secondary muscles worked (if any)
-            4. A brief 1-sentence description of the exercise
-            5. Optional quick form tip
+            1. Category: Choose the best fit from strength, cardio, conditioning, mobility, skill, sportPractice, recovery, flexibility, or custom.
+            2. Primary muscle group for strength exercises only: chest, back, shoulders, biceps, triceps, legs, core, or fullBody.
+            3. Secondary muscles worked, when relevant.
+            4. Target tags that describe what the user is training with this exercise.
+            5. Tracking fields the user should see while logging it.
+            6. A brief 1-sentence description of the exercise.
+            7. Optional quick form or execution tip.
+
+            Use these tracking fields only: sets, reps, weight, duration, distance, calories, notes.
+            Pick fields that match how the exercise is actually tracked. For example:
+            - Strength usually tracks sets, weight, and reps.
+            - Running usually tracks duration, distance, and calories.
+            - Mobility usually tracks duration and notes.
+            - Conditioning may track duration, reps, calories, and notes.
+            - Skill practice may track duration, reps, and notes.
 
             If you don't recognize the exercise, make your best educated guess based on the name.
             """
@@ -60,7 +72,7 @@ extension AIService {
                 "properties": [
                     "category": [
                         "type": "string",
-                        "enum": ["strength", "cardio", "flexibility"]
+                        "enum": ["strength", "cardio", "conditioning", "mobility", "skill", "sportPractice", "recovery", "flexibility", "custom"]
                     ],
                     "muscleGroup": [
                         "type": "string",
@@ -70,6 +82,19 @@ extension AIService {
                     "secondaryMuscles": [
                         "type": "array",
                         "items": ["type": "string"],
+                        "nullable": true
+                    ],
+                    "targetTags": [
+                        "type": "array",
+                        "items": ["type": "string"],
+                        "nullable": true
+                    ],
+                    "trackingFields": [
+                        "type": "array",
+                        "items": [
+                            "type": "string",
+                            "enum": ["sets", "reps", "weight", "duration", "distance", "calories", "notes"]
+                        ],
                         "nullable": true
                     ],
                     "description": [

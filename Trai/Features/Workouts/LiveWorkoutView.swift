@@ -37,6 +37,7 @@ struct LiveWorkoutView: View {
         Array(
             Set(
                 viewModel.entries
+                    .filter { !$0.isPlannedActivityGuidance }
                     .map(\.exerciseName)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
@@ -350,6 +351,8 @@ struct LiveWorkoutView: View {
         ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
                 let entries = viewModel.entries
+                let loggedEntries = entries.filter { !$0.isPlannedActivityGuidance }
+                let plannedGuidanceEntries = entries.filter(\.isPlannedActivityGuidance)
                 let upNext = viewModel.upNextSuggestion
                 let availableSuggestions = viewModel.availableSuggestions
                 let suggestionsByMuscle = viewModel.suggestionsByMuscle
@@ -407,29 +410,67 @@ struct LiveWorkoutView: View {
                         }
                     }
 
-                    // Exercise cards - different UI for strength vs cardio
-                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    // Logged workout items stay first so strength work is always the main surface.
+                    ForEach(loggedEntries, id: \.id) { entry in
                         if entry.isGeneralActivity {
-                            GeneralActivityCard(
+                            CardioExerciseCard(
                                 entry: entry,
-                                onUpdateNotes: { viewModel.updateEntryNotes(for: entry, notes: $0) },
-                                onUpdateDuration: { viewModel.updateEntryDuration(for: entry, seconds: $0) },
-                                onToggleComplete: { viewModel.toggleGeneralEntryCompletion(for: entry) },
-                                onDelete: { viewModel.removeExercise(at: index) }
+                                usesMetricWeight: usesMetricExerciseWeight,
+                                onUpdateDuration: { seconds in
+                                    viewModel.updateEntryDuration(for: entry, seconds: seconds)
+                                },
+                                onUpdateDistance: { meters in
+                                    viewModel.updateCardioDistance(for: entry, meters: meters)
+                                },
+                                onUpdateCalories: { calories in
+                                    viewModel.updateEntryCalories(for: entry, calories: calories)
+                                },
+                                onUpdateSetCount: { count in
+                                    viewModel.updateEntrySetCount(for: entry, count: count)
+                                },
+                                onUpdateReps: { reps in
+                                    viewModel.updateEntryReps(for: entry, reps: reps)
+                                },
+                                onUpdateWeightKg: { weightKg in
+                                    viewModel.updateEntryWeight(for: entry, weightKg: weightKg)
+                                },
+                                onUpdateNotes: { notes in
+                                    viewModel.updateEntryNotes(for: entry, notes: notes)
+                                },
+                                onComplete: {
+                                    viewModel.toggleGeneralEntryCompletion(for: entry)
+                                },
+                                onDeleteExercise: { removeEntry(entry) }
                             )
                         } else if entry.isCardio {
                             CardioExerciseCard(
                                 entry: entry,
+                                usesMetricWeight: usesMetricExerciseWeight,
                                 onUpdateDuration: { seconds in
                                     viewModel.updateCardioDuration(for: entry, seconds: seconds)
                                 },
                                 onUpdateDistance: { meters in
                                     viewModel.updateCardioDistance(for: entry, meters: meters)
                                 },
+                                onUpdateCalories: { calories in
+                                    viewModel.updateEntryCalories(for: entry, calories: calories)
+                                },
+                                onUpdateSetCount: { count in
+                                    viewModel.updateEntrySetCount(for: entry, count: count)
+                                },
+                                onUpdateReps: { reps in
+                                    viewModel.updateEntryReps(for: entry, reps: reps)
+                                },
+                                onUpdateWeightKg: { weightKg in
+                                    viewModel.updateEntryWeight(for: entry, weightKg: weightKg)
+                                },
+                                onUpdateNotes: { notes in
+                                    viewModel.updateEntryNotes(for: entry, notes: notes)
+                                },
                                 onComplete: {
                                     viewModel.toggleCardioCompletion(for: entry)
                                 },
-                                onDeleteExercise: { viewModel.removeExercise(at: index) }
+                                onDeleteExercise: { removeEntry(entry) }
                             )
                         } else {
                             ExerciseCard(
@@ -451,13 +492,22 @@ struct LiveWorkoutView: View {
                                     )
                                 },
                                 onToggleWarmup: { setIndex in viewModel.toggleWarmup(at: setIndex, in: entry) },
-                                onDeleteExercise: { viewModel.removeExercise(at: index) },
+                                onDeleteExercise: { removeEntry(entry) },
                                 onChangeExercise: {
                                     entryToReplace = entry
                                     showingExerciseReplacement = true
                                 }
                             )
                         }
+                    }
+
+                    if loggedEntries.isEmpty {
+                        ContentUnavailableView(
+                            "No Exercises Yet",
+                            systemImage: "dumbbell.fill",
+                            description: Text("Add the strength work you want to track in this session.")
+                        )
+                        .padding(.top, 4)
                     }
 
                     // Up Next suggestion (smart rotation)
@@ -489,6 +539,25 @@ struct LiveWorkoutView: View {
                         }
                     }
 
+                    if !plannedGuidanceEntries.isEmpty {
+                        VStack(spacing: 8) {
+                            ForEach(plannedGuidanceEntries, id: \.id) { entry in
+                                GeneralActivityCard(
+                                    entry: entry,
+                                    allowsCompletionToggle: false,
+                                    allowsDeletion: false,
+                                    showsEditableFields: false,
+                                    isPlannedGuidance: true,
+                                    onUpdateNotes: { _ in },
+                                    onUpdateDuration: { _ in },
+                                    onToggleComplete: {},
+                                    onDelete: {}
+                                )
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+
                     // Bottom padding for the bar
                     Color.clear.frame(height: 100)
                 }
@@ -505,7 +574,8 @@ struct LiveWorkoutView: View {
             WorkoutBottomBar(
                 onAddExercise: { showingExerciseList = true },
                 onAskTrai: { showingChat = true },
-                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise"
+                addLabel: viewModel.usesFocusedCardioWorkspace ? "Add Interval" : "Add Exercise",
+                addSystemImage: "plus.circle.fill"
             )
         }
     }
@@ -518,6 +588,11 @@ struct LiveWorkoutView: View {
 
     private func handleSummaryDone() {
         dismiss()
+    }
+
+    private func removeEntry(_ entry: LiveWorkoutEntry) {
+        guard let index = viewModel.entries.firstIndex(where: { $0.id == entry.id }) else { return }
+        viewModel.removeExercise(at: index)
     }
 
     private func applyUITestStressMutationBurst() {
@@ -555,20 +630,28 @@ struct LiveWorkoutView: View {
                 return entry.completedAt != nil || (entry.durationSeconds ?? 0) > 0 || (entry.distanceMeters ?? 0) > 0
             }
             if entry.isGeneralActivity {
+                guard !entry.isPlannedActivityGuidance else { return false }
                 return entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0
             }
             return !entry.sets.isEmpty && entry.sets.allSatisfy { $0.reps > 0 }
         }.count
 
         let currentExercise = entries.first { entry in
-            if entry.isCardio || entry.isGeneralActivity {
+            if entry.isGeneralActivity {
+                return !entry.isPlannedActivityGuidance && entry.completedAt == nil
+            }
+            if entry.isCardio {
                 return entry.completedAt == nil
             }
             return entry.sets.isEmpty || entry.sets.contains { $0.reps == 0 }
         }?.exerciseName ?? entries.last?.exerciseName
 
         let setsWithData = entries.reduce(0) { total, entry in
-            if entry.isCardio || entry.isGeneralActivity {
+            if entry.isGeneralActivity {
+                guard !entry.isPlannedActivityGuidance else { return total }
+                return total + ((entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0) ? 1 : 0)
+            }
+            if entry.isCardio {
                 return total + ((entry.completedAt != nil || !entry.notes.isEmpty || (entry.durationSeconds ?? 0) > 0) ? 1 : 0)
             }
             return total + entry.sets.filter { $0.reps > 0 && !$0.isWarmup }.count

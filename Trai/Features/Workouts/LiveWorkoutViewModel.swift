@@ -177,6 +177,9 @@ final class LiveWorkoutViewModel {
         let id = UUID()
         let exerciseName: String
         let muscleGroup: String
+        let category: Exercise.Category
+        let targetTags: [String]
+        let trackingFields: [Exercise.TrackingField]
         let defaultSets: Int
         let defaultReps: Int
 
@@ -296,6 +299,7 @@ final class LiveWorkoutViewModel {
     private func currentTargetMuscleCounts() -> [String: Int] {
         var counts: [String: Int] = [:]
         for entry in entries {
+            guard entry.isStrength else { continue }
             guard let muscle = getMuscleGroup(for: entry) else { continue }
             guard targetExerciseMuscleGroups.contains(muscle) else { continue }
             counts[muscle, default: 0] += 1
@@ -310,6 +314,10 @@ final class LiveWorkoutViewModel {
     ) -> Double {
         let usageFrequency = Double(exerciseUsageFrequency[suggestion.exerciseName, default: 0])
         let preferenceScore = log1p(usageFrequency) * 1.5
+        guard suggestion.category == .strength else {
+            let contextualScore: Double = suggestedActivityCategories().contains(suggestion.category) ? 2.0 : 0.5
+            return preferenceScore + contextualScore
+        }
 
         let currentTargetCount = targetMuscleCounts[suggestion.muscleGroup, default: 0]
         let coverageScore: Double
@@ -334,6 +342,86 @@ final class LiveWorkoutViewModel {
         availableSuggestions = rankedSuggestions
         upNextSuggestion = rankedSuggestions.first
         suggestionsByMuscle = Dictionary(grouping: rankedSuggestions) { $0.muscleGroup }
+    }
+
+    private func suggestedActivityCategories() -> Set<Exercise.Category> {
+        var categories = Set<Exercise.Category>()
+
+        switch workout.type {
+        case .cardio:
+            categories.insert(.cardio)
+        case .hiit:
+            categories.formUnion([.conditioning, .cardio])
+        case .climbing:
+            categories.formUnion([.skill, .conditioning, .mobility])
+        case .yoga, .pilates, .flexibility:
+            categories.formUnion([.flexibility, .mobility])
+        case .mobility:
+            categories.insert(.mobility)
+        case .recovery:
+            categories.formUnion([.recovery, .mobility, .cardio])
+        case .mixed:
+            categories.formUnion(categoriesFromFocusAreas())
+        case .custom:
+            categories.formUnion(categoriesFromFocusAreas())
+        case .strength:
+            categories.formUnion(categoriesFromFocusAreas())
+        }
+
+        return categories
+    }
+
+    private func categoriesFromFocusAreas() -> Set<Exercise.Category> {
+        workout.focusAreas.reduce(into: Set<Exercise.Category>()) { result, focus in
+            let normalized = focus
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: " ", with: "")
+
+            if normalized.contains("cardio")
+                || normalized.contains("run")
+                || normalized.contains("cycle")
+                || normalized.contains("bike")
+                || normalized.contains("swim")
+                || normalized.contains("row")
+                || normalized.contains("walk")
+                || normalized.contains("zone2")
+                || normalized.contains("endurance") {
+                result.insert(.cardio)
+            }
+
+            if normalized.contains("conditioning")
+                || normalized.contains("hiit")
+                || normalized.contains("interval")
+                || normalized.contains("circuit") {
+                result.insert(.conditioning)
+            }
+
+            if normalized.contains("climb")
+                || normalized.contains("boulder")
+                || normalized.contains("skill")
+                || normalized.contains("technique") {
+                result.insert(.skill)
+            }
+
+            if normalized.contains("mobility") {
+                result.insert(.mobility)
+            }
+
+            if normalized.contains("flexibility")
+                || normalized.contains("stretch")
+                || normalized.contains("yoga")
+                || normalized.contains("pilates") {
+                result.insert(.flexibility)
+            }
+
+            if normalized.contains("recovery")
+                || normalized.contains("cooldown")
+                || normalized.contains("restorative") {
+                result.insert(.recovery)
+            }
+        }
     }
 
     /// Recomputes ranked suggestions only when source data changes (entries/suggestions/frequencies).
@@ -717,7 +805,8 @@ final class LiveWorkoutViewModel {
     /// This is intentionally event-driven (not tied to set/rep/weight edits).
     private func rebuildSuggestionPool(reason _: SuggestionRebuildReason) {
         guard let modelContext else { return }
-        guard !workout.targetMuscleGroups.isEmpty else {
+        let activityCategories = suggestedActivityCategories()
+        guard !workout.targetMuscleGroups.isEmpty || !activityCategories.isEmpty else {
             exerciseSuggestions = []
             applyRankedSuggestions([])
             return
@@ -727,13 +816,9 @@ final class LiveWorkoutViewModel {
             .components(separatedBy: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        let targetMuscles = LiveWorkout.MuscleGroup.fromTargetStrings(targetMuscleTokens)
-        guard !targetMuscles.isEmpty else {
-            exerciseSuggestions = []
-            applyRankedSuggestions([])
-            return
-        }
-
+        let targetMuscles = targetMuscleTokens.isEmpty
+            ? []
+            : LiveWorkout.MuscleGroup.fromTargetStrings(targetMuscleTokens)
         let exerciseMuscleGroups: Set<String>
         if targetMuscles.contains(.fullBody) {
             // Full-body sessions should suggest across the complete strength catalog,
@@ -749,12 +834,16 @@ final class LiveWorkoutViewModel {
         // Exclude custom exercises created in this workout session:
         // those are usually being performed immediately, not "next suggestion" candidates.
         let filtered = exercises.filter { exercise in
-            guard let muscleGroup = exercise.muscleGroup else { return false }
-            guard exerciseMuscleGroups.contains(muscleGroup) else { return false }
             if exercise.isCustom && exercise.createdAt >= workout.startedAt {
                 return false
             }
-            return true
+
+            if exercise.exerciseCategory == .strength {
+                guard let muscleGroup = exercise.muscleGroup else { return false }
+                return exerciseMuscleGroups.contains(muscleGroup)
+            }
+
+            return activityCategories.contains(exercise.exerciseCategory)
         }
 
         let sortedByPreference = filtered.sorted { lhs, rhs in
@@ -775,7 +864,10 @@ final class LiveWorkoutViewModel {
         exerciseSuggestions = Array(uniqueExercises.prefix(maxSuggestionPoolSize)).map { exercise in
             ExerciseSuggestion(
                 exerciseName: exercise.name,
-                muscleGroup: exercise.muscleGroup ?? "other",
+                muscleGroup: exercise.muscleGroup ?? exercise.exerciseCategory.displayName,
+                category: exercise.exerciseCategory,
+                targetTags: exercise.targetTags,
+                trackingFields: exercise.trackingFields,
                 defaultSets: 3,
                 defaultReps: userDefaultReps
             )
@@ -788,6 +880,13 @@ final class LiveWorkoutViewModel {
     func refreshSuggestions() {
         rebuildSuggestionPool(reason: .userRefresh)
     }
+
+    #if DEBUG
+    func debugRebuildSuggestionPoolForTests(modelContext: ModelContext) {
+        self.modelContext = modelContext
+        rebuildSuggestionPool(reason: .workoutStart)
+    }
+    #endif
 
     /// Load exercise usage frequency from history
     private func loadExerciseUsageFrequency() {
@@ -974,7 +1073,19 @@ final class LiveWorkoutViewModel {
 
     /// Add an exercise from a suggestion
     func addExerciseFromSuggestion(_ suggestion: ExerciseSuggestion) {
-        let entry = LiveWorkoutEntry(exerciseName: suggestion.exerciseName, orderIndex: entries.count)
+        let entry = LiveWorkoutEntry(
+            exerciseName: suggestion.exerciseName,
+            orderIndex: entries.count,
+            exerciseType: suggestion.category.rawValue
+        )
+        entry.targetTags = suggestion.targetTags
+        entry.trackingFields = suggestion.trackingFields
+
+        if suggestion.category != .strength {
+            entry.activityKind = suggestion.category.liveWorkoutActivityKind
+            appendEntry(entry)
+            return
+        }
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: suggestion.exerciseName)
@@ -996,12 +1107,7 @@ final class LiveWorkoutViewModel {
             isWarmup: false
         ))
 
-        if workout.entries == nil {
-            workout.entries = []
-        }
-        workout.entries?.append(entry)
-        refreshEntriesAndMetrics()
-        saveImmediately()
+        appendEntry(entry)
     }
 
     /// Add the "Up Next" suggested exercise
@@ -1014,6 +1120,10 @@ final class LiveWorkoutViewModel {
 
     func addExercise(_ exercise: Exercise) {
         let entry = LiveWorkoutEntry(exercise: exercise, orderIndex: entries.count)
+        guard exercise.exerciseCategory == .strength else {
+            appendEntry(entry)
+            return
+        }
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: exercise.name)
@@ -1035,16 +1145,16 @@ final class LiveWorkoutViewModel {
             isWarmup: false
         ))
 
-        if workout.entries == nil {
-            workout.entries = []
-        }
-        workout.entries?.append(entry)
-        refreshEntriesAndMetrics()
-        saveImmediately()
+        appendEntry(entry)
     }
 
     func addExerciseByName(_ name: String, exerciseType: String = "strength") {
         let entry = LiveWorkoutEntry(exerciseName: name, orderIndex: entries.count, exerciseType: exerciseType)
+        entry.trackingFields = Exercise.defaultTrackingFields(for: Exercise.Category(rawValue: exerciseType) ?? .custom)
+        guard exerciseType == "strength" else {
+            appendEntry(entry)
+            return
+        }
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: name)
@@ -1066,6 +1176,10 @@ final class LiveWorkoutViewModel {
             isWarmup: false
         ))
 
+        appendEntry(entry)
+    }
+
+    private func appendEntry(_ entry: LiveWorkoutEntry) {
         if workout.entries == nil {
             workout.entries = []
         }
@@ -1094,6 +1208,16 @@ final class LiveWorkoutViewModel {
 
         // Create new entry with the same order index
         let newEntry = LiveWorkoutEntry(exercise: newExercise, orderIndex: orderIndex)
+        if newExercise.exerciseCategory != .strength {
+            workout.entries?.removeAll { $0.id == existingEntry.id }
+            newEntry.workout = workout
+            modelContext?.insert(newEntry)
+            workout.entries?.append(newEntry)
+            workout.entries?.sort { $0.orderIndex < $1.orderIndex }
+            refreshEntriesAndMetrics()
+            saveImmediately()
+            return
+        }
 
         // Get last performance to pre-fill first set
         let lastPerformance = getLastPerformance(for: newExercise.name)
@@ -1284,6 +1408,83 @@ final class LiveWorkoutViewModel {
     func updateEntryDuration(for entry: LiveWorkoutEntry, seconds: Int?) {
         guard entry.durationSeconds != seconds else { return }
         entry.durationSeconds = seconds
+        saveDebounced(updateLiveActivity: false)
+    }
+
+    func updateEntryCalories(for entry: LiveWorkoutEntry, calories: Double?) {
+        guard entry.caloriesBurned != calories else { return }
+        entry.caloriesBurned = calories
+        saveDebounced(updateLiveActivity: false)
+    }
+
+    func updateEntryReps(for entry: LiveWorkoutEntry, reps: Int?) {
+        let normalizedReps = max(reps ?? 0, 0)
+        var sets = entry.sets
+        if sets.isEmpty {
+            sets = [
+                LiveWorkoutEntry.SetData(
+                    reps: normalizedReps,
+                    weight: .zero,
+                    completed: normalizedReps > 0,
+                    isWarmup: false
+                )
+            ]
+        } else {
+            var firstSet = sets[0]
+            firstSet.reps = normalizedReps
+            firstSet.completed = normalizedReps > 0
+            sets[0] = firstSet
+        }
+        entry.sets = sets
+        refreshEntriesAndMetrics()
+        saveDebounced(updateLiveActivity: false)
+    }
+
+    func updateEntrySetCount(for entry: LiveWorkoutEntry, count: Int?) {
+        let normalizedCount = max(count ?? 0, 0)
+        var sets = entry.sets
+        if sets.count < normalizedCount {
+            let template = sets.last ?? LiveWorkoutEntry.SetData(reps: 0, weight: .zero, completed: false, isWarmup: false)
+            for _ in sets.count..<normalizedCount {
+                sets.append(
+                    LiveWorkoutEntry.SetData(
+                        reps: template.reps,
+                        weight: CleanWeight(kg: template.weightKg, lbs: template.weightLbs),
+                        preferredWeightUnit: template.preferredWeightUnit,
+                        completed: template.completed,
+                        isWarmup: template.isWarmup,
+                        notes: template.notes
+                    )
+                )
+            }
+        } else if sets.count > normalizedCount {
+            sets = Array(sets.prefix(normalizedCount))
+        }
+        entry.sets = sets
+        refreshEntriesAndMetrics()
+        saveDebounced(updateLiveActivity: false)
+    }
+
+    func updateEntryWeight(for entry: LiveWorkoutEntry, weightKg: Double?) {
+        let normalizedWeight = max(weightKg ?? 0, 0)
+        var sets = entry.sets
+        if sets.isEmpty {
+            sets = [
+                LiveWorkoutEntry.SetData(
+                    reps: 0,
+                    weight: WeightUtility.cleanWeightFromKg(normalizedWeight),
+                    completed: false,
+                    isWarmup: false
+                )
+            ]
+        } else {
+            var firstSet = sets[0]
+            firstSet.weightKg = normalizedWeight
+            firstSet.weightLbs = WeightUtility.round(normalizedWeight * WeightUtility.kgToLbs, unit: .lbs)
+            sets[0] = firstSet
+        }
+        entry.sets = sets
+        refreshEntriesAndMetrics()
         saveDebounced(updateLiveActivity: false)
     }
 
@@ -1540,7 +1741,7 @@ final class LiveWorkoutViewModel {
 
     private func createExerciseHistoryEntries() {
         for entry in entries {
-            guard entry.completedSets?.isEmpty == false else { continue }
+            guard entry.hasExercisePreferenceSignal else { continue }
 
             let history = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? Date())
             modelContext?.insert(history)

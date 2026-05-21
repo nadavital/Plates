@@ -159,6 +159,60 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertEqual(insight?.progressFraction, 1)
     }
 
+    func testMixedWorkoutSuggestionsIncludeRelevantNonStrengthExercises() throws {
+        container = try ModelContainer(
+            for: LiveWorkout.self,
+            LiveWorkoutEntry.self,
+            Exercise.self,
+            ExerciseHistory.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        context = ModelContext(container)
+
+        let bench = Exercise(name: "Bench Press", category: .strength, muscleGroup: .chest)
+        let run = Exercise(name: "Running", category: .cardio)
+        let mobility = Exercise(name: "Hip Mobility Flow", category: .mobility)
+        context.insert(bench)
+        context.insert(run)
+        context.insert(mobility)
+
+        let workout = LiveWorkout(
+            name: "Push + Cardio",
+            workoutType: .mixed,
+            targetMuscleGroups: [.chest],
+            focusAreas: ["Push", "cardio"]
+        )
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        viewModel.debugRebuildSuggestionPoolForTests(modelContext: context)
+
+        XCTAssertTrue(viewModel.availableSuggestions.contains { $0.exerciseName == "Bench Press" })
+        XCTAssertTrue(viewModel.availableSuggestions.contains { $0.exerciseName == "Running" && $0.category == .cardio })
+        XCTAssertFalse(viewModel.availableSuggestions.contains { $0.exerciseName == "Hip Mobility Flow" })
+    }
+
+    func testAddingCardioSuggestionCreatesTrackableCardioEntryWithoutPrefilledStrengthSets() {
+        let workout = LiveWorkout(name: "Support", workoutType: .mixed)
+        let viewModel = LiveWorkoutViewModel(workout: workout)
+        let suggestion = LiveWorkoutViewModel.ExerciseSuggestion(
+            exerciseName: "Running",
+            muscleGroup: "Cardio",
+            category: .cardio,
+            targetTags: ["Endurance"],
+            trackingFields: [.duration, .distance],
+            defaultSets: 3,
+            defaultReps: 10
+        )
+
+        viewModel.addExerciseFromSuggestion(suggestion)
+
+        let entry = viewModel.entries.first
+        XCTAssertEqual(entry?.exerciseName, "Running")
+        XCTAssertEqual(entry?.exerciseType, "cardio")
+        XCTAssertTrue(entry?.sets.isEmpty == true)
+        XCTAssertEqual(entry?.targetTags, ["Endurance"])
+        XCTAssertEqual(entry?.trackingFields, [.duration, .distance])
+    }
+
     private func makeWorkout(initialReps: Int) -> (LiveWorkout, LiveWorkoutEntry) {
         let workout = LiveWorkout(name: "Push Day", workoutType: .strength)
         let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)

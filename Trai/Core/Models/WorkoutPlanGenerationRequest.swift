@@ -124,6 +124,7 @@ struct WorkoutPlanGenerationRequest {
         if requestsCardioAsAccessory {
             directives.append("Primary focus is not standalone cardio; cardio should appear only as a supportive cardio block with role finisher or accessory.")
             directives.append("Dedicated cardio or HIIT templates are not allowed unless the user explicitly asks for them later.")
+            directives.append("Use finisher language only if the user explicitly asked for cardio at the end of a workout; otherwise describe supportive cardio by its purpose, such as endurance support, conditioning, intervals, or recovery.")
         }
 
         if limitsAccessoryCardioToOneSession {

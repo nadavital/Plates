@@ -44,6 +44,12 @@ final class LiveWorkoutEntry {
     /// Planned target copied from the workout plan, such as pace, zone, or movement cue.
     var plannedTarget: String?
 
+    /// Comma-separated targeting tags copied from the exercise library or inferred from the plan.
+    var targetTagsRaw: String = ""
+
+    /// Comma-separated tracking fields copied from the exercise library.
+    var trackingFieldsRaw: String = ""
+
     /// JSON-encoded sets data for strength exercises
     /// Format: [{"reps": 10, "weightKg": 50.0, "completed": true, "isWarmup": false}]
     var setsData: String = "[]"
@@ -89,6 +95,53 @@ final class LiveWorkoutEntry {
         !isStrength && !isCardio
     }
 
+    /// Passive plan guidance shown in live workouts, not a user-added logged item.
+    var isPlannedActivityGuidance: Bool {
+        isGeneralActivity && sourcePlanBlockID != nil
+    }
+
+    var hasExercisePreferenceSignal: Bool {
+        if isStrength {
+            return completedSets?.isEmpty == false
+        }
+        if isPlannedActivityGuidance {
+            return false
+        }
+        return completedAt != nil
+            || (durationSeconds ?? 0) > 0
+            || (distanceMeters ?? 0) > 0
+            || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var trackingFields: [Exercise.TrackingField] {
+        get {
+            let fields = trackingFieldsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .compactMap(Exercise.TrackingField.init(rawValue:))
+            if !fields.isEmpty { return fields }
+            return Exercise.defaultTrackingFields(for: Exercise.Category(rawValue: exerciseType) ?? .custom)
+        }
+        set {
+            trackingFieldsRaw = newValue.map(\.rawValue).joined(separator: ",")
+        }
+    }
+
+    var targetTags: [String] {
+        get {
+            targetTagsRaw
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            targetTagsRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: ",")
+        }
+    }
+
     var activityKind: WorkoutPlan.TrainingBlock.BlockKind? {
         get {
             let trimmed = activityKindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -122,11 +175,25 @@ final class LiveWorkoutEntry {
     }
 
     var activityIconName: String {
+        if let kind = activityKind {
+            return kind.iconName
+        }
+
         switch exerciseType {
         case "strength":
             return "dumbbell.fill"
         case "cardio":
             return "figure.run"
+        case "conditioning":
+            return "bolt.heart.fill"
+        case "mobility":
+            return "figure.mind.and.body"
+        case "skill":
+            return "figure.climbing"
+        case "sportPractice":
+            return "sportscourt.fill"
+        case "recovery":
+            return "heart.text.square.fill"
         case "flexibility":
             return "figure.cooldown"
         default:
@@ -140,6 +207,11 @@ final class LiveWorkoutEntry {
         self.exerciseType = exercise.category
         self.equipmentName = exercise.displayEquipment  // Use inferred equipment if not stored
         self.orderIndex = orderIndex
+        self.trackingFields = exercise.trackingFields
+        self.targetTags = exercise.targetTags
+        if exercise.exerciseCategory != .strength {
+            self.activityKind = exercise.exerciseCategory.liveWorkoutActivityKind
+        }
     }
 
     init(exerciseName: String, orderIndex: Int, exerciseId: UUID? = nil, exerciseType: String = "strength", equipmentName: String? = nil) {
@@ -158,8 +230,18 @@ extension WorkoutPlan.TrainingBlock.BlockKind {
             return .strength
         case "cardio":
             return .cardio
-        case "flexibility":
+        case "conditioning":
+            return .conditioning
+        case "mobility", "flexibility":
             return .mobility
+        case "skill":
+            return .skill
+        case "sportPractice":
+            return .sportPractice
+        case "recovery":
+            return .recovery
+        case "custom":
+            return .custom
         default:
             return nil
         }

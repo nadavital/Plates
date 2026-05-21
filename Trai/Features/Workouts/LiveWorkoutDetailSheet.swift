@@ -703,13 +703,14 @@ struct LiveWorkoutDetailSheet: View {
         for entry in entries {
             // Find existing history entry for this workout entry
             if let history = allExerciseHistory.first(where: { $0.sourceWorkoutEntryId == entry.id }) {
-                // Delete history if the edited exercise has no completed working sets.
-                guard let completedSets = entry.completedSets, !completedSets.isEmpty else {
+                // Delete history if the edited item no longer has trackable work.
+                guard entry.hasExercisePreferenceSignal else {
                     modelContext.delete(history)
                     continue
                 }
 
                 // Update history with current entry data
+                let completedSets = entry.completedSets ?? []
                 if let best = entry.bestSet {
                     history.bestSetWeightKg = WeightUtility.round(best.weightKg, unit: .kg)
                     history.bestSetWeightLbs = WeightUtility.round(best.weightLbs, unit: .lbs)
@@ -729,7 +730,7 @@ struct LiveWorkoutDetailSheet: View {
                     let rounded = WeightUtility.round(set.weightKg, unit: .kg)
                     return String(format: "%.1f", rounded)
                 }.joined(separator: ",")
-            } else if entry.completedSets?.isEmpty == false {
+            } else if entry.hasExercisePreferenceSignal {
                 let newHistory = ExerciseHistory(from: entry, performedAt: workout.completedAt ?? workout.startedAt)
                 modelContext.insert(newHistory)
             }

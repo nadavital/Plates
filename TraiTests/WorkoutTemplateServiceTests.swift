@@ -88,7 +88,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.muscleGroups, [.chest])
     }
 
-    func testCreateWorkoutFromTemplateKeepsSupportiveCardioBlock() throws {
+    func testCreateWorkoutFromTemplateKeepsSupportiveCardioBlockAsActivity() throws {
         let context = try makeInMemoryContext()
         let lift = WorkoutPlan.ExerciseTemplate(
             exerciseName: "Bench Press",
@@ -135,14 +135,68 @@ final class WorkoutTemplateServiceTests: XCTestCase {
 
         let entries = try XCTUnwrap(workout.entries)
         XCTAssertEqual(entries.map(\.exerciseName), ["Bench Press", "Bike Finisher"])
-        XCTAssertEqual(entries.last?.exerciseType, "cardio")
+        XCTAssertEqual(entries.last?.exerciseType, "activity")
         XCTAssertEqual(entries.last?.activityKind, .cardio)
         XCTAssertEqual(entries.last?.activityRole, .finisher)
         XCTAssertEqual(entries.last?.durationSeconds, 600)
         XCTAssertEqual(entries.last?.plannedDurationSeconds, 600)
         XCTAssertEqual(entries.last?.plannedIntensity, "Easy")
         XCTAssertEqual(entries.last?.plannedTarget, "Zone 2")
-        XCTAssertTrue(entries.last?.notes.contains("Zone 2") == true)
+        XCTAssertEqual(entries.last?.notes, "")
+    }
+
+    func testCreateWorkoutFromTemplateKeepsSupportiveConditioningBlockAsActivity() throws {
+        let context = try makeInMemoryContext()
+        let lift = WorkoutPlan.ExerciseTemplate(
+            exerciseName: "Leg Press",
+            muscleGroup: "quads",
+            defaultSets: 3,
+            defaultReps: 8,
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Legs + Conditioning",
+            sessionType: .mixed,
+            focusAreas: ["Legs", "Conditioning"],
+            targetMuscleGroups: ["quads"],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Leg Strength",
+                    detail: "Leg work",
+                    exercises: [lift],
+                    durationMinutes: 30,
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    kind: .conditioning,
+                    role: .accessory,
+                    title: "Conditioning Support",
+                    detail: "Bike intervals",
+                    durationMinutes: 8,
+                    intensity: "Moderate",
+                    target: "Work capacity",
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+
+        let workout = service.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: .defaultStrategy,
+            modelContext: context
+        )
+
+        let entries = try XCTUnwrap(workout.entries)
+        XCTAssertEqual(entries.map(\.exerciseName), ["Leg Press", "Conditioning Support"])
+        XCTAssertEqual(entries.last?.exerciseType, "activity")
+        XCTAssertEqual(entries.last?.activityKind, .conditioning)
+        XCTAssertEqual(entries.last?.activityRole, .accessory)
+        XCTAssertEqual(entries.last?.durationSeconds, 480)
+        XCTAssertEqual(entries.last?.notes, "")
     }
 
     func testCreateWorkoutFromTemplateCreatesEntriesForCardioSessionBlocks() throws {
@@ -218,6 +272,53 @@ final class WorkoutTemplateServiceTests: XCTestCase {
 
         let entries = try XCTUnwrap(workout.entries)
         XCTAssertEqual(entries.map(\.exerciseName), ["Goblet Squat"])
+    }
+
+    func testCreateWorkoutFromTemplateCanSkipPrefilledStrengthExercises() throws {
+        let context = try makeInMemoryContext()
+        let lift = WorkoutPlan.ExerciseTemplate(
+            exerciseName: "Bench Press",
+            muscleGroup: "chest",
+            defaultSets: 3,
+            defaultReps: 8,
+            order: 0
+        )
+        let template = WorkoutPlan.WorkoutTemplate(
+            name: "Push Day",
+            sessionType: .strength,
+            focusAreas: ["Push"],
+            targetMuscleGroups: ["chest"],
+            exercises: [],
+            blocks: [
+                WorkoutPlan.TrainingBlock(
+                    kind: .warmup,
+                    title: "Warm-up",
+                    detail: "Prepare to press",
+                    durationMinutes: 5,
+                    order: 0
+                ),
+                WorkoutPlan.TrainingBlock(
+                    kind: .strength,
+                    title: "Push Strength",
+                    detail: "Main work",
+                    exercises: [lift],
+                    durationMinutes: 30,
+                    order: 1
+                )
+            ],
+            estimatedDurationMinutes: 45,
+            order: 0
+        )
+
+        let workout = service.createWorkoutFromTemplate(
+            template,
+            progressionStrategy: .defaultStrategy,
+            modelContext: context,
+            prefillStrengthExercises: false
+        )
+
+        let entries = try XCTUnwrap(workout.entries)
+        XCTAssertTrue(entries.isEmpty)
     }
 
     func testCreateWorkoutForIntentMatchesTemplateByCaseInsensitiveContains() throws {

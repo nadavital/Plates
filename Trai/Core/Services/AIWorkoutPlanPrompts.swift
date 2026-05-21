@@ -115,16 +115,17 @@ extension AIPromptBuilder {
         14. If the personalization brief includes a strength split direction, follow it. Do not return a full-body split when the user asked for upper/lower, push/pull/legs, body-part focus, or a named priority-muscle structure.
         15. If the user selected strength but did not give a split direction, choose the simplest structure that fits the schedule and goal. A 2-3 day full-body plan is valid only when it is genuinely the best fit or the user chose it.
         16. If the user says supportive cardio should happen once, on one day, or on a named day only, include exactly one cardio or conditioning block with role accessory or finisher in the entire plan and place it there. Do not duplicate it on a second day.
-        17. Make mixed/support work visible in the template name or focusAreas when it materially changes the day, e.g. "Legs + Finisher" or focusAreas including "Cardio accessory".
-        18. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided.
-        19. Write rationale, notes, and planIntent text as Trai speaking directly to the person using the app. Use "you" and "your"; do not refer to them as "the user".
-        20. For EVERY workout template, set:
+        17. Make mixed/support work visible in the template name or focusAreas when it materially changes the day, e.g. "Legs + Conditioning" or focusAreas including "Cardio support".
+        18. Do not use "Finisher" as the default label for supportive cardio. Use "finisher" only when the person explicitly asks for work at the end of the workout; otherwise name the block by its actual purpose, such as endurance support, conditioning, intervals, zone 2, or recovery.
+        19. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided.
+        20. Write rationale, notes, and planIntent text as Trai speaking directly to the person using the app. Use "you" and "your"; do not refer to them as "the user".
+        21. For EVERY workout template, set:
            - sessionType: one of strength, cardio, hiit, climbing, yoga, pilates, flexibility, mobility, mixed, recovery, custom
            - focusAreas: short labels describing the session focus (e.g. ["Push", "Chest"], ["Yoga Flow", "Recovery"], ["Climbing", "Technique"])
            - notes: one short explanation of why this day belongs in your week
            - blocks: ordered training blocks that describe the actual session
            - exercises belong inside the relevant blocks only; do not duplicate block exercises at the template level
-        21. Keep the JSON compact. Use short one-sentence notes/detail fields and avoid repeating the same coaching text in multiple places.
+        22. Keep the JSON compact. Use short one-sentence notes/detail fields and avoid repeating the same coaching text in multiple places.
 
         EXERCISE SELECTION RULES:
         - For full gym: Use barbells, dumbbells, cables, and machines

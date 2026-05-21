@@ -25,9 +25,9 @@ struct CustomExercisesView: View {
         return customExercises.filter { $0.name.localizedStandardContains(searchText) }
     }
 
-    private var exercisesByMuscle: [String: [Exercise]] {
+    private var exercisesByTarget: [String: [Exercise]] {
         Dictionary(grouping: filteredExercises) { exercise in
-            exercise.muscleGroup ?? "Other"
+            exercise.targetTags.first ?? exercise.exerciseCategory.displayName
         }
     }
 
@@ -51,9 +51,9 @@ struct CustomExercisesView: View {
             } else if filteredExercises.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
-                ForEach(exercisesByMuscle.keys.sorted(), id: \.self) { muscleGroup in
-                    Section(muscleGroup.capitalized) {
-                        ForEach(exercisesByMuscle[muscleGroup] ?? []) { exercise in
+                ForEach(exercisesByTarget.keys.sorted(), id: \.self) { target in
+                    Section(target) {
+                        ForEach(exercisesByTarget[target] ?? []) { exercise in
                             ExerciseManagementRow(exercise: exercise)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
@@ -81,12 +81,14 @@ struct CustomExercisesView: View {
             fetchCustomExercises()
         }
         .sheet(isPresented: $showingAddCustomExercise) {
-            AddCustomExerciseSheet(initialName: "") { name, muscleGroup, category, secondaryMuscles in
+            AddCustomExerciseSheet(initialName: "") { name, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
                 addCustomExercise(
                     name: name,
                     muscleGroup: muscleGroup,
                     category: category,
-                    secondaryMuscles: secondaryMuscles
+                    secondaryMuscles: secondaryMuscles,
+                    targetTags: targetTags,
+                    trackingFields: trackingFields
                 )
             }
             .traiSheetBranding()
@@ -132,7 +134,9 @@ struct CustomExercisesView: View {
         name: String,
         muscleGroup: Exercise.MuscleGroup?,
         category: Exercise.Category,
-        secondaryMuscles: [String]? = nil
+        secondaryMuscles: [String]? = nil,
+        targetTags: [String] = [],
+        trackingFields: [Exercise.TrackingField] = []
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -147,6 +151,12 @@ struct CustomExercisesView: View {
             if let secondaryMuscles, !secondaryMuscles.isEmpty, (existing.secondaryMuscles?.isEmpty ?? true) {
                 existing.secondaryMuscles = secondaryMuscles.joined(separator: ",")
             }
+            if !targetTags.isEmpty {
+                existing.targetTags = targetTags
+            }
+            if !trackingFields.isEmpty {
+                existing.trackingFields = trackingFields
+            }
             try? modelContext.save()
             fetchCustomExercises()
             HapticManager.success()
@@ -159,6 +169,8 @@ struct CustomExercisesView: View {
             muscleGroup: category == .strength ? muscleGroup : nil
         )
         exercise.isCustom = true
+        exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: category) : targetTags
+        exercise.trackingFields = trackingFields.isEmpty ? Exercise.defaultTrackingFields(for: category) : trackingFields
         if let secondaryMuscles, !secondaryMuscles.isEmpty {
             exercise.secondaryMuscles = secondaryMuscles.joined(separator: ",")
         }
@@ -193,15 +205,15 @@ private struct ExerciseManagementRow: View {
                     .font(.body)
 
                 HStack(spacing: 8) {
-                    Text(exercise.category.capitalized)
+                    Text(exercise.exerciseCategory.displayName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    if let muscleGroup = exercise.muscleGroup {
+                    if let target = exercise.targetTags.first {
                         Text("•")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
-                        Text(muscleGroup.capitalized)
+                        Text(target)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

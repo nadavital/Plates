@@ -222,48 +222,6 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(firstDecode.modalityProgression?.targets.first?.id, secondDecode.modalityProgression?.targets.first?.id)
     }
 
-    func testLegacyCardioFinisherBlockDecodesAsCardioWithFinisherRole() throws {
-        let json = """
-        {
-          "splitType": "custom",
-          "daysPerWeek": 1,
-          "templates": [
-            {
-              "name": "Hybrid Day",
-              "targetMuscleGroups": [],
-              "exercises": [],
-              "blocks": [
-                {
-                  "kind": "cardioFinisher",
-                  "title": "Bike Support",
-                  "detail": "Easy finish",
-                  "exercises": [],
-                  "durationMinutes": 8,
-                  "order": 0
-                }
-              ],
-              "estimatedDurationMinutes": 45,
-              "order": 0
-            }
-          ],
-          "rationale": "",
-          "guidelines": [],
-          "progressionStrategy": {
-            "type": "doubleProgression",
-            "weightIncrementKg": 2.5,
-            "repsTrigger": 8,
-            "description": "Progress gradually."
-          }
-        }
-        """
-
-        let plan = try XCTUnwrap(WorkoutPlan.fromJSON(json))
-        let block = try XCTUnwrap(plan.templates.first?.displayBlocks.first)
-
-        XCTAssertEqual(block.kind, .cardio)
-        XCTAssertEqual(block.role, .finisher)
-    }
-
     func testWorkoutPlanRefinementSchemaRequiresModalityFields() throws {
         let schema = AIPromptBuilder.workoutPlanRefinementSchema
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])

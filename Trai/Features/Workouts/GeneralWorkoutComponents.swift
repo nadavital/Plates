@@ -80,6 +80,7 @@ struct GeneralActivityCard: View {
     var allowsCompletionToggle: Bool = true
     var allowsDeletion: Bool = true
     var showsEditableFields: Bool = true
+    var isPlannedGuidance: Bool = false
     let onUpdateNotes: (String) -> Void
     let onUpdateDuration: (Int?) -> Void
     let onToggleComplete: () -> Void
@@ -110,24 +111,38 @@ struct GeneralActivityCard: View {
     }
 
     private var metadataChips: [ActivityMetadataChip] {
+        guard !isPlannedGuidance else { return [] }
+
         var chips: [ActivityMetadataChip] = []
-        if let role = entry.activityRole {
-            chips.append(ActivityMetadataChip(title: role.displayName, icon: role.iconName))
+
+        func appendUnique(title: String, icon: String) {
+            let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !normalized.isEmpty,
+                  !chips.contains(where: { $0.title.lowercased() == normalized }) else {
+                return
+            }
+            chips.append(ActivityMetadataChip(title: title, icon: icon))
         }
+
         if let kind = entry.activityKind {
-            chips.append(ActivityMetadataChip(title: kind.displayName, icon: kind.iconName))
+            appendUnique(title: kind.displayName, icon: kind.iconName)
+        }
+        if let role = entry.activityRole {
+            appendUnique(title: role.displayName, icon: role.iconName)
         }
         if let intensity = entry.plannedIntensity?.trimmingCharacters(in: .whitespacesAndNewlines), !intensity.isEmpty {
-            chips.append(ActivityMetadataChip(title: intensity, icon: "gauge.with.dots.needle.33percent"))
+            appendUnique(title: intensity, icon: "gauge.with.dots.needle.33percent")
         }
-        if let target = entry.plannedTarget?.trimmingCharacters(in: .whitespacesAndNewlines), !target.isEmpty {
-            chips.append(ActivityMetadataChip(title: target, icon: "target"))
+        if let target = entry.plannedTarget?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !target.isEmpty,
+           !isPlannedGuidance {
+            appendUnique(title: target, icon: "target")
         }
         return chips
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: isPlannedGuidance ? 8 : 12) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: entry.activityIconName)
                     .font(.subheadline)
@@ -137,22 +152,24 @@ struct GeneralActivityCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.exerciseName)
-                        .font(.headline)
+                        .font(isPlannedGuidance ? .subheadline.weight(.semibold) : .headline)
 
-                    if let completedAt = entry.completedAt {
-                        Text("Completed \(completedAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("In progress")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    if !isPlannedGuidance {
+                        if let completedAt = entry.completedAt {
+                            Text("Completed \(completedAt.formatted(date: .omitted, time: .shortened))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("In progress")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
                 Spacer()
 
-                if allowsCompletionToggle {
+                if allowsCompletionToggle && !isPlannedGuidance {
                     Button(action: onToggleComplete) {
                         Image(systemName: entry.completedAt != nil ? "checkmark.circle.fill" : "circle")
                             .font(.title3)
@@ -161,7 +178,7 @@ struct GeneralActivityCard: View {
                     .buttonStyle(.plain)
                 }
 
-                if allowsDeletion {
+                if allowsDeletion && !isPlannedGuidance {
                     Button(role: .destructive, action: onDelete) {
                         Image(systemName: "trash")
                             .font(.subheadline)
@@ -209,7 +226,7 @@ struct GeneralActivityCard: View {
                         .padding(.vertical, 10)
                         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
                 }
-            } else {
+            } else if !isPlannedGuidance {
                 VStack(alignment: .leading, spacing: 8) {
                     if let duration = entry.formattedDuration {
                         Label(duration, systemImage: "clock")
@@ -229,9 +246,9 @@ struct GeneralActivityCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(.rect(cornerRadius: 16))
+        .padding(isPlannedGuidance ? 14 : 16)
+        .background(Color(.secondarySystemBackground).opacity(isPlannedGuidance ? 0.72 : 1))
+        .clipShape(.rect(cornerRadius: isPlannedGuidance ? 14 : 16))
     }
 }
 

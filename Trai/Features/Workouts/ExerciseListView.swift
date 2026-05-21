@@ -100,6 +100,8 @@ struct ExerciseListView: View {
         let muscleGroup: Exercise.MuscleGroup?
         let category: Exercise.Category
         let secondaryMuscles: [String]?
+        let targetTags: [String]
+        let trackingFields: [Exercise.TrackingField]
     }
 
     private var targetMusclePriority: [Exercise.MuscleGroup: Int] {
@@ -297,12 +299,13 @@ struct ExerciseListView: View {
                 filterSection(muscleGroups: muscleGroupsForFilterChips)
 
                 List {
-                    // Load defaults if empty
                     if exercises.isEmpty {
                         Section {
-                            Button("Load Default Exercises") {
-                                loadDefaultExercises()
-                            }
+                            ContentUnavailableView(
+                                "No Exercises Yet",
+                                systemImage: "dumbbell.fill",
+                                description: Text("Trai is preparing your exercise library.")
+                            )
                         }
                     } else {
                         // Create custom exercise option (always available at top)
@@ -399,7 +402,7 @@ struct ExerciseListView: View {
                                     exerciseRow(exercise)
                                 }
                             } header: {
-                                Label(selectedCategory?.displayName ?? "Other", systemImage: "figure.run")
+                                Label(selectedCategory?.displayName ?? "Activities", systemImage: selectedCategory?.iconName ?? "figure.mixed.cardio")
                             }
                         }
                     }
@@ -418,12 +421,14 @@ struct ExerciseListView: View {
             .sheet(isPresented: $showingAddCustom) {
                 AddCustomExerciseSheet(
                     initialName: searchText,
-                    onSave: { name, muscleGroup, category, secondaryMuscles in
+                    onSave: { name, muscleGroup, category, secondaryMuscles, targetTags, trackingFields in
                         queueCustomExerciseCreation(
                             name: name,
                             muscleGroup: muscleGroup,
                             category: category,
-                            secondaryMuscles: secondaryMuscles
+                            secondaryMuscles: secondaryMuscles,
+                            targetTags: targetTags,
+                            trackingFields: trackingFields
                         )
                     }
                 )
@@ -508,6 +513,7 @@ struct ExerciseListView: View {
                 }
             }
             .onAppear {
+                ExerciseLibrarySeeder.ensureDefaults(in: modelContext)
                 refreshUsageSummaryIfNeeded(force: true)
             }
             .onChange(of: showingCamera) { _, isShowing in
@@ -521,7 +527,9 @@ struct ExerciseListView: View {
                     name: pendingCustomExerciseCreation.name,
                     muscleGroup: pendingCustomExerciseCreation.muscleGroup,
                     category: pendingCustomExerciseCreation.category,
-                    secondaryMuscles: pendingCustomExerciseCreation.secondaryMuscles
+                    secondaryMuscles: pendingCustomExerciseCreation.secondaryMuscles,
+                    targetTags: pendingCustomExerciseCreation.targetTags,
+                    trackingFields: pendingCustomExerciseCreation.trackingFields
                 )
             }
             .onDisappear {
@@ -662,6 +670,10 @@ struct ExerciseListView: View {
                             Text(muscleGroup.displayName)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        } else if exercise.exerciseCategory != .strength {
+                            Text(exercise.exerciseCategory.displayName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
                         // Show equipment name (stored or inferred)
@@ -702,13 +714,17 @@ struct ExerciseListView: View {
         name: String,
         muscleGroup: Exercise.MuscleGroup?,
         category: Exercise.Category,
-        secondaryMuscles: [String]?
+        secondaryMuscles: [String]?,
+        targetTags: [String],
+        trackingFields: [Exercise.TrackingField]
     ) {
         let request = PendingCustomExerciseCreation(
             name: name,
             muscleGroup: muscleGroup,
             category: category,
-            secondaryMuscles: secondaryMuscles
+            secondaryMuscles: secondaryMuscles,
+            targetTags: targetTags,
+            trackingFields: trackingFields
         )
 
         guard showingAddCustom else {
@@ -716,7 +732,9 @@ struct ExerciseListView: View {
                 name: request.name,
                 muscleGroup: request.muscleGroup,
                 category: request.category,
-                secondaryMuscles: request.secondaryMuscles
+                secondaryMuscles: request.secondaryMuscles,
+                targetTags: request.targetTags,
+                trackingFields: request.trackingFields
             )
             return
         }
@@ -725,21 +743,14 @@ struct ExerciseListView: View {
         showingAddCustom = false
     }
 
-    private func loadDefaultExercises() {
-        for (name, category, muscleGroup, equipment) in Exercise.defaultExercises {
-            let exercise = Exercise(name: name, category: category, muscleGroup: muscleGroup)
-            exercise.equipmentName = equipment
-            modelContext.insert(exercise)
-        }
-        try? modelContext.save()
-    }
-
     private func addCustomExercise(
         name: String,
         muscleGroup: Exercise.MuscleGroup? = nil,
         category: Exercise.Category = .strength,
         equipmentName: String? = nil,
-        secondaryMuscles: [String]? = nil
+        secondaryMuscles: [String]? = nil,
+        targetTags: [String] = [],
+        trackingFields: [Exercise.TrackingField]? = nil
     ) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -752,8 +763,17 @@ struct ExerciseListView: View {
                existing.targetMuscleGroup == nil,
                let normalizedMuscleGroup {
                 existing.targetMuscleGroup = normalizedMuscleGroup
-                try? modelContext.save()
             }
+            if let secondary = secondaryMuscles, !secondary.isEmpty {
+                existing.secondaryMuscles = secondary.joined(separator: ",")
+            }
+            if !targetTags.isEmpty {
+                existing.targetTags = targetTags
+            }
+            if let trackingFields, !trackingFields.isEmpty {
+                existing.trackingFields = trackingFields
+            }
+            try? modelContext.save()
             selectExercise(existing)
             return
         }
@@ -766,6 +786,8 @@ struct ExerciseListView: View {
         )
         exercise.isCustom = true
         exercise.equipmentName = equipmentName
+        exercise.targetTags = targetTags.isEmpty ? Exercise.defaultTargetTags(for: category) : targetTags
+        exercise.trackingFields = trackingFields ?? Exercise.defaultTrackingFields(for: category)
         if let secondary = secondaryMuscles, !secondary.isEmpty {
             exercise.secondaryMuscles = secondary.joined(separator: ",")
         }

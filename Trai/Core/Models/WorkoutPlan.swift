@@ -460,9 +460,6 @@ struct WorkoutPlan: Codable, Equatable {
                 }
             }
 
-            nonisolated static func legacyRole(forRawKind rawKind: String) -> Role? {
-                rawKind == "cardioFinisher" ? .finisher : nil
-            }
         }
 
         nonisolated init(
@@ -494,9 +491,8 @@ struct WorkoutPlan: Codable, Equatable {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             let rawKind = try container.decode(String.self, forKey: .kind)
-            kind = BlockKind(rawValue: rawKind) ?? (rawKind == "cardioFinisher" ? .cardio : .custom)
+            kind = BlockKind(rawValue: rawKind) ?? .custom
             role = try container.decodeIfPresent(Role.self, forKey: .role)
-                ?? Role.legacyRole(forRawKind: rawKind)
                 ?? Role.defaultRole(for: kind)
             title = try container.decode(String.self, forKey: .title)
             detail = try container.decode(String.self, forKey: .detail)

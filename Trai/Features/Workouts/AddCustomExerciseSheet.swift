@@ -16,11 +16,12 @@ struct AddCustomExerciseSheet: View {
     @Environment(ProUpsellCoordinator.self) private var proUpsellCoordinator: ProUpsellCoordinator?
 
     let initialName: String
-    let onSave: (String, Exercise.MuscleGroup?, Exercise.Category, [String]?) -> Void
+    let onSave: (String, Exercise.MuscleGroup?, Exercise.Category, [String]?, [String], [Exercise.TrackingField]) -> Void
 
     @State private var exerciseName: String = ""
     @State private var selectedCategory: Exercise.Category = .strength
-    @State private var selectedMuscleGroup: Exercise.MuscleGroup?
+    @State private var selectedTargets: Set<String> = []
+    @State private var selectedTrackingFields: Set<Exercise.TrackingField> = Set(Exercise.defaultTrackingFields(for: .strength))
 
     // AI Analysis state
     @State private var aiService = AIService()
@@ -56,10 +57,11 @@ struct AddCustomExerciseSheet: View {
                     categorySelector
                         .traiCard(cornerRadius: 16)
 
-                    if selectedCategory == .strength {
-                        muscleGroupSelector
-                            .traiCard(cornerRadius: 16)
-                    }
+                    targetSelector
+                        .traiCard(cornerRadius: 16)
+
+                    trackingFieldSelector
+                        .traiCard(cornerRadius: 16)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -76,7 +78,14 @@ struct AddCustomExerciseSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add", systemImage: "checkmark") {
-                        onSave(exerciseName, selectedMuscleGroup, selectedCategory, analysisResult?.secondaryMuscles)
+                        onSave(
+                            exerciseName,
+                            primaryMuscleGroup,
+                            selectedCategory,
+                            secondaryMuscleGroups,
+                            Array(selectedTargets).sorted(),
+                            orderedSelectedTrackingFields
+                        )
                         HapticManager.success()
                     }
                     .labelStyle(.iconOnly)
@@ -85,6 +94,7 @@ struct AddCustomExerciseSheet: View {
             }
             .onAppear {
                 exerciseName = initialName
+                resetDefaultsForSelectedCategory()
                 if canAccessExerciseAI
                     && !requiresAuthenticatedAccountForExerciseAI
                     && !initialName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -195,7 +205,11 @@ struct AddCustomExerciseSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Category", icon: "square.grid.2x2")
 
-            HStack(spacing: 8) {
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 8) {
                 ForEach(Exercise.Category.allCases) { category in
                     CategoryButton(
                         category: category,
@@ -203,6 +217,7 @@ struct AddCustomExerciseSheet: View {
                     ) {
                         withAnimation(.snappy(duration: 0.2)) {
                             selectedCategory = category
+                            resetDefaultsForSelectedCategory()
                             HapticManager.selectionChanged()
                         }
                     }
@@ -211,27 +226,56 @@ struct AddCustomExerciseSheet: View {
         }
     }
 
-    // MARK: - Muscle Group Selector
+    // MARK: - Target Selector
 
-    private var muscleGroupSelector: some View {
+    private var targetSelector: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Target Muscle", icon: "figure.strengthtraining.traditional")
+            sectionHeader("What are you targeting?", icon: selectedCategory.iconName)
 
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 10) {
-                ForEach(Exercise.MuscleGroup.allCases) { muscle in
-                    MuscleButton(
-                        muscle: muscle,
-                        isSelected: selectedMuscleGroup == muscle
+                ForEach(visibleTargetOptions, id: \.self) { target in
+                    TargetButton(
+                        title: target,
+                        isSelected: selectedTargets.contains(target)
                     ) {
                         withAnimation(.snappy(duration: 0.2)) {
-                            if selectedMuscleGroup == muscle {
-                                selectedMuscleGroup = nil
+                            if selectedTargets.contains(target) {
+                                selectedTargets.remove(target)
                             } else {
-                                selectedMuscleGroup = muscle
+                                selectedTargets.insert(target)
+                            }
+                            HapticManager.selectionChanged()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var trackingFieldSelector: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Track", icon: "slider.horizontal.3")
+
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 10) {
+                ForEach(Exercise.TrackingField.allCases) { field in
+                    TargetButton(
+                        title: field.displayName,
+                        icon: field.iconName,
+                        isSelected: selectedTrackingFields.contains(field)
+                    ) {
+                        withAnimation(.snappy(duration: 0.2)) {
+                            if selectedTrackingFields.contains(field) {
+                                selectedTrackingFields.remove(field)
+                            } else {
+                                selectedTrackingFields.insert(field)
                             }
                             HapticManager.selectionChanged()
                         }
@@ -272,16 +316,74 @@ struct AddCustomExerciseSheet: View {
             withAnimation(.snappy(duration: 0.2)) {
                 if let category = Exercise.Category(rawValue: analysis.category) {
                     selectedCategory = category
+                    resetDefaultsForSelectedCategory()
+                }
+
+                if let targetTags = analysis.targetTags, !targetTags.isEmpty {
+                    selectedTargets = Set(targetTags.map(Self.displayTargetTag))
+                }
+
+                if let fields = analysis.trackingFields?
+                    .compactMap(Exercise.TrackingField.init(rawValue:)),
+                   !fields.isEmpty {
+                    selectedTrackingFields = Set(fields)
                 }
 
                 if let muscleGroupStr = analysis.muscleGroup,
                    let muscleGroup = Exercise.MuscleGroup(rawValue: muscleGroupStr) {
-                    selectedMuscleGroup = muscleGroup
+                    selectedTargets.insert(muscleGroup.displayName)
                 }
             }
         } catch {
             print("Exercise analysis failed: \(error)")
         }
+    }
+
+    private var primaryMuscleGroup: Exercise.MuscleGroup? {
+        selectedMuscleTargets.first
+    }
+
+    private var secondaryMuscleGroups: [String]? {
+        let secondary = selectedMuscleTargets.dropFirst().map(\.rawValue)
+        return secondary.isEmpty ? analysisResult?.secondaryMuscles : Array(secondary)
+    }
+
+    private var selectedMuscleTargets: [Exercise.MuscleGroup] {
+        selectedTargets
+            .compactMap { target in
+                Exercise.MuscleGroup.allCases.first { $0.displayName == target || $0.rawValue == target }
+            }
+            .sorted { $0.displayName < $1.displayName }
+    }
+
+    private var orderedSelectedTrackingFields: [Exercise.TrackingField] {
+        let selected = Exercise.TrackingField.allCases.filter { selectedTrackingFields.contains($0) }
+        return selected.isEmpty ? Exercise.defaultTrackingFields(for: selectedCategory) : selected
+    }
+
+    private var visibleTargetOptions: [String] {
+        let defaults = Exercise.targetOptions(for: selectedCategory)
+        let extra = selectedTargets
+            .filter { !defaults.contains($0) }
+            .sorted()
+        return defaults + extra
+    }
+
+    private func resetDefaultsForSelectedCategory() {
+        let defaults = Exercise.defaultTargetTags(for: selectedCategory)
+        selectedTargets = Set(defaults)
+        selectedTrackingFields = Set(Exercise.defaultTrackingFields(for: selectedCategory))
+    }
+
+    private static func displayTargetTag(_ tag: String) -> String {
+        tag
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { word in
+                word.prefix(1).uppercased() + word.dropFirst()
+            }
+            .joined(separator: " ")
     }
 }
 
@@ -319,8 +421,9 @@ private struct CategoryButton: View {
 
 // MARK: - Muscle Button
 
-private struct MuscleButton: View {
-    let muscle: Exercise.MuscleGroup
+private struct TargetButton: View {
+    let title: String
+    var icon: String?
     let isSelected: Bool
     let action: () -> Void
 
@@ -340,9 +443,11 @@ private struct MuscleButton: View {
 
     private var label: some View {
         VStack(spacing: 6) {
-            Image(systemName: muscle.iconName)
-                .font(.traiLabel(13))
-            Text(muscle.displayName)
+            if let icon {
+                Image(systemName: icon)
+                    .font(.traiLabel(13))
+            }
+            Text(title)
                 .font(.traiLabel(11))
                 .lineLimit(1)
         }
