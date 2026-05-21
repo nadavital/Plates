@@ -14,6 +14,8 @@ final class WorkoutGoal {
     var statusRaw: String = GoalStatus.active.rawValue
     var linkedWorkoutTypeRaw: String?
     var linkedActivityName: String?
+    var linkedActivityKindRaw: String?
+    var linkedActivityRoleRaw: String?
     var targetValue: Double?
     var targetUnit: String = ""
     var periodUnitRaw: String?
@@ -37,6 +39,8 @@ final class WorkoutGoal {
         status: GoalStatus = .active,
         linkedWorkoutType: WorkoutMode? = nil,
         linkedActivityName: String? = nil,
+        linkedActivityKind: WorkoutPlan.TrainingBlock.BlockKind? = nil,
+        linkedActivityRole: WorkoutPlan.TrainingBlock.Role? = nil,
         targetValue: Double? = nil,
         targetUnit: String = "",
         periodUnit: PeriodUnit? = nil,
@@ -52,6 +56,8 @@ final class WorkoutGoal {
         self.statusRaw = status.rawValue
         self.linkedWorkoutTypeRaw = linkedWorkoutType?.rawValue
         self.linkedActivityName = linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.linkedActivityKindRaw = linkedActivityKind?.rawValue
+        self.linkedActivityRoleRaw = linkedActivityRole?.rawValue
         self.targetValue = targetValue
         self.targetUnit = targetUnit
         self.periodUnitRaw = periodUnit?.rawValue
@@ -164,6 +170,20 @@ extension WorkoutGoal {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    var linkedActivityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+        get { linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)) }
+        set { linkedActivityKindRaw = newValue?.rawValue }
+    }
+
+    var linkedActivityRole: WorkoutPlan.TrainingBlock.Role? {
+        get { linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)) }
+        set { linkedActivityRoleRaw = newValue?.rawValue }
+    }
+
+    var hasActivityScope: Bool {
+        trimmedActivityName != nil || linkedActivityKind != nil || linkedActivityRole != nil
+    }
+
     var trimmedNotes: String {
         notes.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -202,16 +222,20 @@ extension WorkoutGoal {
     }
 
     var scopeSummary: String {
-        if let activityName = trimmedActivityName, let linkedWorkoutType {
-            return "\(linkedWorkoutType.displayName) • \(activityName)"
+        var parts: [String] = []
+        if let linkedWorkoutType {
+            parts.append(linkedWorkoutType.displayName)
         }
         if let activityName = trimmedActivityName {
-            return activityName
+            parts.append(activityName)
         }
-        if let linkedWorkoutType {
-            return linkedWorkoutType.displayName
+        if let linkedActivityKind {
+            parts.append(linkedActivityKind.displayName)
         }
-        return "Any session"
+        if let linkedActivityRole {
+            parts.append(linkedActivityRole.displayName)
+        }
+        return parts.isEmpty ? "Any session" : parts.joined(separator: " • ")
     }
 
     var trackingSummary: String? {
@@ -249,22 +273,38 @@ extension WorkoutGoal {
             return false
         }
 
-        guard let activityName = trimmedActivityName?.goalNormalizedKey else {
+        guard hasActivityScope else {
             return true
         }
 
-        let normalizedFocusAreas = Set(workout.focusAreas.map(\.goalNormalizedKey))
-        if normalizedFocusAreas.contains(activityName) {
-            return true
+        let activityName = trimmedActivityName?.goalNormalizedKey
+        let nameMatches = activityName.map {
+            Set(workout.focusAreas.map(\.goalNormalizedKey)).contains($0)
+                || workout.name.goalNormalizedKey == $0
+        } ?? false
+
+        return (workout.entries ?? []).contains { matches(entry: $0) } || nameMatches
+    }
+
+    func matches(entry: LiveWorkoutEntry) -> Bool {
+        if let activityName = trimmedActivityName?.goalNormalizedKey,
+           entry.exerciseName.goalNormalizedKey != activityName {
+            return false
         }
 
-        if workout.name.goalNormalizedKey == activityName {
-            return true
+        if let linkedActivityKind {
+            let entryKind = entry.activityKind ?? WorkoutPlan.TrainingBlock.BlockKind.liveWorkoutFallbackKind(for: entry.exerciseType)
+            if entryKind != linkedActivityKind {
+                return false
+            }
         }
 
-        return (workout.entries ?? []).contains {
-            $0.exerciseName.goalNormalizedKey == activityName
+        if let linkedActivityRole,
+           entry.activityRole != linkedActivityRole {
+            return false
         }
+
+        return true
     }
 
     func matches(session: WorkoutSession) -> Bool {
@@ -272,8 +312,12 @@ extension WorkoutGoal {
             return false
         }
 
-        guard let activityName = trimmedActivityName?.goalNormalizedKey else {
+        guard hasActivityScope else {
             return true
+        }
+
+        guard let activityName = trimmedActivityName?.goalNormalizedKey else {
+            return false
         }
 
         return session.goalMatchingTokens.contains(activityName)

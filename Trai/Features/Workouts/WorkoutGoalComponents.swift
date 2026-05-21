@@ -258,12 +258,7 @@ enum WorkoutGoalProgressResolver {
         let matchingSessions = sessions.filter { goal.matches(session: $0) }
 
         let matchingEntries = matchingWorkouts.flatMap { workout in
-            (workout.entries ?? []).filter { entry in
-                guard let activityName = goal.trimmedActivityName?.goalNormalizedKey else {
-                    return true
-                }
-                return entry.exerciseName.goalNormalizedKey == activityName
-            }
+            (workout.entries ?? []).filter { goal.matches(entry: $0) }
         }
 
         let latestSupportingNote = latestNote(
@@ -340,7 +335,7 @@ enum WorkoutGoalProgressResolver {
                     return durationMinutes * 60
                 }.max()
 
-                if goal.trimmedActivityName != nil {
+                if goal.hasActivityScope {
                     let entryMax = matchingEntries.compactMap { entry -> Double? in
                         guard let durationSeconds = entry.durationSeconds, durationSeconds > 0 else { return nil }
                         return Double(durationSeconds)
@@ -665,9 +660,23 @@ enum WorkoutGoalProgressResolver {
             periodStart = calendar.date(byAdding: .month, value: -(periodCount - 1), to: currentMonth) ?? currentMonth
         }
 
-        let workoutCount = workouts
-            .filter { ($0.completedAt ?? $0.startedAt) >= periodStart }
-            .count
+        let workoutCount: Int
+        if goal.hasActivityScope {
+            workoutCount = workouts.reduce(0) { count, workout in
+                count + (workout.entries ?? []).filter { entry in
+                    guard goal.matches(entry: entry),
+                          let completedAt = entry.completedAt,
+                          completedAt >= periodStart else {
+                        return false
+                    }
+                    return true
+                }.count
+            }
+        } else {
+            workoutCount = workouts
+                .filter { ($0.completedAt ?? $0.startedAt) >= periodStart }
+                .count
+        }
         let sessionCount = sessions
             .filter { $0.loggedAt >= periodStart }
             .count
@@ -1743,6 +1752,8 @@ struct AddWorkoutGoalSheet: View {
     @State private var scope: GoalScope = .session
     @State private var selectedWorkoutType: WorkoutMode
     @State private var activityName = ""
+    @State private var selectedActivityKind: WorkoutPlan.TrainingBlock.BlockKind?
+    @State private var selectedActivityRole: WorkoutPlan.TrainingBlock.Role?
     @State private var targetValueText = ""
     @State private var baselineValueText = ""
     @State private var targetUnit: String
@@ -1784,9 +1795,11 @@ struct AddWorkoutGoalSheet: View {
         self.editingGoal = existing
         _title = State(initialValue: existing.title)
         _goalKind = State(initialValue: existing.goalKind)
-        _scope = State(initialValue: existing.trimmedActivityName != nil ? .activity : .session)
+        _scope = State(initialValue: existing.hasActivityScope ? .activity : .session)
         _selectedWorkoutType = State(initialValue: existing.linkedWorkoutType ?? .custom)
         _activityName = State(initialValue: existing.linkedActivityName ?? "")
+        _selectedActivityKind = State(initialValue: existing.linkedActivityKind)
+        _selectedActivityRole = State(initialValue: existing.linkedActivityRole)
         _targetValueText = State(initialValue: Self.formatDoubleForField(existing.targetValue))
         _baselineValueText = State(initialValue: Self.formatDoubleForField(existing.baselineValue))
         _targetUnit = State(
@@ -1826,8 +1839,11 @@ struct AddWorkoutGoalSheet: View {
     }
 
     private var isSaveDisabled: Bool {
-        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-        (scope == .activity && activityName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ||
+        let hasActivityScope = !activityName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            selectedActivityKind != nil ||
+            selectedActivityRole != nil
+        return title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        (scope == .activity && !hasActivityScope) ||
         (goalKind.supportsNumericTarget && Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines)) == nil)
     }
 
@@ -1896,14 +1912,19 @@ struct AddWorkoutGoalSheet: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text(scope == .session ? "This goal will follow your \(selectedWorkoutType.displayName.lowercased()) sessions." : "Attach this goal to a specific activity name so recent notes and metrics are more focused.")
+                        Text(scope == .session ? "This goal will follow your \(selectedWorkoutType.displayName.lowercased()) sessions." : "Track an exact movement, activity type, role, or any combination.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
                         if scope == .activity {
-                            TextField("Activity name", text: $activityName)
+                            TextField("Activity name (optional)", text: $activityName)
                                 .padding(12)
                                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+                            HStack(spacing: 10) {
+                                activityKindMenu
+                                activityRoleMenu
+                            }
 
                             if !activitySuggestions.isEmpty {
                                 FlowLayout(spacing: 8) {
@@ -2026,6 +2047,8 @@ struct AddWorkoutGoalSheet: View {
                             existing.linkedActivityName = scope == .activity
                                 ? activityName.trimmingCharacters(in: .whitespacesAndNewlines)
                                 : nil
+                            existing.linkedActivityKind = scope == .activity ? selectedActivityKind : nil
+                            existing.linkedActivityRole = scope == .activity ? selectedActivityRole : nil
                             existing.targetValue = goalKind.supportsNumericTarget
                                 ? Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines))
                                 : nil
@@ -2046,6 +2069,8 @@ struct AddWorkoutGoalSheet: View {
                                 goalKind: goalKind,
                                 linkedWorkoutType: selectedWorkoutType,
                                 linkedActivityName: scope == .activity ? activityName : nil,
+                                linkedActivityKind: scope == .activity ? selectedActivityKind : nil,
+                                linkedActivityRole: scope == .activity ? selectedActivityRole : nil,
                                 targetValue: goalKind.supportsNumericTarget ? Double(targetValueText.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
                                 targetUnit: goalKind.supportsNumericTarget ? targetUnit : "",
                                 periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
@@ -2067,6 +2092,46 @@ struct AddWorkoutGoalSheet: View {
             }
         }
         .traiSheetBranding()
+    }
+
+    private var activityKindMenu: some View {
+        Menu {
+            Button("Any type") {
+                selectedActivityKind = nil
+            }
+            ForEach(WorkoutPlan.TrainingBlock.BlockKind.allCases) { kind in
+                Button {
+                    selectedActivityKind = kind
+                } label: {
+                    Label(kind.displayName, systemImage: kind.iconName)
+                }
+            }
+        } label: {
+            Label(selectedActivityKind?.displayName ?? "Any type", systemImage: selectedActivityKind?.iconName ?? "square.grid.2x2")
+                .font(.caption.weight(.semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.traiSecondary(size: .compact, fullWidth: true))
+    }
+
+    private var activityRoleMenu: some View {
+        Menu {
+            Button("Any role") {
+                selectedActivityRole = nil
+            }
+            ForEach(WorkoutPlan.TrainingBlock.Role.allCases) { role in
+                Button {
+                    selectedActivityRole = role
+                } label: {
+                    Label(role.displayName, systemImage: role.iconName)
+                }
+            }
+        } label: {
+            Label(selectedActivityRole?.displayName ?? "Any role", systemImage: selectedActivityRole?.iconName ?? "slider.horizontal.3")
+                .font(.caption.weight(.semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.traiSecondary(size: .compact, fullWidth: true))
     }
 
     private static func defaultUnit(for kind: WorkoutGoal.GoalKind, prefersMetricWeight: Bool) -> String {

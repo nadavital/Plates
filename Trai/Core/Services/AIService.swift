@@ -397,6 +397,12 @@ final class AIService {
         let errorCode = payload?.error?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         if statusCode == 401 {
+            let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalizedMessage.contains("session not found") ||
+                normalizedMessage.contains("session expired") ||
+                normalizedMessage.contains("invalid session") {
+                return .accessDenied("Sign in is required before using server-backed AI features.")
+            }
             return .accessDenied(message)
         }
 

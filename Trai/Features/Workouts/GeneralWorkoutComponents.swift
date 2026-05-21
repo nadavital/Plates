@@ -109,6 +109,23 @@ struct GeneralActivityCard: View {
         )
     }
 
+    private var metadataChips: [ActivityMetadataChip] {
+        var chips: [ActivityMetadataChip] = []
+        if let role = entry.activityRole {
+            chips.append(ActivityMetadataChip(title: role.displayName, icon: role.iconName))
+        }
+        if let kind = entry.activityKind {
+            chips.append(ActivityMetadataChip(title: kind.displayName, icon: kind.iconName))
+        }
+        if let intensity = entry.plannedIntensity?.trimmingCharacters(in: .whitespacesAndNewlines), !intensity.isEmpty {
+            chips.append(ActivityMetadataChip(title: intensity, icon: "gauge.with.dots.needle.33percent"))
+        }
+        if let target = entry.plannedTarget?.trimmingCharacters(in: .whitespacesAndNewlines), !target.isEmpty {
+            chips.append(ActivityMetadataChip(title: target, icon: "target"))
+        }
+        return chips
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
@@ -151,6 +168,19 @@ struct GeneralActivityCard: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                }
+            }
+
+            if !metadataChips.isEmpty {
+                FlowLayout(spacing: 8) {
+                    ForEach(metadataChips) { chip in
+                        Label(chip.title, systemImage: chip.icon)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
+                    }
                 }
             }
 
@@ -205,15 +235,31 @@ struct GeneralActivityCard: View {
     }
 }
 
+private struct ActivityMetadataChip: Identifiable {
+    let id = UUID()
+    let title: String
+    let icon: String
+}
+
 struct AddGeneralActivitySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
-    let onAdd: (String, String, Int?) -> Void
+    let onAdd: (String, String, Int?, WorkoutPlan.TrainingBlock.BlockKind, WorkoutPlan.TrainingBlock.Role) -> Void
 
     @State private var activityName = ""
     @State private var activityNotes = ""
     @State private var durationMinutes = ""
+    @State private var selectedKind: WorkoutPlan.TrainingBlock.BlockKind = .custom
+    @State private var selectedRole: WorkoutPlan.TrainingBlock.Role = .accessory
+
+    private var addableKinds: [WorkoutPlan.TrainingBlock.BlockKind] {
+        [.cardio, .conditioning, .mobility, .skill, .sportPractice, .recovery, .custom]
+    }
+
+    private var addableRoles: [WorkoutPlan.TrainingBlock.Role] {
+        [.main, .warmup, .accessory, .finisher, .cooldown, .custom]
+    }
 
     var body: some View {
         NavigationStack {
@@ -226,6 +272,24 @@ struct AddGeneralActivitySheet: View {
                         TextField("e.g. V4 bouldering, Flow block, Breathing work", text: $activityName)
                             .padding(12)
                             .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+
+                        HStack(spacing: 10) {
+                            Picker("Kind", selection: $selectedKind) {
+                                ForEach(addableKinds) { kind in
+                                    Label(kind.displayName, systemImage: kind.iconName)
+                                        .tag(kind)
+                                }
+                            }
+                            .pickerStyle(.menu)
+
+                            Picker("Role", selection: $selectedRole) {
+                                ForEach(addableRoles) { role in
+                                    Label(role.displayName, systemImage: role.iconName)
+                                        .tag(role)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
                     }
                     .padding()
                     .background(Color(.secondarySystemBackground))
@@ -273,7 +337,9 @@ struct AddGeneralActivitySheet: View {
                         onAdd(
                             activityName,
                             activityNotes,
-                            Int(durationMinutes.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 * 60 }
+                            Int(durationMinutes.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 * 60 },
+                            selectedKind,
+                            selectedRole
                         )
                         dismiss()
                     }

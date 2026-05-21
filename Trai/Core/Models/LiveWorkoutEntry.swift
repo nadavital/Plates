@@ -26,6 +26,24 @@ final class LiveWorkoutEntry {
     /// Type of exercise: "strength", "cardio", or "flexibility"
     var exerciseType: String = "strength"
 
+    /// Broad activity kind for non-strength planned/ad hoc work, e.g. "cardio", "mobility", "skill".
+    var activityKindRaw: String = ""
+
+    /// Role inside the workout, e.g. "main", "warmup", "accessory", "finisher", "cooldown".
+    var activityRoleRaw: String = ""
+
+    /// Source workout-plan block ID when this entry came from a generated or manual plan.
+    var sourcePlanBlockIDRaw: String?
+
+    /// Planned duration in seconds before the user edits/logs the actual duration.
+    var plannedDurationSeconds: Int?
+
+    /// Planned effort or intensity cue copied from the workout plan.
+    var plannedIntensity: String?
+
+    /// Planned target copied from the workout plan, such as pace, zone, or movement cue.
+    var plannedTarget: String?
+
     /// JSON-encoded sets data for strength exercises
     /// Format: [{"reps": 10, "weightKg": 50.0, "completed": true, "isWarmup": false}]
     var setsData: String = "[]"
@@ -71,6 +89,38 @@ final class LiveWorkoutEntry {
         !isStrength && !isCardio
     }
 
+    var activityKind: WorkoutPlan.TrainingBlock.BlockKind? {
+        get {
+            let trimmed = activityKindRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmed)
+        }
+        set {
+            activityKindRaw = newValue?.rawValue ?? ""
+        }
+    }
+
+    var activityRole: WorkoutPlan.TrainingBlock.Role? {
+        get {
+            let trimmed = activityRoleRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return WorkoutPlan.TrainingBlock.Role(rawValue: trimmed)
+        }
+        set {
+            activityRoleRaw = newValue?.rawValue ?? ""
+        }
+    }
+
+    var sourcePlanBlockID: UUID? {
+        get {
+            guard let raw = sourcePlanBlockIDRaw else { return nil }
+            return UUID(uuidString: raw)
+        }
+        set {
+            sourcePlanBlockIDRaw = newValue?.uuidString
+        }
+    }
+
     var activityIconName: String {
         switch exerciseType {
         case "strength":
@@ -98,6 +148,32 @@ final class LiveWorkoutEntry {
         self.exerciseId = exerciseId
         self.exerciseType = exerciseType
         self.equipmentName = equipmentName
+    }
+}
+
+extension WorkoutPlan.TrainingBlock.BlockKind {
+    static func liveWorkoutFallbackKind(for exerciseType: String) -> WorkoutPlan.TrainingBlock.BlockKind? {
+        switch exerciseType {
+        case "strength":
+            return .strength
+        case "cardio":
+            return .cardio
+        case "flexibility":
+            return .mobility
+        default:
+            return nil
+        }
+    }
+
+    var liveWorkoutExerciseType: String {
+        switch self {
+        case .cardio, .conditioning:
+            return "cardio"
+        case .mobility, .recovery, .cooldown, .warmup:
+            return "flexibility"
+        case .skill, .sportPractice, .custom, .strength:
+            return "activity"
+        }
     }
 }
 

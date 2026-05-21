@@ -11,6 +11,8 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
     let goalKindRaw: String
     let linkedWorkoutTypeRaw: String?
     let linkedActivityName: String?
+    let linkedActivityKindRaw: String?
+    let linkedActivityRoleRaw: String?
     let targetValue: Double?
     let targetUnit: String?
     let periodUnitRaw: String?
@@ -25,7 +27,9 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             title,
             goalKindRaw,
             linkedWorkoutTypeRaw ?? "",
-            linkedActivityName ?? ""
+            linkedActivityName ?? "",
+            linkedActivityKindRaw ?? "",
+            linkedActivityRoleRaw ?? ""
         ].joined(separator: "|")
     }
 
@@ -60,6 +64,8 @@ struct WorkoutGoalSuggestion: Codable, Identifiable, Sendable {
             goalKind: goalKind,
             linkedWorkoutType: linkedWorkoutType,
             linkedActivityName: linkedActivityName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            linkedActivityKind: linkedActivityKindRaw.flatMap(WorkoutPlan.TrainingBlock.BlockKind.init(rawValue:)),
+            linkedActivityRole: linkedActivityRoleRaw.flatMap(WorkoutPlan.TrainingBlock.Role.init(rawValue:)),
             targetValue: goalKind.supportsNumericTarget ? targetValue : nil,
             targetUnit: goalKind.supportsNumericTarget ? (targetUnit ?? "") : "",
             periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
@@ -295,7 +301,7 @@ extension AIService {
             - Do not infer a strength baseline just because an exercise appears in the plan.
             - Weight/load goals require a known current baseline and should progress from that baseline.
             - Do not create vague progression goals unless the structured target and successCriteria make the exact achievement verifiable from app data.
-            - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName, and successCriteria should all describe the same behavior Trai can track.
+            - Broad goals are allowed, but the intent must be accurate: title, target fields, linkedWorkoutType/linkedActivityName/linkedActivityKindRaw/linkedActivityRoleRaw, and successCriteria should all describe the same behavior Trai can track.
             - If the current plan includes a personalized constraint, habit, or recurring support block, prefer a goal for that specific plan behavior over generic progression.
             - For a brand-new workout plan with little history, use goals that establish the plan: weekly structure adherence, named-day/session-type completion across several weeks, requested recurring habits, check-in cadence, or logging enough sessions for Trai to personalize the next revision.
             - Every frequency, duration, distance, or weight goal must have a targetValue greater than 0 and a clear targetUnit.
@@ -313,7 +319,10 @@ extension AIService {
             - If an exercise clearly appears as a recurring anchor movement in the history, it is okay to recommend an exercise-specific goal tied to linkedActivityName.
             - Use linkedWorkoutType when the goal is broad to a session type.
             - Use linkedActivityName when the goal is tied to a specific exercise or activity like a route, lift, or interval format.
+            - Use linkedActivityKindRaw and linkedActivityRoleRaw when the goal is tied to a category of workout entry, such as cardio support work, mobility warmups, skill accessories, or recovery cooldowns. For support work inside another workout, prefer kind+role over an exact title.
             - linkedWorkoutType must be one of: \(workoutModes)
+            - linkedActivityKindRaw can be warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
+            - linkedActivityRoleRaw can be main, warmup, accessory, finisher, cooldown, or custom.
             - goalKind must be one of: milestone, frequency, duration, distance, weight
             - For milestone goals, leave targetValue and targetUnit empty.
             - For frequency goals, targetValue must be the count, targetUnit should usually be "sessions" or another unit matching the tracked activity, periodUnitRaw must be day, week, or month, and periodCount must be 1.
@@ -412,7 +421,9 @@ extension WorkoutGoalSuggestion {
             title.goalNormalizedKey,
             goalKind.rawValue,
             linkedWorkoutTypeRaw?.goalNormalizedKey ?? "",
-            linkedActivityName?.goalNormalizedKey ?? ""
+            linkedActivityName?.goalNormalizedKey ?? "",
+            linkedActivityKindRaw ?? "",
+            linkedActivityRoleRaw ?? ""
         ].joined(separator: "|")
     }
 

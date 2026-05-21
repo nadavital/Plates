@@ -682,12 +682,12 @@ extension WorkoutPlan {
                         targetMuscleGroups: template.targetMuscleGroups,
                         exercises: template.exercises,
                         blocks: index == 0
-                            ? blocksWithAccessoryCardioFinisher(template.displayBlocks)
+                            ? blocksWithSupportiveCardioBlock(template.displayBlocks)
                             : template.blocks,
                         estimatedDurationMinutes: template.estimatedDurationMinutes,
                         order: index,
                         notes: index == 0
-                            ? "Strength-first session with the requested short cardio finisher."
+                            ? "Strength-first session with the requested short cardio support."
                             : template.notes
                     )
                     return renamed
@@ -741,15 +741,16 @@ extension WorkoutPlan {
         .compactMap { $0 }
     }
 
-    private static func blocksWithAccessoryCardioFinisher(
+    private static func blocksWithSupportiveCardioBlock(
         _ blocks: [WorkoutPlan.TrainingBlock]
     ) -> [WorkoutPlan.TrainingBlock] {
         let normalizedBlocks = blocks.sorted { $0.order < $1.order }
         let nextOrder = (normalizedBlocks.map(\.order).max() ?? -1) + 1
         return normalizedBlocks + [
             WorkoutPlan.TrainingBlock(
-                kind: .cardioFinisher,
-                title: "Easy cardio finisher",
+                kind: .cardio,
+                role: .finisher,
+                title: "Easy support cardio",
                 detail: "Short easy finish after the lift",
                 durationMinutes: 10,
                 intensity: "Easy",

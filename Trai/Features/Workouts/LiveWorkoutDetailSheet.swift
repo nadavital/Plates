@@ -232,8 +232,8 @@ struct LiveWorkoutDetailSheet: View {
                 }
             }
             .sheet(isPresented: $showingGeneralActivitySheet) {
-                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds in
-                    addGeneralActivity(name: name, notes: notes, durationSeconds: durationSeconds)
+                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
+                    addGeneralActivity(name: name, notes: notes, durationSeconds: durationSeconds, kind: kind, role: role)
                 }
             }
             .sheet(isPresented: $showingGoalSheet) {
@@ -544,7 +544,13 @@ struct LiveWorkoutDetailSheet: View {
         HapticManager.selectionChanged()
     }
 
-    private func addGeneralActivity(name: String, notes: String, durationSeconds: Int?) {
+    private func addGeneralActivity(
+        name: String,
+        notes: String,
+        durationSeconds: Int?,
+        kind: WorkoutPlan.TrainingBlock.BlockKind,
+        role: WorkoutPlan.TrainingBlock.Role
+    ) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
 
@@ -555,10 +561,13 @@ struct LiveWorkoutDetailSheet: View {
         let entry = LiveWorkoutEntry(
             exerciseName: trimmedName,
             orderIndex: workout.entries?.count ?? 0,
-            exerciseType: exerciseTypeForWorkout
+            exerciseType: kind.liveWorkoutExerciseType
         )
         entry.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         entry.durationSeconds = durationSeconds
+        entry.activityKind = kind
+        entry.activityRole = role
+        entry.plannedDurationSeconds = durationSeconds
         if durationSeconds != nil {
             entry.completedAt = Date()
         }
@@ -664,19 +673,6 @@ struct LiveWorkoutDetailSheet: View {
     private func toggleCompletion(for entry: LiveWorkoutEntry) {
         entry.completedAt = entry.completedAt == nil ? Date() : nil
         HapticManager.selectionChanged()
-    }
-
-    private var exerciseTypeForWorkout: String {
-        switch workout.type {
-        case .cardio, .climbing:
-            return "cardio"
-        case .yoga, .pilates, .flexibility, .mobility, .recovery:
-            return "flexibility"
-        case .strength, .mixed, .hiit:
-            return "strength"
-        case .custom:
-            return "general"
-        }
     }
 
     private func toggleGoalCompletion(_ goal: WorkoutGoal) {

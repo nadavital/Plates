@@ -260,6 +260,31 @@ extension LiveWorkout {
             prompt += " It was a \(details.joined(separator: ", "))."
         }
 
+        let activityDetails = (entries ?? [])
+            .filter { $0.isCardio || $0.isGeneralActivity }
+            .sorted { $0.orderIndex < $1.orderIndex }
+            .prefix(4)
+            .map { entry in
+                var parts: [String] = [entry.exerciseName]
+                if let role = entry.activityRole {
+                    parts.append(role.displayName.lowercased())
+                }
+                if let kind = entry.activityKind {
+                    parts.append(kind.displayName.lowercased())
+                }
+                if let duration = entry.formattedDuration {
+                    parts.append(duration)
+                }
+                if entry.completedAt != nil {
+                    parts.append("completed")
+                }
+                return parts.joined(separator: " • ")
+            }
+
+        if !activityDetails.isEmpty {
+            prompt += " Activity blocks: \(activityDetails.joined(separator: "; "))."
+        }
+
         if !trimmedNotes.isEmpty {
             prompt += " I added these notes: \(trimmedNotes)."
         }

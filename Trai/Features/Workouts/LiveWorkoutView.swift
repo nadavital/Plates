@@ -174,11 +174,13 @@ struct LiveWorkoutView: View {
                 }
             }
             .sheet(isPresented: $showingGeneralActivitySheet) {
-                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds in
+                AddGeneralActivitySheet(title: "Add Activity") { name, notes, durationSeconds, kind, role in
                     viewModel.addGeneralActivity(
                         name: name,
                         notes: notes,
-                        durationSeconds: durationSeconds
+                        durationSeconds: durationSeconds,
+                        kind: kind,
+                        role: role
                     )
                 }
             }

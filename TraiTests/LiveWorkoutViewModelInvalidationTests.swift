@@ -78,6 +78,87 @@ final class LiveWorkoutViewModelInvalidationTests: XCTestCase {
         XCTAssertTrue(viewModel.isWorkoutComplete)
     }
 
+    func testActivityScopedFrequencyGoalCountsCompletedMatchingEntries() {
+        let workout = LiveWorkout(name: "Legs + Support", workoutType: .strength)
+        workout.completedAt = Date()
+        let strengthEntry = LiveWorkoutEntry(exerciseName: "Back Squat", orderIndex: 0)
+        strengthEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+        let supportEntry = LiveWorkoutEntry(
+            exerciseName: "Easy Bike",
+            orderIndex: 1,
+            exerciseType: "cardio"
+        )
+        supportEntry.activityKind = .cardio
+        supportEntry.activityRole = .finisher
+        supportEntry.durationSeconds = 600
+        supportEntry.completedAt = Date()
+        workout.entries = [strengthEntry, supportEntry]
+
+        let unmatchedWorkout = LiveWorkout(name: "Push", workoutType: .strength)
+        unmatchedWorkout.completedAt = Date()
+        let unmatchedEntry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)
+        unmatchedEntry.addSet(LiveWorkoutEntry.SetData(reps: 8, weight: .zero, completed: true))
+        unmatchedWorkout.entries = [unmatchedEntry]
+
+        let goal = WorkoutGoal(
+            title: "Complete weekly support work",
+            goalKind: .frequency,
+            linkedWorkoutType: .strength,
+            linkedActivityKind: .cardio,
+            linkedActivityRole: .finisher,
+            targetValue: 1,
+            targetUnit: "entries",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete one matching support entry this week."
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout, unmatchedWorkout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressFraction, 1)
+    }
+
+    func testActivityKindGoalMatchesLegacyCardioEntryType() {
+        let workout = LiveWorkout(name: "Conditioning", workoutType: .mixed)
+        workout.completedAt = Date()
+        let cardioEntry = LiveWorkoutEntry(
+            exerciseName: "Bike",
+            orderIndex: 0,
+            exerciseType: "cardio"
+        )
+        cardioEntry.durationSeconds = 900
+        cardioEntry.completedAt = Date()
+        workout.entries = [cardioEntry]
+
+        let goal = WorkoutGoal(
+            title: "Do weekly cardio support",
+            goalKind: .frequency,
+            linkedWorkoutType: .mixed,
+            linkedActivityKind: .cardio,
+            targetValue: 1,
+            targetUnit: "entries",
+            periodUnit: .week,
+            periodCount: 1,
+            successCriteria: "You complete one cardio entry this week."
+        )
+
+        let insight = WorkoutGoalProgressResolver.insights(
+            goals: [goal],
+            workouts: [workout],
+            exerciseHistory: [],
+            useLbs: false
+        ).first
+
+        XCTAssertEqual(insight?.currentValueText, "1")
+        XCTAssertEqual(insight?.progressFraction, 1)
+    }
+
     private func makeWorkout(initialReps: Int) -> (LiveWorkout, LiveWorkoutEntry) {
         let workout = LiveWorkout(name: "Push Day", workoutType: .strength)
         let entry = LiveWorkoutEntry(exerciseName: "Bench Press", orderIndex: 0)

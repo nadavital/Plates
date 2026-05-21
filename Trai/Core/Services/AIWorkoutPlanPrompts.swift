@@ -103,7 +103,7 @@ extension AIPromptBuilder {
         2. Custom, activity-first, hybrid, skill-based, and nontraditional weekly structures are all valid.
         3. Respect the user's selected weekly schedule. If Available Days Per Week is a number, return exactly that many workout templates and set daysPerWeek to that same number. Only choose a different session count when Available Days Per Week is Flexible.
         4. Design workout templates with exercises OR activities that match the user's actual preferences, equipment, and constraints.
-        5. Build every template from ordered blocks. Blocks can be warmup, strength, cardio, cardioFinisher, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom.
+        5. Build every template from ordered blocks. Block kind describes what the work is: warmup, strength, cardio, conditioning, skill, mobility, recovery, sportPractice, cooldown, or custom. Block role describes how it fits: main, warmup, accessory, finisher, cooldown, or custom.
         6. Include 4-8 exercises inside strength blocks when it is an exercise-based session. For activity-based sessions, use blocks with duration, intensity, target, and detail instead of forcing fake sets/reps.
         7. Specify sets, reps, intervals, pace guidance, duration, intensity, or effort targets appropriate for each block.
         8. Include a modalityProgression that matches the plan. Do not force a lifting progression for cardio, mobility, climbing, sport, or hybrid plans.
@@ -111,11 +111,11 @@ extension AIPromptBuilder {
         10. Address any specific goals, weak points, injuries, and conversation notes mentioned.
         11. Use nutrition targets, onboarding notes, existing workout goals, and remembered context when they are provided. For example, match volume and conditioning to calorie goals, protein targets, recovery constraints, and the user's stated training history.
         12. If Intake Notes include "Personalization brief (highest priority)", treat that as the main customization input. If it contains labels like "Split direction", "Training outcome", or "Workout details", use them directly: the split direction should determine the weekly structure, the training outcome should drive exercise selection/progression/goals, and workout details should determine priority muscles, included movements, avoided movements, and recovery spacing. Do not merely mention these notes in the rationale.
-        13. If the personalization brief says one modality should only support another modality, honor that exactly. For example, if the user asks for cardio only at the end of one strength session each week, create strength-focused templates and add a short cardio finisher block to one of them. Do NOT create a dedicated cardio day in that case.
+        13. If the personalization brief says one modality should only support another modality, honor that exactly. For example, if the user asks for cardio only at the end of one strength session each week, create strength-focused templates and add one short cardio block with role finisher or accessory. Do NOT create a dedicated cardio day in that case.
         14. If the personalization brief includes a strength split direction, follow it. Do not return a full-body split when the user asked for upper/lower, push/pull/legs, body-part focus, or a named priority-muscle structure.
         15. If the user selected strength but did not give a split direction, choose the simplest structure that fits the schedule and goal. A 2-3 day full-body plan is valid only when it is genuinely the best fit or the user chose it.
-        16. If the user says supportive cardio should happen once, on one day, or on a named day only, include exactly one cardio/cardioFinisher/conditioning support block in the entire plan and place it there. Do not duplicate it on a second day.
-        17. Make mixed/support work visible in the template name or focusAreas when it materially changes the day, e.g. "Legs + Finisher" or focusAreas including "Cardio Finisher".
+        16. If the user says supportive cardio should happen once, on one day, or on a named day only, include exactly one cardio or conditioning block with role accessory or finisher in the entire plan and place it there. Do not duplicate it on a second day.
+        17. Make mixed/support work visible in the template name or focusAreas when it materially changes the day, e.g. "Legs + Finisher" or focusAreas including "Cardio accessory".
         18. Return a planIntent that explicitly summarizes the primary focus, supporting focuses, session allocation, honored user inputs, and anything intentionally avoided.
         19. Write rationale, notes, and planIntent text as Trai speaking directly to the person using the app. Use "you" and "your"; do not refer to them as "the user".
         20. For EVERY workout template, set:
@@ -163,7 +163,7 @@ extension AIPromptBuilder {
         2. If the user asked for dedicated endurance, running, cycling, race prep, or cardio as the leading focus, include dedicated cardio templates.
         3. If the user's answer gives a specific frequency or placement, follow that placement exactly.
         4. For mixed plans, balance strength and cardio according to the user's stated priority, not by automatically splitting the week into separate modality days.
-        5. If the user asks for one cardio finisher or says "only" for a day, return exactly one cardio finisher/accessory block in the whole plan.
+        5. If the user asks for one cardio support block or says "only" for a day, return exactly one cardio block with role finisher or accessory in the whole plan.
         Preferred cardio activities: \(cardioInfo)
         Do not ignore cardio, but do not turn supportive cardio into a full cardio day.
         """
@@ -200,7 +200,11 @@ extension AIPromptBuilder {
                 "id": ["type": "string"],
                 "kind": [
                     "type": "string",
-                    "enum": ["warmup", "strength", "cardio", "cardioFinisher", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                    "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                ],
+                "role": [
+                    "type": "string",
+                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
                 ],
                 "title": ["type": "string"],
                 "detail": ["type": "string"],
@@ -214,7 +218,7 @@ extension AIPromptBuilder {
                 "order": ["type": "integer"],
                 "notes": ["type": "string", "nullable": true]
             ],
-            "required": ["id", "kind", "title", "detail", "exercises", "order"]
+            "required": ["id", "kind", "role", "title", "detail", "exercises", "order"]
         ]
 
         return [
@@ -345,6 +349,16 @@ extension AIPromptBuilder {
                 ],
                 "linkedActivityName": [
                     "type": "string",
+                    "nullable": true
+                ],
+                "linkedActivityKindRaw": [
+                    "type": "string",
+                    "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"],
+                    "nullable": true
+                ],
+                "linkedActivityRoleRaw": [
+                    "type": "string",
+                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"],
                     "nullable": true
                 ],
                 "targetValue": [
@@ -493,7 +507,7 @@ extension AIPromptBuilder {
         - Ask AT MOST one short follow-up only when missing information would materially change the plan
         - If they ask to change exercises or schedule directionally, make a reasonable proposal instead of starting a long clarification chain
         - Preserve and update planIntent, modalityProgression, and template blocks whenever a plan changes
-        - Use blocks for modality-specific work: cardio finishers, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises
+        - Use blocks for modality-specific work: cardio, mobility flows, climbing/sport practice, conditioning, and recovery should not be flattened into fake strength exercises. Use role to describe whether a block is main work, a warmup, an accessory, a finisher, or a cooldown.
         - If the user says a support modality should happen once, only once, or on a named day only, include exactly one matching support block and place it on that day. Do not duplicate it elsewhere.
         - Make support work visible in the changed template name or focusAreas when it materially changes the day, so the plan card can show it without requiring a details sheet.
         - Keep the selected coach tone consistent with the rest of the app
@@ -525,7 +539,11 @@ extension AIPromptBuilder {
                 "id": ["type": "string"],
                 "kind": [
                     "type": "string",
-                    "enum": ["warmup", "strength", "cardio", "cardioFinisher", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                    "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                ],
+                "role": [
+                    "type": "string",
+                    "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
                 ],
                 "title": ["type": "string"],
                 "detail": ["type": "string"],
@@ -539,7 +557,7 @@ extension AIPromptBuilder {
                 "order": ["type": "integer"],
                 "notes": ["type": "string", "nullable": true]
             ],
-            "required": ["id", "kind", "title", "detail", "exercises", "order"]
+            "required": ["id", "kind", "role", "title", "detail", "exercises", "order"]
         ]
 
         let templateSchema: [String: Any] = [

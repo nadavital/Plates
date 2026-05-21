@@ -153,11 +153,18 @@ struct WorkoutTemplateService {
                 let entry = LiveWorkoutEntry(
                     exerciseName: block.title.isEmpty ? block.kind.displayName : block.title,
                     orderIndex: nextOrderIndex,
-                    exerciseType: block.liveWorkoutExerciseType
+                    exerciseType: block.kind.liveWorkoutExerciseType
                 )
                 if let durationMinutes = block.durationMinutes, durationMinutes > 0 {
-                    entry.durationSeconds = durationMinutes * 60
+                    let seconds = durationMinutes * 60
+                    entry.durationSeconds = seconds
+                    entry.plannedDurationSeconds = seconds
                 }
+                entry.activityKind = block.kind
+                entry.activityRole = block.role
+                entry.sourcePlanBlockID = block.id
+                entry.plannedIntensity = block.intensity
+                entry.plannedTarget = block.target
                 entry.notes = [block.detail, block.intensity, block.target, block.notes]
                     .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
@@ -433,21 +440,10 @@ struct WorkoutTemplateService {
 private extension WorkoutPlan.TrainingBlock {
     var shouldCreateLiveWorkoutEntry: Bool {
         switch kind {
-        case .warmup, .cardio, .cardioFinisher, .conditioning, .skill, .mobility, .recovery, .sportPractice, .cooldown, .custom:
+        case .warmup, .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice, .cooldown, .custom:
             return true
         case .strength:
             return false
-        }
-    }
-
-    var liveWorkoutExerciseType: String {
-        switch kind {
-        case .cardio, .cardioFinisher, .conditioning:
-            return "cardio"
-        case .mobility, .recovery, .cooldown, .warmup:
-            return "flexibility"
-        case .skill, .sportPractice, .custom, .strength:
-            return "activity"
         }
     }
 }

@@ -325,6 +325,7 @@ struct WorkoutPlan: Codable, Equatable {
     struct TrainingBlock: Codable, Equatable, Identifiable {
         let id: UUID
         let kind: BlockKind
+        let role: Role
         let title: String
         let detail: String
         let exercises: [ExerciseTemplate]
@@ -337,6 +338,7 @@ struct WorkoutPlan: Codable, Equatable {
         private enum CodingKeys: String, CodingKey {
             case id
             case kind
+            case role
             case title
             case detail
             case exercises
@@ -351,7 +353,6 @@ struct WorkoutPlan: Codable, Equatable {
             case warmup
             case strength
             case cardio
-            case cardioFinisher
             case conditioning
             case skill
             case mobility
@@ -367,7 +368,6 @@ struct WorkoutPlan: Codable, Equatable {
                 case .warmup: "Warmup"
                 case .strength: "Strength"
                 case .cardio: "Cardio"
-                case .cardioFinisher: "Finisher"
                 case .conditioning: "Conditioning"
                 case .skill: "Skill"
                 case .mobility: "Mobility"
@@ -383,7 +383,6 @@ struct WorkoutPlan: Codable, Equatable {
                 case .warmup: "figure.walk"
                 case .strength: "dumbbell.fill"
                 case .cardio: "figure.run"
-                case .cardioFinisher: "timer"
                 case .conditioning: "bolt.heart.fill"
                 case .skill: "scope"
                 case .mobility: "figure.mind.and.body"
@@ -416,9 +415,60 @@ struct WorkoutPlan: Codable, Equatable {
             }
         }
 
+        nonisolated enum Role: String, Codable, CaseIterable, Identifiable {
+            case main
+            case warmup
+            case accessory
+            case finisher
+            case cooldown
+            case custom
+
+            nonisolated var id: String { rawValue }
+
+            nonisolated var displayName: String {
+                switch self {
+                case .main: "Main"
+                case .warmup: "Warmup"
+                case .accessory: "Accessory"
+                case .finisher: "Finisher"
+                case .cooldown: "Cooldown"
+                case .custom: "Custom"
+                }
+            }
+
+            nonisolated var iconName: String {
+                switch self {
+                case .main: "target"
+                case .warmup: "figure.walk"
+                case .accessory: "plus.circle"
+                case .finisher: "timer"
+                case .cooldown: "figure.cooldown"
+                case .custom: "slider.horizontal.3"
+                }
+            }
+
+            nonisolated static func defaultRole(for kind: BlockKind) -> Role {
+                switch kind {
+                case .warmup:
+                    return .warmup
+                case .cooldown:
+                    return .cooldown
+                case .custom:
+                    return .custom
+                case .strength, .cardio, .conditioning, .skill, .mobility, .recovery, .sportPractice:
+                    return .main
+                }
+            }
+
+            nonisolated static func legacyRole(forRawKind rawKind: String) -> Role? {
+                rawKind == "cardioFinisher" ? .finisher : nil
+            }
+        }
+
         nonisolated init(
             id: UUID = UUID(),
             kind: BlockKind,
+            role: Role? = nil,
             title: String,
             detail: String,
             exercises: [ExerciseTemplate] = [],
@@ -430,6 +480,7 @@ struct WorkoutPlan: Codable, Equatable {
         ) {
             self.id = id
             self.kind = kind
+            self.role = role ?? Role.defaultRole(for: kind)
             self.title = title
             self.detail = detail
             self.exercises = exercises
@@ -442,7 +493,11 @@ struct WorkoutPlan: Codable, Equatable {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            kind = try container.decode(BlockKind.self, forKey: .kind)
+            let rawKind = try container.decode(String.self, forKey: .kind)
+            kind = BlockKind(rawValue: rawKind) ?? (rawKind == "cardioFinisher" ? .cardio : .custom)
+            role = try container.decodeIfPresent(Role.self, forKey: .role)
+                ?? Role.legacyRole(forRawKind: rawKind)
+                ?? Role.defaultRole(for: kind)
             title = try container.decode(String.self, forKey: .title)
             detail = try container.decode(String.self, forKey: .detail)
             exercises = try container.decodeIfPresent([ExerciseTemplate].self, forKey: .exercises) ?? []
@@ -674,6 +729,7 @@ private extension Array where Element == WorkoutPlan.TrainingBlock {
             WorkoutPlan.TrainingBlock(
                 id: block.id,
                 kind: block.kind,
+                role: block.role,
                 title: block.title,
                 detail: block.detail,
                 exercises: block.exercises,

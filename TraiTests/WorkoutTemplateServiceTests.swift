@@ -88,7 +88,7 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         XCTAssertEqual(workout.muscleGroups, [.chest])
     }
 
-    func testCreateWorkoutFromTemplateKeepsCardioFinisherBlock() throws {
+    func testCreateWorkoutFromTemplateKeepsSupportiveCardioBlock() throws {
         let context = try makeInMemoryContext()
         let lift = WorkoutPlan.ExerciseTemplate(
             exerciseName: "Bench Press",
@@ -113,7 +113,8 @@ final class WorkoutTemplateServiceTests: XCTestCase {
                     order: 0
                 ),
                 WorkoutPlan.TrainingBlock(
-                    kind: .cardioFinisher,
+                    kind: .cardio,
+                    role: .finisher,
                     title: "Bike Finisher",
                     detail: "Easy Zone 2 spin",
                     durationMinutes: 10,
@@ -135,7 +136,12 @@ final class WorkoutTemplateServiceTests: XCTestCase {
         let entries = try XCTUnwrap(workout.entries)
         XCTAssertEqual(entries.map(\.exerciseName), ["Bench Press", "Bike Finisher"])
         XCTAssertEqual(entries.last?.exerciseType, "cardio")
+        XCTAssertEqual(entries.last?.activityKind, .cardio)
+        XCTAssertEqual(entries.last?.activityRole, .finisher)
         XCTAssertEqual(entries.last?.durationSeconds, 600)
+        XCTAssertEqual(entries.last?.plannedDurationSeconds, 600)
+        XCTAssertEqual(entries.last?.plannedIntensity, "Easy")
+        XCTAssertEqual(entries.last?.plannedTarget, "Zone 2")
         XCTAssertTrue(entries.last?.notes.contains("Zone 2") == true)
     }
 

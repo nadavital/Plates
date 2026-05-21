@@ -47,7 +47,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         XCTAssertEqual(plan.templates.count, 3)
         XCTAssertFalse(plan.templates.contains { $0.sessionType == .cardio })
         XCTAssertEqual(
-            plan.templates.flatMap(\.displayBlocks).filter { $0.kind == .cardioFinisher }.count,
+            plan.templates.flatMap(\.displayBlocks).filter { $0.kind == .cardio && $0.role == .finisher }.count,
             1
         )
     }
@@ -128,7 +128,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
               "id": "session-1",
               "name": "Strength A + Easy Run Finisher",
               "sessionType": "mixed",
-              "focusAreas": ["Bench Press", "Easy Cardio Finisher"],
+              "focusAreas": ["Bench Press", "Easy Cardio Support"],
               "targetMuscleGroups": ["Chest", "Back"],
               "exercises": [
                 {
@@ -147,6 +147,7 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
                 {
                   "id": "session-1-strength",
                   "kind": "strength",
+                  "role": "main",
                   "title": "Strength",
                   "detail": "Bench work",
                   "exercises": [
@@ -167,8 +168,9 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
                 },
                 {
                   "id": "session-1-cardio",
-                  "kind": "cardioFinisher",
-                  "title": "Cardio Finisher",
+                  "kind": "cardio",
+                  "role": "finisher",
+                  "title": "Cardio Support",
                   "detail": "Easy incline walk",
                   "exercises": [],
                   "durationMinutes": 5,
@@ -212,11 +214,54 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
         let template = try XCTUnwrap(firstDecode.templates.first)
 
         XCTAssertEqual(template.sessionType, .mixed)
-        XCTAssertEqual(template.displayBlocks.map(\.kind), [.strength, .cardioFinisher])
+        XCTAssertEqual(template.displayBlocks.map(\.kind), [.strength, .cardio])
+        XCTAssertEqual(template.displayBlocks.map(\.role), [.main, .finisher])
         XCTAssertEqual(template.structuredExercises.map(\.exerciseName), ["Bench Press"])
         XCTAssertEqual(firstDecode.templates.first?.id, secondDecode.templates.first?.id)
         XCTAssertEqual(firstDecode.templates.first?.blocks.first?.id, secondDecode.templates.first?.blocks.first?.id)
         XCTAssertEqual(firstDecode.modalityProgression?.targets.first?.id, secondDecode.modalityProgression?.targets.first?.id)
+    }
+
+    func testLegacyCardioFinisherBlockDecodesAsCardioWithFinisherRole() throws {
+        let json = """
+        {
+          "splitType": "custom",
+          "daysPerWeek": 1,
+          "templates": [
+            {
+              "name": "Hybrid Day",
+              "targetMuscleGroups": [],
+              "exercises": [],
+              "blocks": [
+                {
+                  "kind": "cardioFinisher",
+                  "title": "Bike Support",
+                  "detail": "Easy finish",
+                  "exercises": [],
+                  "durationMinutes": 8,
+                  "order": 0
+                }
+              ],
+              "estimatedDurationMinutes": 45,
+              "order": 0
+            }
+          ],
+          "rationale": "",
+          "guidelines": [],
+          "progressionStrategy": {
+            "type": "doubleProgression",
+            "weightIncrementKg": 2.5,
+            "repsTrigger": 8,
+            "description": "Progress gradually."
+          }
+        }
+        """
+
+        let plan = try XCTUnwrap(WorkoutPlan.fromJSON(json))
+        let block = try XCTUnwrap(plan.templates.first?.displayBlocks.first)
+
+        XCTAssertEqual(block.kind, .cardio)
+        XCTAssertEqual(block.role, .finisher)
     }
 
     func testWorkoutPlanRefinementSchemaRequiresModalityFields() throws {
@@ -307,7 +352,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             exercises: [],
             blocks: [
                 WorkoutPlan.TrainingBlock(
-                    kind: .cardioFinisher,
+                    kind: .cardio,
+                    role: .finisher,
                     title: "Finisher",
                     detail: "Bike",
                     order: 2
@@ -348,6 +394,8 @@ final class WorkoutPlanGenerationRequestTests: XCTestCase {
             goalKindRaw: goalKindRaw,
             linkedWorkoutTypeRaw: WorkoutMode.mixed.rawValue,
             linkedActivityName: "Planned Habit",
+            linkedActivityKindRaw: nil,
+            linkedActivityRoleRaw: nil,
             targetValue: targetValue,
             targetUnit: targetUnit,
             periodUnitRaw: periodUnitRaw,

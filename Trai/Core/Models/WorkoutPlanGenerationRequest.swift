@@ -122,12 +122,12 @@ struct WorkoutPlanGenerationRequest {
         }
 
         if requestsCardioAsAccessory {
-            directives.append("Primary focus is not standalone cardio; cardio should appear only as a supportive finisher/accessory block.")
+            directives.append("Primary focus is not standalone cardio; cardio should appear only as a supportive cardio block with role finisher or accessory.")
             directives.append("Dedicated cardio or HIIT templates are not allowed unless the user explicitly asks for them later.")
         }
 
         if limitsAccessoryCardioToOneSession {
-            directives.append("The user limited supportive cardio to one placement. Include exactly one cardio finisher/accessory block in the whole plan, on the requested day when one is named.")
+            directives.append("The user limited supportive cardio to one placement. Include exactly one cardio block with role finisher or accessory in the whole plan, on the requested day when one is named.")
         }
 
         if let selectedWorkoutTypes, selectedWorkoutTypes.count > 1 {

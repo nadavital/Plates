@@ -1979,7 +1979,7 @@ struct OnboardingWorkoutPlanSetupView: View {
         }
         if cardioIsSupportOnly {
             suggestions.append(contentsOf: [
-                (title: "Easy finisher", text: "Keep cardio to one short easy finisher after a lift each week."),
+                (title: "Short support", text: "Keep cardio to one short easy support block after a lift each week."),
                 (title: "Recover better", text: "Use cardio only if it helps recovery and conditioning without taking over."),
                 (title: "No cardio day", text: "Do not create a dedicated cardio day for this plan.")
             ])

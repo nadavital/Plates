@@ -695,6 +695,14 @@ struct ActivitySummaryRow: View {
     private var subtitleSegments: [String] {
         var segments: [String] = []
 
+        if let role = entry.activityRole {
+            segments.append(role.displayName)
+        }
+
+        if let kind = entry.activityKind {
+            segments.append(kind.displayName)
+        }
+
         if let duration = entry.formattedDuration {
             segments.append(duration)
         }

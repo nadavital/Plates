@@ -369,6 +369,10 @@ extension AIFunctionExecutor {
 
         let workoutType = WorkoutMode.normalized(from: args["workout_type"] as? String)
         let activityName = (args["activity_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityKind = (args["activity_kind"] as? String)
+            .flatMap { WorkoutPlan.TrainingBlock.BlockKind(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let activityRole = (args["activity_role"] as? String)
+            .flatMap { WorkoutPlan.TrainingBlock.Role(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         let notes = (args["notes"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let targetValue = numericDouble(from: args["target_value"])
         let targetUnit = (args["target_unit"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -383,6 +387,8 @@ extension AIFunctionExecutor {
             goalKind: goalKind,
             linkedWorkoutType: workoutType,
             linkedActivityName: activityName?.isEmpty == false ? activityName : nil,
+            linkedActivityKind: activityKind,
+            linkedActivityRole: activityRole,
             targetValue: goalKind.supportsNumericTarget ? targetValue : nil,
             targetUnit: goalKind.supportsNumericTarget ? targetUnit : "",
             periodUnit: goalKind.usesPeriodTarget ? periodUnit : nil,
@@ -473,6 +479,16 @@ extension AIFunctionExecutor {
         if let rawActivityName = args["activity_name"] as? String {
             let trimmedActivity = rawActivityName.trimmingCharacters(in: .whitespacesAndNewlines)
             goal.linkedActivityName = trimmedActivity.isEmpty ? nil : trimmedActivity
+        }
+
+        if let rawActivityKind = args["activity_kind"] as? String {
+            let trimmedKind = rawActivityKind.trimmingCharacters(in: .whitespacesAndNewlines)
+            goal.linkedActivityKind = trimmedKind.isEmpty ? nil : WorkoutPlan.TrainingBlock.BlockKind(rawValue: trimmedKind)
+        }
+
+        if let rawActivityRole = args["activity_role"] as? String {
+            let trimmedRole = rawActivityRole.trimmingCharacters(in: .whitespacesAndNewlines)
+            goal.linkedActivityRole = trimmedRole.isEmpty ? nil : WorkoutPlan.TrainingBlock.Role(rawValue: trimmedRole)
         }
 
         if args.keys.contains("target_value") {

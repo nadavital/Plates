@@ -248,7 +248,7 @@ struct WorkoutPlanProposalCard: View {
         let supportBlocks = template.displayBlocks
             .filter { block in
                 switch block.kind {
-                case .cardioFinisher, .cardio, .conditioning, .mobility, .recovery, .skill, .sportPractice:
+                case .cardio, .conditioning, .mobility, .recovery, .skill, .sportPractice:
                     true
                 case .warmup, .strength, .cooldown, .custom:
                     false

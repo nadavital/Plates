@@ -1298,27 +1298,26 @@ final class LiveWorkoutViewModel {
         HapticManager.selectionChanged()
     }
 
-    func addGeneralActivity(name: String, notes: String = "", durationSeconds: Int? = nil) {
+    func addGeneralActivity(
+        name: String,
+        notes: String = "",
+        durationSeconds: Int? = nil,
+        kind: WorkoutPlan.TrainingBlock.BlockKind = .custom,
+        role: WorkoutPlan.TrainingBlock.Role = .accessory
+    ) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
-
-        let activityType: String
-        switch workout.type {
-        case .yoga, .pilates, .flexibility, .mobility, .recovery:
-            activityType = "flexibility"
-        case .cardio, .climbing:
-            activityType = "cardio"
-        default:
-            activityType = "general"
-        }
 
         let entry = LiveWorkoutEntry(
             exerciseName: trimmedName,
             orderIndex: entries.count,
-            exerciseType: activityType
+            exerciseType: kind.liveWorkoutExerciseType
         )
         entry.notes = notes
         entry.durationSeconds = durationSeconds
+        entry.activityKind = kind
+        entry.activityRole = role
+        entry.plannedDurationSeconds = durationSeconds
 
         if workout.entries == nil {
             workout.entries = []
@@ -1691,13 +1690,13 @@ final class LiveWorkoutViewModel {
     }
 
     private func liveActivityEntryForAddSet() -> LiveWorkoutEntry? {
-        if let currentEntry = liveActivityCurrentEntry(), !currentEntry.isCardio {
+        if let currentEntry = liveActivityCurrentEntry(), currentEntry.isStrength {
             return currentEntry
         }
 
-        // If the current item is cardio, route "Add Set" to the next unresolved strength exercise.
-        return entries.first { !$0.isCardio && !isEntryCompleteForLiveActivity($0) }
-            ?? entries.last(where: { !$0.isCardio })
+        // If the current item is timed/general work, route "Add Set" to a real strength entry.
+        return entries.first { $0.isStrength && !isEntryCompleteForLiveActivity($0) }
+            ?? entries.last(where: \.isStrength)
     }
 
     private func updateLiveActivity() {

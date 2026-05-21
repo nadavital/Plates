@@ -494,6 +494,16 @@ enum AIFunctionDeclarations {
                         "type": "string",
                         "description": "Optional specific exercise or activity name"
                     ],
+                    "activity_kind": [
+                        "type": "string",
+                        "description": "Optional broad activity kind for goals tied to a workout entry instead of a whole session.",
+                        "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom"]
+                    ],
+                    "activity_role": [
+                        "type": "string",
+                        "description": "Optional role inside a workout, such as accessory or finisher.",
+                        "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom"]
+                    ],
                     "target_value": [
                         "type": "number",
                         "description": "Numeric target when relevant"
@@ -564,6 +574,16 @@ enum AIFunctionDeclarations {
                     "activity_name": [
                         "type": "string",
                         "description": "Updated linked activity name. Pass empty string to clear it."
+                    ],
+                    "activity_kind": [
+                        "type": "string",
+                        "description": "Updated activity kind. Pass empty string to clear it.",
+                        "enum": ["warmup", "strength", "cardio", "conditioning", "skill", "mobility", "recovery", "sportPractice", "cooldown", "custom", ""]
+                    ],
+                    "activity_role": [
+                        "type": "string",
+                        "description": "Updated activity role. Pass empty string to clear it.",
+                        "enum": ["main", "warmup", "accessory", "finisher", "cooldown", "custom", ""]
                     ],
                     "target_value": [
                         "type": "number",

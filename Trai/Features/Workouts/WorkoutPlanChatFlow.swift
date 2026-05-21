@@ -1686,6 +1686,8 @@ private extension WorkoutGoal {
             successCriteria,
             notes,
             linkedActivityName ?? "",
+            linkedActivityKindRaw ?? "",
+            linkedActivityRoleRaw ?? "",
             linkedWorkoutTypeRaw ?? ""
         ]
         .joined(separator: " ")
@@ -1698,21 +1700,25 @@ private extension WorkoutGoal {
             return "plan-adherence|\(linkedWorkoutTypeRaw ?? "any")|\(periodUnitRaw ?? "week")|\(periodCount ?? 1)"
         }
 
-        if combinedText.contains("cardio"),
-           combinedText.contains("push day") || combinedText.contains("finisher") {
-            return "cardio-placement|\(linkedWorkoutTypeRaw ?? "any")|\(periodUnitRaw ?? "week")|\(periodCount ?? 1)"
-        }
-
         if goalKind == .frequency {
-            return [
+            let roundedTarget = targetValue.map { value in
+                String(Int(value.rounded()))
+            } ?? ""
+            let normalizedActivityName = linkedActivityName?.goalNormalizedKey ?? ""
+            let normalizedTargetUnit = targetUnit.goalNormalizedKey
+            let periodCountText = periodCount.map(String.init) ?? ""
+            let parts: [String] = [
                 goalKind.rawValue,
                 linkedWorkoutTypeRaw ?? "any",
-                linkedActivityName?.goalNormalizedKey ?? "",
-                targetValue.map { String(Int($0.rounded())) } ?? "",
-                targetUnit.goalNormalizedKey,
+                normalizedActivityName,
+                linkedActivityKindRaw ?? "",
+                linkedActivityRoleRaw ?? "",
+                roundedTarget,
+                normalizedTargetUnit,
                 periodUnitRaw ?? "",
-                periodCount.map(String.init) ?? ""
-            ].joined(separator: "|")
+                periodCountText
+            ]
+            return parts.joined(separator: "|")
         }
 
         return title
